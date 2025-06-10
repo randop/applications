@@ -23,3 +23,9 @@ project/
 docker buildx create --name multiarch --use
 docker buildx build --platform linux/amd64,linux/arm64 -t randop/cpp-service:latest --push .
 ```
+
+## Deployment Test
+```bash
+docker buildx build --platform linux/amd64 -t cpp-s6-service:amd64 --load .
+docker run --rm cpp-s6-service:amd64
+```
