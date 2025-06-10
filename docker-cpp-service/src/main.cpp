@@ -9,16 +9,20 @@
 // Atomic flag to handle graceful shutdown
 std::atomic<bool> running{true};
 
-// Signal handler for graceful shutdown
-void signal_handler(int signal) {
-    running = false;
-}
-
 std::string get_timestamp() {
     auto now = std::time(nullptr);
     std::string timestamp = std::ctime(&now);
     timestamp.pop_back(); // Remove trailing newline
     return timestamp;
+}
+
+// Signal handler for graceful shutdown
+void signal_handler(int signal) {
+    std::cout << get_timestamp() << " [WARN] Received signal " << signal << ", shutting down..." << std::endl;
+    std::cerr << get_timestamp() << " [WARN] Signal " << signal << " error log." << std::endl;
+    std::cout.flush(); // Flush stdout
+    std::cerr.flush();
+    running = false;
 }
 
 int main() {

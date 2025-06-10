@@ -1,0 +1,2 @@
+#!/bin/sh
+tail -n 25 /var/log/service.log
