@@ -1,7 +1,7 @@
 project(
     'currency-converter',
     'cpp',
-    version : '1.0.0',
+    version : '1.3.0',
     default_options : [
         'buildtype=release',
         'optimization=3',
@@ -13,7 +13,7 @@ project(
     meson_version: '>= 0.60.0',
 )
 
-boost_dep = dependency('boost', modules: ['system', 'filesystem', 'thread', 'json', 'program_options'], required: true, static: true)
+boost_dep = dependency('boost', version: '>=1.88', modules: ['system', 'filesystem', 'thread', 'json', 'program_options'], required: true, static: true)
 
 openssl_dep = dependency('openssl', required: true)
 
@@ -40,7 +40,7 @@ if cpp.get_id() == 'gcc' or cpp.get_id() == 'clang'
 endif
 
 executable('currency-converter',
-           'main.cpp',
+           'src/main.cpp',
            dependencies: [boost_dep, openssl_dep, fmt_dep, spdlog_dep],
            link_args: ['-Wl,--gc-sections', '-Wl,-O2'] # Optimize linker output
 )

@@ -266,7 +266,7 @@ void fetch_exchange_rates() {
 
 int main(int argc, char **argv) {
   spdlog::set_level(spdlog::level::trace);
-  fmt::print("Currency Converter version 1.2\n");
+  fmt::print("Currency Converter version 1.3\n");
 
   po::options_description desc("Allowed options");
   desc.add_options()("help,h", "Produce help message");
@@ -279,6 +279,8 @@ int main(int argc, char **argv) {
     std::cout << desc << "\n";
     return 1;
   }
+
+  fetch_exchange_rates();
 
   return 0;
 }
