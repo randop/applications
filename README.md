@@ -10,7 +10,7 @@
 </p>
 
 ### 🏠 [Homepage](https://gitlab.com/randop/applications)
-#### The repository of my applications written in C++, C, Node.js, and more.
+#### The repository of my applications written in C++, C, Javascript, and more.
 
 >  Copyright © 2010 — 2025 Randolph Ledesma
 >
