@@ -3,11 +3,19 @@
 ## Structure
 ```
 project/
-├── Dockerfile
+├── resources/
+│   └── docker/
+│       └── s6-rc.d/
+│           ├── app-service/
+│           │   ├── run
+│           │   └── type
+│           └── user/
+│               └── contents.d/
+│                   └── app-service
+├── src/
 ├── Makefile
 ├── healthcheck.sh
-└── src/
-    └── main.cpp
+└── Dockerfile
 ```
 
 ## Build

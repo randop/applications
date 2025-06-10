@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/command/execlineb -P
 
 # Check if the log file exists
 if [ ! -f /var/log/service.log ]; then
