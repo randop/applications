@@ -10,7 +10,29 @@ project(
     meson_version: '>= 1.0.1',
 )
 
-executable('blog',
-           'src/main.cpp'
-)
+###############################################################################
+# Dependencies
+###############################################################################
+cmake = import('cmake')
 
+libpqxx = cmake.subproject('libpqxx')
+libpqxx_dep = libpqxx.dependency('pqxx_dep')
+
+thread_dep = dependency('threads')
+
+###############################################################################
+# Sources
+###############################################################################
+
+sources = [
+    'src/main.cpp'
+]
+
+executable(
+    'blog',
+    sources,
+    dependencies: [
+        libpqxx_dep,
+        thread_dep
+    ]
+)
