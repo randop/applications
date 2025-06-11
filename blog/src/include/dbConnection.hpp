@@ -1,5 +1,5 @@
-#ifndef BLOG_DATABASE_DB_CONNECTION_H
-#define BLOG_DATABASE_DB_CONNECTION_H
+#ifndef BLOG_DB_CONNECTION_H
+#define BLOG_DB_CONNECTION_H
 
 #include <memory>
 #include <pqxx/pqxx>
@@ -15,4 +15,4 @@ private:
 };
 } // namespace db
 
-#endif // BLOG_DATABASE_DB_CONNECTION_H
+#endif // BLOG_DB_CONNECTION_H

@@ -36,7 +36,8 @@ inc_dirs = [
 
 sources = [
     'src/main.cpp',
-    'src/dbConnection.cpp'
+    'src/dbConnection.cpp',
+    'src/connectionPool.cpp'
 ]
 
 executable(
