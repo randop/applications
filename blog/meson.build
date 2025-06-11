@@ -19,6 +19,8 @@ cmark_dep = cmark.get_variable('cmark_dep')
 
 thread_dep = dependency('threads')
 
+boost_dep = dependency('boost', version: '>=1.88.0', modules: ['system', 'filesystem', 'thread'], required: true)
+
 ###############################################################################
 # Includes
 ###############################################################################
@@ -45,7 +47,8 @@ executable(
     dependencies: [
         libpqxx_dep,
         cmark_dep,
-        thread_dep
+        thread_dep,
+        boost_dep
     ],
     include_directories: inc_dirs,
 )

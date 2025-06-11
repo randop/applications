@@ -35,9 +35,10 @@ int main(int argc, char **argv) {
       const char *markdown;
       for (const auto &row : result) {
         std::cout << "ID: " << row.at("id").as<int>()
-                  << ", created: " << row.at("created_at").as<std::string>()
-                  << ", updated: " << row.at("updated_at").as<std::string>() << std::endl
-                  << "title: " << row.at("title").as<std::string>() << std::endl
+                  << ", created: " << row.at("created_at").c_str()
+                  << ", updated: " << row.at("updated_at").c_str()
+                  << std::endl
+                  << "title: " << row.at("title").c_str() << std::endl
                   << "content: " << std::endl;
         modeId = row.at("mode_id").as<int>();
         if (modeId == MODE_MARKDOWN) {
