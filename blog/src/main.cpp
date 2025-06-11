@@ -34,21 +34,21 @@ int main(int argc, char **argv) {
       int modeId = MODE_MARKDOWN;
       const char *markdown;
       for (const auto &row : result) {
-        std::cout << "ID: " << row[0].as<int>()
-                  << ", created: " << row[1].as<std::string>()
-                  << ", updated: " << row[2].as<std::string>() << std::endl
-                  << "title: " << row[3].as<std::string>() << std::endl
+        std::cout << "ID: " << row.at("id").as<int>()
+                  << ", created: " << row.at("created_at").as<std::string>()
+                  << ", updated: " << row.at("updated_at").as<std::string>() << std::endl
+                  << "title: " << row.at("title").as<std::string>() << std::endl
                   << "content: " << std::endl;
-        modeId = row[5].as<int>();
+        modeId = row.at("mode_id").as<int>();
         if (modeId == MODE_MARKDOWN) {
-          markdown = row[4].c_str();
+          markdown = row.at("content").c_str();
           auto html = std::unique_ptr<char, void (*)(void *)>(
               cmark_markdown_to_html(markdown, strlen(markdown),
                                      CMARK_OPT_DEFAULT),
               std::free);
           std::cout << html.get() << std::endl;
         } else if (modeId == MODE_HTML) {
-          std::cout << row[4].as<std::string>() << std::endl;
+          std::cout << row.at("content").c_str() << std::endl;
         }
       }
       txn.commit();
