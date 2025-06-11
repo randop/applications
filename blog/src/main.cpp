@@ -6,6 +6,8 @@
 #include <string_view>
 
 const int MAX_DB_CONNECTION = 10;
+const int MODE_MARKDOWN = 1;
+const int MODE_HTML = 1;
 
 int main(int argc, char **argv) {
   std::cout << "Blog server project: 1.0" << std::endl;
@@ -25,19 +27,29 @@ int main(int argc, char **argv) {
       std::cout << "DB pool connection: OK" << std::endl;
       pqxx::work txn(*conn);
       auto result =
-          txn.exec("SELECT * FROM posts WHERE id = $1 LIMIT 1", postId);
+          txn.exec("SELECT id, created_at, updated_at, title, content, mode_id "
+                   "FROM posts WHERE id = $1 LIMIT 1",
+                   postId);
+
+      int modeId = MODE_MARKDOWN;
+      const char *markdown;
       for (const auto &row : result) {
         std::cout << "ID: " << row[0].as<int>()
                   << ", created: " << row[1].as<std::string>()
                   << ", updated: " << row[2].as<std::string>() << std::endl
                   << "title: " << row[3].as<std::string>() << std::endl
                   << "content: " << std::endl;
-        const char *markdown = row[4].c_str();
-        auto html = std::unique_ptr<char, void (*)(void *)>(
-            cmark_markdown_to_html(markdown, strlen(markdown),
-                                   CMARK_OPT_DEFAULT),
-            std::free);
-        std::cout << html.get() << std::endl;
+        modeId = row[5].as<int>();
+        if (modeId == MODE_MARKDOWN) {
+          markdown = row[4].c_str();
+          auto html = std::unique_ptr<char, void (*)(void *)>(
+              cmark_markdown_to_html(markdown, strlen(markdown),
+                                     CMARK_OPT_DEFAULT),
+              std::free);
+          std::cout << html.get() << std::endl;
+        } else if (modeId == MODE_HTML) {
+          std::cout << row[4].as<std::string>() << std::endl;
+        }
       }
       txn.commit();
       pool.releaseConnection(conn);
