@@ -1,3 +1,8 @@
+/***
+###############################################################################
+# Includes
+###############################################################################
+***/
 #include "include/connectionPool.hpp"
 #include "include/dbConnection.hpp"
 #include "include/httpServer.hpp"
@@ -11,12 +16,24 @@
 #include <memory>
 #include <string_view>
 
+/***
+###############################################################################
+# Constants
+###############################################################################
+***/
 const int MAX_DB_CONNECTION = 10;
 const int MODE_MARKDOWN = 1;
 const int MODE_HTML = 1;
+const int DEFAULT_PORT = 8181;
 
 int main(int argc, char **argv) {
   std::cout << "Blog server project: 1.0" << std::endl;
+
+  const char *host = "0.0.0.0";
+  auto const address = net::ip::make_address(host);
+  auto const port = static_cast<unsigned short>(DEFAULT_PORT);
+  auto const docRoot = std::make_shared<std::string>("/tmp");
+  auto const threadCount = std::max<int>(1, 4);
 
   int postId = 1;
 
@@ -63,33 +80,28 @@ int main(int argc, char **argv) {
       std::cerr << "Failed to get connection from pool" << std::endl;
     }
 
-    auto post = blog::Post(pool);
+    auto post = std::make_shared<blog::Post>(pool);
+
+    // The io_context is required for all I/O
+    net::io_context ioc{threadCount};
+
+    // Create and launch a listening port
+    std::make_shared<listener>(ioc, tcp::endpoint{address, port}, docRoot, post)
+        ->run();
+
+    spdlog::info("http server listening on {} port {}", host, port);
+
+    // Run the I/O service on the requested number of threads
+    std::vector<std::thread> threads;
+    threads.reserve(threadCount - 1);
+    for (auto i = threadCount - 1; i > 0; --i) {
+      threads.emplace_back([&ioc] { ioc.run(); });
+    }
+    ioc.run();
   } catch (const std::exception &e) {
     std::cerr << "Error: " << e.what() << "\n";
     return EXIT_FAILURE;
   }
-
-  const char *host = "0.0.0.0";
-  auto const address = net::ip::make_address(host);
-  auto const port = static_cast<unsigned short>(8181);
-  auto const docRoot = std::make_shared<std::string>("/tmp");
-  auto const threadCount = std::max<int>(1, 4);
-
-  // The io_context is required for all I/O
-  net::io_context ioc{threadCount};
-
-  // Create and launch a listening port
-  std::make_shared<listener>(ioc, tcp::endpoint{address, port}, docRoot)->run();
-
-  spdlog::info("http server listening on {} port {}", host, port);
-
-  // Run the I/O service on the requested number of threads
-  std::vector<std::thread> threads;
-  threads.reserve(threadCount - 1);
-  for (auto i = threadCount - 1; i > 0; --i) {
-    threads.emplace_back([&ioc] { ioc.run(); });
-  }
-  ioc.run();
 
   return EXIT_SUCCESS;
 }

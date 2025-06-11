@@ -1,5 +1,9 @@
+#pragma once
+
 #ifndef BLOG_HTTP_SERVER_H
 #define BLOG_HTTP_SERVER_H
+
+#include "include/post.hpp"
 
 #include <algorithm>
 #include <boost/asio/coroutine.hpp>
@@ -144,18 +148,33 @@ handle_request(beast::string_view doc_root,
   };
 
   // Make sure we can handle the method
-  if (req.method() != http::verb::get && req.method() != http::verb::head)
+  if (req.method() != http::verb::get && req.method() != http::verb::head) {
     return bad_request("Unknown HTTP-method");
+  }
 
   // Request path must be absolute and not contain "..".
   if (req.target().empty() || req.target()[0] != '/' ||
-      req.target().find("..") != beast::string_view::npos)
+      req.target().find("..") != beast::string_view::npos) {
     return bad_request("Illegal request-target");
+  }
 
   // Build the path to the requested file
   std::string path = path_cat(doc_root, req.target());
-  if (req.target().back() == '/')
+  if (req.target().back() == '/') {
     path.append("index.html");
+  }
+
+  // Handle posts route
+  if (req.method() == http::verb::get &&
+      req.target().find("/posts/") != beast::string_view::npos) {
+    http::response<http::string_body> res{http::status::ok, req.version()};
+    res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
+    res.set(http::field::content_type, "text/html");
+    res.keep_alive(req.keep_alive());
+    res.body() = "This is example post";
+    res.prepare_payload();
+    return res;
+  }
 
   // Attempt to open the file
   beast::error_code ec;
@@ -163,12 +182,14 @@ handle_request(beast::string_view doc_root,
   body.open(path.c_str(), beast::file_mode::scan, ec);
 
   // Handle the case where the file doesn't exist
-  if (ec == beast::errc::no_such_file_or_directory)
+  if (ec == beast::errc::no_such_file_or_directory) {
     return not_found(req.target());
+  }
 
   // Handle an unknown error
-  if (ec)
+  if (ec) {
     return server_error(ec.message());
+  }
 
   // Cache the size since we need it after the move
   auto const size = body.size();
@@ -209,12 +230,14 @@ class session : public boost::asio::coroutine,
   std::shared_ptr<std::string const> doc_root_;
   http::request<http::string_body> req_;
   bool keep_alive_ = true;
+  std::shared_ptr<blog::Post> post;
 
 public:
   // Take ownership of the socket
   explicit session(tcp::socket &&socket,
-                   std::shared_ptr<std::string const> const &doc_root)
-      : stream_(std::move(socket)), doc_root_(doc_root) {}
+                   std::shared_ptr<std::string const> const &doc_root,
+                   std::shared_ptr<blog::Post> blogPost)
+      : stream_(std::move(socket)), doc_root_(doc_root), post(blogPost) {}
 
   // Start the asynchronous operation
   void run() {
@@ -294,12 +317,15 @@ class listener : public boost::asio::coroutine,
   tcp::acceptor acceptor_;
   tcp::socket socket_;
   std::shared_ptr<std::string const> doc_root_;
+  std::shared_ptr<blog::Post> post;
 
 public:
   listener(net::io_context &ioc, tcp::endpoint endpoint,
-           std::shared_ptr<std::string const> const &doc_root)
+           std::shared_ptr<std::string const> const &doc_root,
+           std::shared_ptr<blog::Post> blogPost)
       : ioc_(ioc), acceptor_(net::make_strand(ioc)),
-        socket_(net::make_strand(ioc)), doc_root_(doc_root) {
+        socket_(net::make_strand(ioc)), doc_root_(doc_root),
+        post(std::move(blogPost)) {
     beast::error_code ec;
 
     // Open the acceptor
@@ -347,7 +373,7 @@ private:
           fail(ec, "accept");
         } else {
           // Create the session and run it
-          std::make_shared<session>(std::move(socket_), doc_root_)->run();
+          std::make_shared<session>(std::move(socket_), doc_root_, post)->run();
         }
 
         // Make sure each session gets its own strand

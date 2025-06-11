@@ -1,3 +1,5 @@
+#pragma once
+
 #ifndef BLOG_POST_H
 #define BLOG_POST_H
 

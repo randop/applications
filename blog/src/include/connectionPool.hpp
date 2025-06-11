@@ -1,3 +1,5 @@
+#pragma once
+
 #ifndef BLOG_CONNECTION_POOL_H
 #define BLOG_CONNECTION_POOL_H
 
