@@ -21,11 +21,22 @@ libpqxx_dep = libpqxx.get_variable('pqxx_dep')
 thread_dep = dependency('threads')
 
 ###############################################################################
+# Includes
+###############################################################################
+inc_src = include_directories('src')
+inc_inc = include_directories('src/include')
+inc_dirs = [
+    inc_src,
+    inc_inc
+]
+
+###############################################################################
 # Sources
 ###############################################################################
 
 sources = [
-    'src/main.cpp'
+    'src/main.cpp',
+    'src/dbConnection.cpp'
 ]
 
 executable(
@@ -34,5 +45,6 @@ executable(
     dependencies: [
         libpqxx_dep,
         thread_dep
-    ]
+    ],
+    include_directories: inc_dirs,
 )
