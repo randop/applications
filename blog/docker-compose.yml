@@ -3,7 +3,7 @@ version: "3.8"
 services:
   postgres:
     image: alpine:3.22
-    container_name: postgres-alpine
+    container_name: database
     command: >
       sh -c "
         apk update &&
