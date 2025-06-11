@@ -2,6 +2,7 @@
 build
 .kdev*
 .cache
+*.kate-swp
 
 ### Node ###
 # Logs
