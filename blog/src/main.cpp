@@ -28,7 +28,11 @@ int main(int argc, char **argv) {
           txn.exec("SELECT * FROM posts WHERE id = $1 LIMIT 1", postId);
       for (const auto &row : result) {
         std::cout << "ID: " << row[0].as<int>()
-                  << ", Title: " << row[1].as<std::string>() << "\n";
+                  << ", created: " << row[1].as<std::string>()
+                  << ", updated: " << row[2].as<std::string>()
+                  << ", title: " << row[3].as<std::string>()
+                  << ", content: " << row[4].as<std::string>()
+                  << std::endl;
       }
       txn.commit();
       pool.releaseConnection(conn);
