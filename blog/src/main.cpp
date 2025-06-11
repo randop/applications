@@ -24,7 +24,7 @@
 #include "include/constants.h"
 
 int main(int argc, char **argv) {
-  std::cout << "Blog server project: 1.0" << std::endl;
+  spdlog::info("Blog server project: 1.0");
 
   const char *host = "0.0.0.0";
   auto const address = net::ip::make_address(host);
@@ -44,12 +44,9 @@ int main(int argc, char **argv) {
     // Get a connection from the pool
     auto conn = pool->getConnection();
     if (conn) {
-      std::cout << "DB pool connection: OK" << std::endl;
+      spdlog::info("DB pool connection: OK");
       pqxx::work txn(*conn);
-      auto result =
-          txn.exec("SELECT id, created_at, updated_at, title, content, mode_id "
-                   "FROM posts WHERE id = $1 LIMIT 1",
-                   postId);
+      auto result = txn.exec(queryPost, postId);
 
       int modeId = MODE_MARKDOWN;
       const char *markdown;

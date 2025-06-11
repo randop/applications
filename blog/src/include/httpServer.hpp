@@ -22,11 +22,13 @@
 #include <boost/beast/version.hpp>
 #include <boost/config.hpp>
 #include <boost/url.hpp>
+#include <charconv>
 #include <cstdlib>
 #include <functional>
 #include <iostream>
 #include <memory>
 #include <string>
+#include <system_error>
 #include <thread>
 #include <vector>
 
@@ -184,11 +186,22 @@ handle_request(std::shared_ptr<blog::Post> post, beast::string_view doc_root,
       int index = 0;
 
       for (const auto &segment : segments) {
-        std::string seg(segment);
         if (index == 1) {
-          postId = std::stoi(seg);
+          // Converts string segment to int with numeric validation
+          auto [ptr, ec] = std::from_chars(
+              segment.data(), segment.data() + segment.size(), postId);
+          if (ec == std::errc() && ptr == segment.data() + segment.size()) {
+            break;
+          } else {
+            postId = NONE_POST_ID;
+          }
+          break;
         }
         ++index;
+      }
+
+      if (postId == NONE_POST_ID) {
+        return not_found(req.target());
       }
 
       std::string content = post->getPost(postId);

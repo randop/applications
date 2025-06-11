@@ -21,9 +21,6 @@
 ***/
 #include "include/constants.h"
 
-const char *queryPost = "SELECT id, created_at, updated_at, title, content, "
-                        "mode_id FROM posts WHERE id = $1 LIMIT 1";
-
 namespace blog {
 class Post {
 public:
