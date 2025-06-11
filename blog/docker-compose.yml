@@ -1,0 +1,36 @@
+version: "3.8"
+
+services:
+  postgres:
+    image: alpine:3.22
+    container_name: postgres-alpine
+    command: >
+      sh -c "
+        apk update &&
+        apk add postgresql17 postgresql17-contrib &&
+        mkdir -p /var/lib/postgresql/data &&
+        touch /var/log/postgresql.log &&
+        chmod 777 /var/log/postgresql.log &&
+        chown postgres:postgres /var/lib/postgresql/data &&
+        mkdir -p /run/postgresql &&
+        chmod 777 /run/postgresql &&
+        chown postgres:postgres /run/postgresql
+        su postgres -c 'initdb -D /var/lib/postgresql/data' &&
+        sleep 5 &&
+        echo \"listen_addresses = '*'\" >> /var/lib/postgresql/data/postgresql.conf &&
+        echo 'host all all 0.0.0.0/0 md5' >> /var/lib/postgresql/data/pg_hba.conf &&
+        su postgres -c 'pg_ctl start -D /var/lib/postgresql/data -l /var/log/postgresql.log' &&
+        su postgres -c \"psql -c \\\"CREATE USER myuser WITH PASSWORD 'mypassword';\\\"\" &&
+        su postgres -c \"psql -c \\\"CREATE DATABASE mydb OWNER myuser;\\\"\" &&
+        tail -f /var/log/postgresql.log
+      "
+    environment:
+      - POSTGRES_USER=myuser
+      - POSTGRES_PASSWORD=mypassword
+      - POSTGRES_DB=mydb
+    ports:
+      - "5432:5432"
+    network_mode: host
+
+volumes:
+  postgres_data:
