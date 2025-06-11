@@ -9,6 +9,8 @@ const int MAX_DB_CONNECTION = 10;
 int main(int argc, char **argv) {
   std::cout << "Blog server project: 1.0" << std::endl;
 
+  int postId = 1;
+
   try {
     // Initialize connection pool
     auto pool = db::ConnectionPool(
@@ -18,8 +20,14 @@ int main(int argc, char **argv) {
     // Get a connection from the pool
     auto conn = pool.getConnection();
     if (conn) {
-      pqxx::work txn(*conn);
       std::cout << "DB pool connection: OK" << std::endl;
+      pqxx::work txn(*conn);
+      auto result = txn.exec("SELECT * FROM posts WHERE id = $1 LIMIT 1", postId);
+      for (const auto& row : result) {
+        std::cout << "ID: " << row[0].as<int>()
+                  << ", Title: " << row[1].as<std::string>() << "\n";
+      }
+      txn.commit();
       pool.releaseConnection(conn);
     } else {
       std::cerr << "Failed to get connection from pool" << std::endl;
