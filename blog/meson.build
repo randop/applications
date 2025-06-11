@@ -16,7 +16,7 @@ project(
 cmake = import('cmake')
 
 libpqxx = cmake.subproject('libpqxx')
-libpqxx_dep = libpqxx.dependency('pqxx_dep')
+libpqxx_dep = libpqxx.get_variable('pqxx_dep')
 
 thread_dep = dependency('threads')
 
