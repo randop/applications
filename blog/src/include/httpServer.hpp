@@ -3,6 +3,14 @@
 #ifndef BLOG_HTTP_SERVER_H
 #define BLOG_HTTP_SERVER_H
 
+/***
+###############################################################################
+# Includes
+###############################################################################
+***/
+
+#include <spdlog/spdlog.h>
+
 #include "include/post.hpp"
 
 #include <algorithm>
@@ -13,6 +21,7 @@
 #include <boost/beast/http.hpp>
 #include <boost/beast/version.hpp>
 #include <boost/config.hpp>
+#include <boost/url.hpp>
 #include <cstdlib>
 #include <functional>
 #include <iostream>
@@ -109,7 +118,7 @@ std::string path_cat(beast::string_view base, beast::string_view path) {
 // request), is type-erased in message_generator.
 template <class Body, class Allocator>
 http::message_generator
-handle_request(beast::string_view doc_root,
+handle_request(std::shared_ptr<blog::Post> post, beast::string_view doc_root,
                http::request<Body, http::basic_fields<Allocator>> &&req) {
   // Returns a bad request response
   auto const bad_request = [&req](beast::string_view why) {
@@ -167,13 +176,34 @@ handle_request(beast::string_view doc_root,
   // Handle posts route
   if (req.method() == http::verb::get &&
       req.target().find("/posts/") != beast::string_view::npos) {
-    http::response<http::string_body> res{http::status::ok, req.version()};
-    res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
-    res.set(http::field::content_type, "text/html");
-    res.keep_alive(req.keep_alive());
-    res.body() = "This is example post";
-    res.prepare_payload();
-    return res;
+    int postId = NONE_POST_ID;
+    boost::urls::url urlTarget;
+    urlTarget.set_path(req.target());
+    auto segments = urlTarget.encoded_segments();
+    if (segments.size() >= 2) {
+      int index = 0;
+
+      for (const auto &segment : segments) {
+        std::string seg(segment);
+        if (index == 1) {
+          postId = std::stoi(seg);
+        }
+        ++index;
+      }
+
+      std::string content = post->getPost(postId);
+
+      if (postId > NONE_POST_ID && !content.empty()) {
+        http::response<http::string_body> res{http::status::ok, req.version()};
+        res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
+        res.set(http::field::content_type, "text/html");
+        res.keep_alive(req.keep_alive());
+        res.body() = content;
+        res.prepare_payload();
+        return res;
+      }
+    }
+    return not_found(req.target());
   }
 
   // Attempt to open the file
@@ -219,7 +249,7 @@ handle_request(beast::string_view doc_root,
 
 // Report a failure
 void fail(beast::error_code ec, char const *what) {
-  std::cerr << what << ": " << ec.message() << "\n";
+  spdlog::error("{}: {}", what, ec.message());
 }
 
 // Handles an HTTP server connection
@@ -278,7 +308,7 @@ public:
         yield {
           // Handle request
           http::message_generator msg =
-              handle_request(*doc_root_, std::move(req_));
+              handle_request(post, *doc_root_, std::move(req_));
 
           // Determine if we should close the connection
           keep_alive_ = msg.keep_alive();

@@ -21,10 +21,7 @@
 # Constants
 ###############################################################################
 ***/
-const int MAX_DB_CONNECTION = 10;
-const int MODE_MARKDOWN = 1;
-const int MODE_HTML = 1;
-const int DEFAULT_PORT = 8181;
+#include "include/constants.h"
 
 int main(int argc, char **argv) {
   std::cout << "Blog server project: 1.0" << std::endl;
@@ -99,7 +96,7 @@ int main(int argc, char **argv) {
     }
     ioc.run();
   } catch (const std::exception &e) {
-    std::cerr << "Error: " << e.what() << "\n";
+    spdlog::error("Error: {}", e.what());
     return EXIT_FAILURE;
   }
 

@@ -19,7 +19,7 @@ cmark_dep = cmark.get_variable('cmark_dep')
 
 thread_dep = dependency('threads')
 
-boost_dep = dependency('boost', version: '>=1.88.0', modules: ['system', 'filesystem', 'thread'], required: true)
+boost_dep = dependency('boost', version: '>=1.88.0', modules: ['system', 'filesystem', 'thread', 'url'], required: true)
 
 fmt = subproject('fmt')
 fmt_dep = fmt.get_variable('fmt_dep')
