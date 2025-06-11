@@ -21,6 +21,12 @@ thread_dep = dependency('threads')
 
 boost_dep = dependency('boost', version: '>=1.88.0', modules: ['system', 'filesystem', 'thread'], required: true)
 
+fmt = subproject('fmt')
+fmt_dep = fmt.get_variable('fmt_dep')
+
+spdlog = subproject('spdlog')
+spdlog_dep = spdlog.get_variable('spdlog_dep')
+
 ###############################################################################
 # Includes
 ###############################################################################
@@ -48,7 +54,9 @@ executable(
         libpqxx_dep,
         cmark_dep,
         thread_dep,
-        boost_dep
+        boost_dep,
+        fmt_dep,
+        spdlog_dep
     ],
     include_directories: inc_dirs,
 )
