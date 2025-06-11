@@ -10,3 +10,13 @@ Blog server project written in C++
 ```bash
 docker compose up
 ```
+
+### Configure the Build
+```bash
+meson setup build --prefer-static --default-library=static
+```
+
+### Compile
+```bash
+meson compile -C build
+```
