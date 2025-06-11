@@ -1,6 +1,7 @@
 #include "include/connectionPool.hpp"
 #include "include/dbConnection.hpp"
 #include <cmark.h>
+#include <cstdlib>
 #include <iostream>
 #include <memory>
 #include <string_view>
@@ -36,8 +37,7 @@ int main(int argc, char **argv) {
       for (const auto &row : result) {
         std::cout << "ID: " << row.at("id").as<int>()
                   << ", created: " << row.at("created_at").c_str()
-                  << ", updated: " << row.at("updated_at").c_str()
-                  << std::endl
+                  << ", updated: " << row.at("updated_at").c_str() << std::endl
                   << "title: " << row.at("title").c_str() << std::endl
                   << "content: " << std::endl;
         modeId = row.at("mode_id").as<int>();
@@ -59,8 +59,8 @@ int main(int argc, char **argv) {
     }
   } catch (const std::exception &e) {
     std::cerr << "Error: " << e.what() << "\n";
-    return 1;
+    return EXIT_FAILURE;
   }
 
-  return 0;
+  return EXIT_SUCCESS;
 }
