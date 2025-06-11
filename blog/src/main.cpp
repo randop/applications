@@ -1,7 +1,10 @@
 #include "include/connectionPool.hpp"
 #include "include/dbConnection.hpp"
 #include "include/httpServer.hpp"
+
 #include <cmark.h>
+#include <spdlog/spdlog.h>
+
 #include <cstdlib>
 #include <iostream>
 #include <memory>
@@ -63,7 +66,8 @@ int main(int argc, char **argv) {
     return EXIT_FAILURE;
   }
 
-  auto const address = net::ip::make_address("0.0.0.0");
+  const char *host = "0.0.0.0";
+  auto const address = net::ip::make_address(host);
   auto const port = static_cast<unsigned short>(8181);
   auto const docRoot = std::make_shared<std::string>("/tmp");
   auto const threadCount = std::max<int>(1, 4);
@@ -73,6 +77,8 @@ int main(int argc, char **argv) {
 
   // Create and launch a listening port
   std::make_shared<listener>(ioc, tcp::endpoint{address, port}, docRoot)->run();
+
+  spdlog::info("http server listening on {} port {}", host, port);
 
   // Run the I/O service on the requested number of threads
   std::vector<std::thread> threads;
