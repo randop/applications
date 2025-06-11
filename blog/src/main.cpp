@@ -1,6 +1,7 @@
 #include "include/connectionPool.hpp"
 #include "include/dbConnection.hpp"
 #include "include/httpServer.hpp"
+#include "include/post.hpp"
 
 #include <cmark.h>
 #include <spdlog/spdlog.h>
@@ -21,13 +22,13 @@ int main(int argc, char **argv) {
 
   try {
     // Initialize connection pool
-    auto pool =
-        db::ConnectionPool("dbname=mydb user=myuser password=mypassword "
-                           "host=192.168.100.3 port=5432",
-                           MAX_DB_CONNECTION);
+    auto pool = std::make_shared<db::ConnectionPool>(
+        "dbname=mydb user=myuser password=mypassword "
+        "host=192.168.100.3 port=5432",
+        MAX_DB_CONNECTION);
 
     // Get a connection from the pool
-    auto conn = pool.getConnection();
+    auto conn = pool->getConnection();
     if (conn) {
       std::cout << "DB pool connection: OK" << std::endl;
       pqxx::work txn(*conn);
@@ -57,10 +58,12 @@ int main(int argc, char **argv) {
         }
       }
       txn.commit();
-      pool.releaseConnection(conn);
+      pool->releaseConnection(conn);
     } else {
       std::cerr << "Failed to get connection from pool" << std::endl;
     }
+
+    auto post = blog::Post(pool);
   } catch (const std::exception &e) {
     std::cerr << "Error: " << e.what() << "\n";
     return EXIT_FAILURE;
