@@ -1,5 +1,6 @@
 #include "include/connectionPool.hpp"
 #include "include/dbConnection.hpp"
+#include "include/httpServer.hpp"
 #include <cmark.h>
 #include <cstdlib>
 #include <iostream>
