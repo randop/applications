@@ -29,24 +29,21 @@ int main(int argc, char **argv) {
       for (const auto &row : result) {
         std::cout << "ID: " << row[0].as<int>()
                   << ", created: " << row[1].as<std::string>()
-                  << ", updated: " << row[2].as<std::string>()
-                  << ", title: " << row[3].as<std::string>()
-                  << ", content: " << row[4].as<std::string>()
-                  << std::endl;
+                  << ", updated: " << row[2].as<std::string>() << std::endl
+                  << "title: " << row[3].as<std::string>() << std::endl
+                  << "content: " << std::endl;
+        const char *markdown = row[4].c_str();
+        auto html = std::unique_ptr<char, void (*)(void *)>(
+            cmark_markdown_to_html(markdown, strlen(markdown),
+                                   CMARK_OPT_DEFAULT),
+            std::free);
+        std::cout << html.get() << std::endl;
       }
       txn.commit();
       pool.releaseConnection(conn);
     } else {
       std::cerr << "Failed to get connection from pool" << std::endl;
     }
-
-    // Convert Markdown to HTML
-    const char *markdown = "# Hello, World!\nThis is a **Markdown** example.";
-    auto html = std::unique_ptr<char, void (*)(void *)>(
-        cmark_markdown_to_html(markdown, strlen(markdown), CMARK_OPT_DEFAULT),
-        std::free);
-    std::cout << "Markdown to HTML:\n" << html.get() << std::endl;
-
   } catch (const std::exception &e) {
     std::cerr << "Error: " << e.what() << "\n";
     return 1;
