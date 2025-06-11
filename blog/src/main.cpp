@@ -12,7 +12,7 @@ int main(int argc, char **argv) {
   try {
     // Initialize connection pool
     auto pool = db::ConnectionPool(
-        "dbname=mydb user=myuser password=mypassword host=localhost port=5432",
+        "dbname=mydb user=myuser password=mypassword host=192.168.100.3 port=5432",
         MAX_DB_CONNECTION);
 
     // Get a connection from the pool
