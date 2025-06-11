@@ -22,6 +22,7 @@ services:
         su postgres -c 'pg_ctl start -D /var/lib/postgresql/data -l /var/log/postgresql.log' &&
         su postgres -c \"psql -c \\\"CREATE USER myuser WITH PASSWORD 'mypassword';\\\"\" &&
         su postgres -c \"psql -c \\\"CREATE DATABASE mydb OWNER myuser;\\\"\" &&
+        su postgres -c \"psql -d mydb -f /resources.d/init.sql\" &&
         tail -f /var/log/postgresql.log
       "
     environment:
@@ -30,6 +31,8 @@ services:
       - POSTGRES_DB=mydb
     ports:
       - "5432:5432"
+    volumes:
+      - ./resources/database/init.sql:/resources.d/init.sql:ro
     network_mode: host
 
 volumes:
