@@ -1,0 +1,4 @@
+[wrap-git]
+directory = cmark
+url = https://github.com/commonmark/cmark.git
+revision = 0.31.1

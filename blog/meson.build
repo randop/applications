@@ -14,6 +14,9 @@ cmake = import('cmake')
 libpqxx = cmake.subproject('libpqxx')
 libpqxx_dep = libpqxx.get_variable('pqxx_dep')
 
+cmark = cmake.subproject('cmark')
+cmark_dep = cmark.get_variable('cmark_dep')
+
 thread_dep = dependency('threads')
 
 ###############################################################################
@@ -41,6 +44,7 @@ executable(
     sources,
     dependencies: [
         libpqxx_dep,
+        cmark_dep,
         thread_dep
     ],
     include_directories: inc_dirs,
