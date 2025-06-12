@@ -1,0 +1,66 @@
+FROM alpine:3.22
+
+# Set environment variable
+ENV MODSEC_VERSION=3.0.12
+
+# Install build dependencies and required packages
+RUN apk update && \
+    apk add \
+    nginx \
+    curl \
+    gcc \
+    pcre-dev \
+    make \
+    zlib-dev \
+    linux-headers \
+    libxml2-dev \
+    yajl-dev \
+    geoip-dev
+
+RUN apk add --virtual .build-deps \
+    build-base \
+    automake \
+    autoconf
+
+# Install ModSecurity for Nginx
+RUN curl -sL https://github.com/SpiderLabs/ModSecurity/releases/download/v${MODSEC_VERSION}/modsecurity-v${MODSEC_VERSION}.tar.gz -o /tmp/modsecurity.tar.gz && \
+    tar -xzvf /tmp/modsecurity.tar.gz -C /tmp
+
+# Install OWASP ModSecurity Core Rule Set (CRS)
+RUN curl -sL https://github.com/coreruleset/coreruleset/archive/v4.0.0-rc2.tar.gz -o /tmp/crs.tar.gz && \
+    tar -xzvf /tmp/crs.tar.gz -C /usr/local && \
+    mv /usr/local/coreruleset-4.0.0-rc2 /usr/local/crs && \
+    cp /usr/local/crs/crs-setup.conf.example /usr/local/crs/crs-setup.conf
+
+# Compile ModSecurity for Nginx
+RUN cd /tmp/modsecurity-v${MODSEC_VERSION} && \
+    ./configure --with-yajl --with-geoip && \
+    make && make install
+
+# Clean up build dependencies
+RUN rm -rf /tmp/modsecurity* && \
+    rm -rf /tmp/crs.tar.gz && \
+    apk del .build-deps && \
+    rm -rf /var/cache/apk/*
+
+RUN apk add nginx-mod-http-modsecurity
+
+# Create directories for configurations and web content
+RUN mkdir -p /etc/nginx/conf.d /var/www/html /var/cache/nginx /var/run/nginx /var/log/nginx && \
+    chown -R nginx:nginx /etc/nginx /var/www/html /var/cache/nginx /var/run/nginx /var/log/nginx
+
+# Copy custom Nginx and ModSecurity configurations
+COPY nginx.conf /etc/nginx/nginx.conf
+COPY modsecurity.conf /etc/nginx/modsecurity.conf
+
+# Copy application files
+COPY app /var/www/html
+
+# Expose port 80
+EXPOSE 80
+
+# Run as non-root user
+USER nginx
+
+# Start Nginx in foreground
+CMD ["nginx", "-g", "daemon off;"]
