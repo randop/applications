@@ -4,9 +4,14 @@
 #define BLOG_CONNECTION_POOL_H
 
 #include "dbConnection.hpp"
+#include <spdlog/spdlog.h>
+
 #include <condition_variable>
 #include <mutex>
 #include <queue>
+#include <stdexcept>
+
+const int POOL_CONNECT_TIMEOUT = 10;
 
 namespace db {
 class ConnectionPool {
@@ -16,6 +21,7 @@ public:
 
   std::shared_ptr<pqxx::connection> getConnection();
   void releaseConnection(std::shared_ptr<pqxx::connection> conn);
+  void releaseAll();
 
 private:
   std::string connStr;

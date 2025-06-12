@@ -43,8 +43,7 @@ private:
   std::shared_ptr<db::ConnectionPool> pool;
 };
 
-Post::Post(std::shared_ptr<db::ConnectionPool> sharedPool)
-    : pool(std::move(sharedPool)) {
+Post::Post(std::shared_ptr<db::ConnectionPool> sharedPool) : pool(sharedPool) {
   if (!pool) {
     throw std::invalid_argument("Connection pool cannot be null");
   }
@@ -124,6 +123,8 @@ std::string Post::getPost(int postId) {
     pool->releaseConnection(conn);
   } catch (const std::exception &e) {
     spdlog::error("get post failure: {}", e.what());
+    pool->releaseAll();
+    spdlog::error("connections release all");
   }
 
   return post;

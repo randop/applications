@@ -367,8 +367,7 @@ public:
            std::shared_ptr<std::string const> const &doc_root,
            std::shared_ptr<blog::Post> blogPost)
       : ioc_(ioc), acceptor_(net::make_strand(ioc)),
-        socket_(net::make_strand(ioc)), doc_root_(doc_root),
-        post(std::move(blogPost)) {
+        socket_(net::make_strand(ioc)), doc_root_(doc_root), post(blogPost) {
     beast::error_code ec;
 
     // Open the acceptor
