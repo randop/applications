@@ -21,6 +21,6 @@
 
 docker buildx build \
     --platform linux/amd64,linux/arm64 \
-    -t rfledesma/blog:$(cat VERSION | xargs) \
-    -t rfledesma/blog:latest \
+    -t rfledesma/boost:$(cat VERSION | xargs) \
+    -t rfledesma/boost:latest \
     --push .
