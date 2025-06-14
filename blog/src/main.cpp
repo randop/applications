@@ -5,6 +5,7 @@
 ***/
 #include "include/connectionPool.hpp"
 #include "include/dbConnection.hpp"
+#include "include/environment.hpp"
 #include "include/httpServer.hpp"
 #include "include/post.hpp"
 
@@ -24,22 +25,29 @@
 #include "include/constants.h"
 
 int main(int argc, char **argv) {
-  spdlog::info("Blog server project: 1.0");
+  spdlog::info("Blog server project: 1.0.2");
 
   const char *host = "0.0.0.0";
   auto const address = net::ip::make_address(host);
   auto const port = static_cast<unsigned short>(DEFAULT_PORT);
   auto const docRoot = std::make_shared<std::string>("/tmp");
   auto const threadCount = std::max<int>(1, 4);
+  std::string dbUrl = "postgresql://user:password@localhost:5432/database";
+
+  if (auto envDbUrl = Environment::getVariable("DB_URL")) {
+    spdlog::debug("DB_URL => {}", envDbUrl.value());
+    dbUrl = envDbUrl.value();
+  } else {
+    spdlog::warn("Unspecified environment variable DB_URL using default: {}",
+                 dbUrl);
+  }
 
   int postId = 1;
 
   try {
     // Initialize connection pool
-    auto pool = std::make_shared<db::ConnectionPool>(
-        "dbname=mydb user=myuser password=mypassword "
-        "host=192.168.100.3 port=5432",
-        MAX_DB_CONNECTION);
+    auto pool =
+        std::make_shared<db::ConnectionPool>(dbUrl, MAX_DB_CONNECTION);
 
     // Get a connection from the pool
     auto conn = pool->getConnection();
