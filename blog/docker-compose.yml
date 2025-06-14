@@ -30,6 +30,8 @@ services:
         su postgres -c \"psql -c \\\"CREATE DATABASE mydb OWNER myuser;\\\"\" &&
         su postgres -c \"psql -d mydb -f /resources.d/001-init.sql\" &&
         su postgres -c \"psql -d mydb -f /resources.d/002-seed.sql\" &&
+        su postgres -c \"psql -d mydb -f /resources.d/003-seed.sql\" &&
+        su postgres -c \"psql -d mydb -f /resources.d/004-seed.sql\" &&
         tail -f /var/log/postgresql.log
       "
     environment:
@@ -41,6 +43,8 @@ services:
     volumes:
       - ./resources/database/001-init.sql:/resources.d/001-init.sql:ro
       - ./resources/database/002-seed.sql:/resources.d/002-seed.sql:ro
+      - ./resources/database/003-seed.sql:/resources.d/003-seed.sql:ro
+      - ./resources/database/004-seed.sql:/resources.d/004-seed.sql:ro
     network_mode: host
 
 volumes:

@@ -101,6 +101,7 @@ std::string Post::getPost(int postId) {
       int modeId = MODE_MARKDOWN;
       const char *markdown;
       for (const auto &row : result) {
+        modeId = row.at("mode_id").as<int>();
         post.append("<h1>");
         post.append(row.at("title").c_str());
         post.append("</h1>");

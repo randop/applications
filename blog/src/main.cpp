@@ -7,6 +7,7 @@
 #include "include/dbConnection.hpp"
 #include "include/environment.hpp"
 #include "include/httpServer.hpp"
+#include "include/page.hpp"
 #include "include/post.hpp"
 #include "project.hpp"
 
@@ -37,9 +38,8 @@ namespace po = boost::program_options;
 int main(int argc, char *argv[]) {
   try {
     po::options_description desc("Allowed options");
-    desc.add_options()
-      ("help,h", "Produce help message")
-      ("version,v", "Print version information");
+    desc.add_options()("help,h", "Produce help message")(
+        "version,v", "Print version information");
 
     po::variables_map vm;
     po::store(po::parse_command_line(argc, argv, desc), vm);
@@ -116,12 +116,14 @@ int main(int argc, char *argv[]) {
     }
 
     auto post = std::make_shared<blog::Post>(pool);
+    auto page = std::make_shared<blog::Page>(pool);
 
     // The io_context is required for all I/O
     net::io_context ioc{threadCount};
 
     // Create and launch a listening port
-    std::make_shared<listener>(ioc, tcp::endpoint{address, port}, docRoot, post)
+    std::make_shared<listener>(ioc, tcp::endpoint{address, port}, docRoot, post,
+                               page)
         ->run();
 
     spdlog::info("http server listening on {} port {}", host, port);

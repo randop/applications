@@ -11,6 +11,7 @@
 
 #include <spdlog/spdlog.h>
 
+#include "include/page.hpp"
 #include "include/post.hpp"
 
 #include <algorithm>
@@ -120,7 +121,8 @@ std::string path_cat(beast::string_view base, beast::string_view path) {
 // request), is type-erased in message_generator.
 template <class Body, class Allocator>
 http::message_generator
-handle_request(std::shared_ptr<blog::Post> post, beast::string_view doc_root,
+handle_request(std::shared_ptr<blog::Post> post,
+               std::shared_ptr<blog::Page> page, beast::string_view doc_root,
                http::request<Body, http::basic_fields<Allocator>> &&req) {
   // Returns a bad request response
   auto const bad_request = [&req](beast::string_view why) {
@@ -172,7 +174,14 @@ handle_request(std::shared_ptr<blog::Post> post, beast::string_view doc_root,
   // Build the path to the requested file
   std::string path = path_cat(doc_root, req.target());
   if (req.target().back() == '/') {
-    path.append("index.html");
+    std::string content = page->getPage("index");
+    http::response<http::string_body> res{http::status::ok, req.version()};
+    res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
+    res.set(http::field::content_type, "text/html");
+    res.keep_alive(req.keep_alive());
+    res.body() = content;
+    res.prepare_payload();
+    return res;
   }
 
   // Handle posts route
@@ -262,6 +271,10 @@ handle_request(std::shared_ptr<blog::Post> post, beast::string_view doc_root,
 
 // Report a failure
 void fail(beast::error_code ec, char const *what) {
+  if (ec.message().find("The socket was closed due to a timeout") !=
+      beast::string_view::npos) {
+    return;
+  }
   spdlog::error("{}: {}", what, ec.message());
 }
 
@@ -274,13 +287,16 @@ class session : public boost::asio::coroutine,
   http::request<http::string_body> req_;
   bool keep_alive_ = true;
   std::shared_ptr<blog::Post> post;
+  std::shared_ptr<blog::Page> page;
 
 public:
   // Take ownership of the socket
   explicit session(tcp::socket &&socket,
                    std::shared_ptr<std::string const> const &doc_root,
-                   std::shared_ptr<blog::Post> blogPost)
-      : stream_(std::move(socket)), doc_root_(doc_root), post(blogPost) {}
+                   std::shared_ptr<blog::Post> blogPost,
+                   std::shared_ptr<blog::Page> blogPage)
+      : stream_(std::move(socket)), doc_root_(doc_root), post(blogPost),
+        page(blogPage) {}
 
   // Start the asynchronous operation
   void run() {
@@ -321,7 +337,7 @@ public:
         yield {
           // Handle request
           http::message_generator msg =
-              handle_request(post, *doc_root_, std::move(req_));
+              handle_request(post, page, *doc_root_, std::move(req_));
 
           // Determine if we should close the connection
           keep_alive_ = msg.keep_alive();
@@ -361,13 +377,16 @@ class listener : public boost::asio::coroutine,
   tcp::socket socket_;
   std::shared_ptr<std::string const> doc_root_;
   std::shared_ptr<blog::Post> post;
+  std::shared_ptr<blog::Page> page;
 
 public:
   listener(net::io_context &ioc, tcp::endpoint endpoint,
            std::shared_ptr<std::string const> const &doc_root,
-           std::shared_ptr<blog::Post> blogPost)
+           std::shared_ptr<blog::Post> blogPost,
+           std::shared_ptr<blog::Page> blogPage)
       : ioc_(ioc), acceptor_(net::make_strand(ioc)),
-        socket_(net::make_strand(ioc)), doc_root_(doc_root), post(blogPost) {
+        socket_(net::make_strand(ioc)), doc_root_(doc_root), post(blogPost),
+        page(blogPage) {
     beast::error_code ec;
 
     // Open the acceptor
@@ -415,7 +434,8 @@ private:
           fail(ec, "accept");
         } else {
           // Create the session and run it
-          std::make_shared<session>(std::move(socket_), doc_root_, post)->run();
+          std::make_shared<session>(std::move(socket_), doc_root_, post, page)
+              ->run();
         }
 
         // Make sure each session gets its own strand

@@ -19,4 +19,8 @@
 # limitations under the License.
 #
 
-docker buildx build --platform linux/amd64,linux/arm64 -t rfledesma/blog:latest -t rfledesma/blog:$(cat VERSION | xargs) --push .
+docker buildx build \
+    --platform linux/amd64,linux/arm64 \
+    -t rfledesma/blog:$(cat VERSION | xargs) \
+    -t rfledesma/blog:latest \
+    --push .

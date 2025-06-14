@@ -13,7 +13,8 @@ INSERT INTO
     modes (id, mode)
 VALUES
     (1, 'markdown'),
-    (2, 'html');
+    (2, 'html'),
+    (3, 'plain');
 
 GRANT ALL PRIVILEGES ON TABLE modes TO myuser;
 
@@ -28,3 +29,28 @@ CREATE TABLE IF NOT EXISTS posts (
 );
 
 GRANT ALL PRIVILEGES ON TABLE posts TO myuser;
+
+CREATE TABLE IF NOT EXISTS layouts (
+    id SERIAL PRIMARY KEY,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    name VARCHAR(255) NOT NULL,
+    header TEXT NOT NULL,
+    footer TEXT NOT NULL
+);
+
+GRANT ALL PRIVILEGES ON TABLE layouts TO myuser;
+
+CREATE TABLE IF NOT EXISTS pages (
+    id VARCHAR(255) PRIMARY KEY,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    title VARCHAR(255) NOT NULL,
+    content TEXT NOT NULL,
+    mode_id INTEGER NOT NULL DEFAULT 2,
+    layout_id INTEGER NOT NULL DEFAULT 1,
+    CONSTRAINT fk_mode_id FOREIGN KEY (mode_id) REFERENCES modes (id),
+    CONSTRAINT fk_layout_id FOREIGN KEY (layout_id) REFERENCES layouts (id)
+);
+
+GRANT ALL PRIVILEGES ON TABLE pages TO myuser;
