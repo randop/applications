@@ -47,8 +47,7 @@ int main(int argc, char **argv) {
 
   try {
     // Initialize connection pool
-    auto pool =
-        std::make_shared<db::ConnectionPool>(dbUrl, MAX_DB_CONNECTION);
+    auto pool = std::make_shared<db::ConnectionPool>(dbUrl, MAX_DB_CONNECTION);
 
     // Get a connection from the pool
     auto conn = pool->getConnection();
