@@ -64,16 +64,23 @@ int main(int argc, char *argv[]) {
   const char *host = "0.0.0.0";
   auto const address = net::ip::make_address(host);
   auto const port = static_cast<unsigned short>(DEFAULT_PORT);
-  auto const docRoot = std::make_shared<std::string>("/tmp");
   auto const threadCount = std::max<int>(1, 4);
-  std::string dbUrl = "postgresql://user:password@localhost:5432/database";
 
+  std::string dbUrl = "postgresql://user:password@localhost:5432/database";
   if (auto envDbUrl = Environment::getVariable("DB_URL")) {
     spdlog::debug("DB_URL => {}", envDbUrl.value());
     dbUrl = envDbUrl.value();
   } else {
     spdlog::warn("Unspecified environment variable DB_URL using default: {}",
                  dbUrl);
+  }
+
+  auto docRoot = std::make_shared<std::string>("/tmp");
+  if (auto envDocRoot = Environment::getVariable("DOC_ROOT")) {
+    docRoot = std::make_shared<std::string>(envDocRoot.value());
+  } else {
+    spdlog::warn("Unspecified environment variable DOC_ROOT using default: {}",
+                 docRoot->c_str());
   }
 
   int postId = 1;
@@ -108,6 +115,7 @@ int main(int argc, char *argv[]) {
         } else if (modeId == MODE_HTML) {
           std::cout << row.at("content").c_str() << std::endl;
         }
+        break;
       }
       txn.commit();
       pool->releaseConnection(conn);
