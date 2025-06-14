@@ -24,5 +24,5 @@ meson compile -C build
 ## Build and Deploy
 ```bash
 docker buildx create --name multiarch --use
-docker buildx build --platform linux/amd64,linux/arm64 -t rfledesma/blog:latest -t rfledesma/blog:1.0.0 --push .
+docker buildx build --platform linux/amd64,linux/arm64 -t rfledesma/blog:latest --push .
 ```
