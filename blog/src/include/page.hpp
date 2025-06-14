@@ -74,21 +74,19 @@ std::string Page::getPage(const std::string &pageId) {
       const char *markdown;
       for (const auto &row : result) {
         modeId = row.at("mode_id").as<int>();
+        page.append(row.at("header").c_str());
         if (modeId == MODE_MARKDOWN) {
           markdown = row.at("content").c_str();
           auto html = std::unique_ptr<char, void (*)(void *)>(
               cmark_markdown_to_html(markdown, strlen(markdown),
                                      CMARK_OPT_DEFAULT),
               std::free);
-          page.append(row.at("header").c_str());
-          page.append(html.get());
-          page.append(row.at("footer").c_str());
-        } else if (modeId == MODE_HTML) {
-          page.append(row.at("header").c_str());
-          page.append(row.at("content").c_str());
-          page.append(row.at("footer").c_str());
-        }
 
+          page.append(html.get());
+        } else if (modeId == MODE_HTML) {
+          page.append(row.at("content").c_str());
+        }
+        page.append(row.at("footer").c_str());
         page = titlePlaceholder(page, row.at("title").c_str());
         break;
       }

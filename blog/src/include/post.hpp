@@ -37,6 +37,7 @@ public:
   ~Post() = default;
 
   std::string timestamp(const std::string &timeStamp);
+  std::string titlePlaceholder(std::string content, const char *newTitle) const;
   std::string getPost(int postId);
 
 private:
@@ -90,6 +91,19 @@ std::string Post::timestamp(const std::string &inputTimestamp) {
   return inputTimestamp;
 }
 
+std::string Post::titlePlaceholder(std::string content,
+                                   const char *newTitle) const {
+  const std::string placeholder = "<title>%REPLACE_WITH_TITLE_ID%</title>";
+  std::string::size_type pos = content.find(placeholder);
+  std::string title = "<title>";
+  title.append(newTitle);
+  title.append("</title>");
+  if (pos != std::string::npos) {
+    content.replace(pos, placeholder.length(), title);
+  }
+  return content;
+}
+
 std::string Post::getPost(int postId) {
   std::string post;
   try {
@@ -102,6 +116,7 @@ std::string Post::getPost(int postId) {
       const char *markdown;
       for (const auto &row : result) {
         modeId = row.at("mode_id").as<int>();
+        post.append(row.at("header").c_str());
         post.append("<h1>");
         post.append(row.at("title").c_str());
         post.append("</h1>");
@@ -118,6 +133,9 @@ std::string Post::getPost(int postId) {
         } else if (modeId == MODE_HTML) {
           post.append(row.at("content").c_str());
         }
+        post.append(row.at("footer").c_str());
+        post = titlePlaceholder(post, row.at("title").c_str());
+        break;
       }
     }
     txn.commit();
