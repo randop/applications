@@ -59,7 +59,8 @@ int main(int argc, char *argv[]) {
     return EXIT_FAILURE;
   }
 
-  spdlog::info("Blog server project: {} (build: {})", PROJECT_VERSION, PROJECT_BUILD);
+  spdlog::info("Blog server project: {} (build: {})", PROJECT_VERSION,
+               PROJECT_BUILD);
 
   const char *host = "0.0.0.0";
   auto const address = net::ip::make_address(host);
@@ -78,6 +79,7 @@ int main(int argc, char *argv[]) {
   auto docRoot = std::make_shared<std::string>("/tmp");
   if (auto envDocRoot = Environment::getVariable("DOC_ROOT")) {
     docRoot = std::make_shared<std::string>(envDocRoot.value());
+    spdlog::info("DOC_ROOT => {}", docRoot->c_str());
   } else {
     spdlog::warn("Unspecified environment variable DOC_ROOT using default: {}",
                  docRoot->c_str());
