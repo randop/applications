@@ -4,5 +4,6 @@
 #define BLOG_PROJECT_HPP
 
 #define PROJECT_VERSION "@VERSION@"
+#define PROJECT_BUILD "@BUILD@"
 
 #endif // BLOG_PROJECT_HPP

@@ -59,7 +59,7 @@ int main(int argc, char *argv[]) {
     return EXIT_FAILURE;
   }
 
-  spdlog::info("Blog server project: {}", PROJECT_VERSION);
+  spdlog::info("Blog server project: {} (build: {})", PROJECT_VERSION, PROJECT_BUILD);
 
   const char *host = "0.0.0.0";
   auto const address = net::ip::make_address(host);
