@@ -10,6 +10,7 @@
 #include "include/post.hpp"
 #include "project.hpp"
 
+#include <boost/program_options.hpp>
 #include <cmark.h>
 #include <spdlog/spdlog.h>
 
@@ -25,7 +26,39 @@
 ***/
 #include "include/constants.h"
 
-int main(int argc, char **argv) {
+/***
+###############################################################################
+# Namespaces
+###############################################################################
+***/
+
+namespace po = boost::program_options;
+
+int main(int argc, char *argv[]) {
+  try {
+    po::options_description desc("Allowed options");
+    desc.add_options()
+      ("help,h", "Produce help message")
+      ("version,v", "Print version information");
+
+    po::variables_map vm;
+    po::store(po::parse_command_line(argc, argv, desc), vm);
+    po::notify(vm);
+
+    if (vm.count("help")) {
+      std::cout << desc << std::endl;
+      return EXIT_SUCCESS;
+    }
+
+    if (vm.count("version")) {
+      std::cout << PROJECT_VERSION << std::endl;
+      return EXIT_SUCCESS;
+    }
+  } catch (const std::exception &e) {
+    std::cerr << "Error: " << e.what() << std::endl;
+    return EXIT_FAILURE;
+  }
+
   spdlog::info("Blog server project: {}", PROJECT_VERSION);
 
   const char *host = "0.0.0.0";
