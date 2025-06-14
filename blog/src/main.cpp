@@ -8,6 +8,7 @@
 #include "include/environment.hpp"
 #include "include/httpServer.hpp"
 #include "include/post.hpp"
+#include "project.hpp"
 
 #include <cmark.h>
 #include <spdlog/spdlog.h>
@@ -25,7 +26,7 @@
 #include "include/constants.h"
 
 int main(int argc, char **argv) {
-  spdlog::info("Blog server project: 1.0.2");
+  spdlog::info("Blog server project: {}", PROJECT_VERSION);
 
   const char *host = "0.0.0.0";
   auto const address = net::ip::make_address(host);

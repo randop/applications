@@ -1,7 +1,7 @@
 project(
   'blog',
   'cpp',
-  version : '1.0.0',
+  version : run_command('cat', 'VERSION', check: true).stdout().strip(),
   default_options : [
         'buildtype=release',
         'optimization=3',
@@ -11,6 +11,13 @@ project(
         'cpp_std=c++20'
   ],
   meson_version : '>= 1.0.1'
+)
+
+version = meson.project_version()
+configure_file(
+  input: 'src/project.hpp.in',
+  output: 'project.hpp',
+  configuration: {'VERSION': version}
 )
 
 ###############################################################################

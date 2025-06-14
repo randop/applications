@@ -1,0 +1,8 @@
+#pragma once
+
+#ifndef BLOG_PROJECT_HPP
+#define BLOG_PROJECT_HPP
+
+#define PROJECT_VERSION "@VERSION@"
+
+#endif // BLOG_PROJECT_HPP
