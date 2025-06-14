@@ -8,7 +8,7 @@ Blog server project written in C++
 
 ## Development
 ```bash
-docker compose up
+docker compose up --renew-anon-volumes
 ```
 
 ### Configure the Build

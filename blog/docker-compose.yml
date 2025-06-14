@@ -1,3 +1,8 @@
+###############################################################################
+# Services for development only
+# IMPORTANT!!! Data is wiped on provision
+###############################################################################
+
 version: "3.8"
 
 services:
@@ -23,7 +28,8 @@ services:
         su postgres -c 'pg_ctl start -D /var/lib/postgresql/data -l /var/log/postgresql.log' &&
         su postgres -c \"psql -c \\\"CREATE USER myuser WITH PASSWORD 'mypassword';\\\"\" &&
         su postgres -c \"psql -c \\\"CREATE DATABASE mydb OWNER myuser;\\\"\" &&
-        su postgres -c \"psql -d mydb -f /resources.d/init.sql\" &&
+        su postgres -c \"psql -d mydb -f /resources.d/001-init.sql\" &&
+        su postgres -c \"psql -d mydb -f /resources.d/002-seed.sql\" &&
         tail -f /var/log/postgresql.log
       "
     environment:
@@ -33,7 +39,8 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - ./resources/database/init.sql:/resources.d/init.sql:ro
+      - ./resources/database/001-init.sql:/resources.d/001-init.sql:ro
+      - ./resources/database/002-seed.sql:/resources.d/002-seed.sql:ro
     network_mode: host
 
 volumes:

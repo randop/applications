@@ -62,4 +62,6 @@ RUN chown -R nonroot:nonroot /app
 # Switch to nonroot user
 USER nonroot
 
+EXPOSE 10000
+
 CMD ["/app/blog"]

@@ -6,7 +6,7 @@
 const int MAX_DB_CONNECTION = 10;
 const int MODE_MARKDOWN = 1;
 const int MODE_HTML = 1;
-const int DEFAULT_PORT = 8181;
+const int DEFAULT_PORT = 10000;
 const int NONE_POST_ID = 0;
 
 const char *queryPost = "SELECT id, created_at, updated_at, title, content, "
