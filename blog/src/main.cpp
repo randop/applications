@@ -72,7 +72,8 @@ int main(int argc, char *argv[]) {
   catch (const std::exception& e)
   {
     // Handle errors
-    std::cout<< "Exception: " << e.what() << std::endl;
+    spdlog::error("mongodb error: {}", e.what());
+    return EXIT_SUCCESS;
   }
 
 
