@@ -20,6 +20,10 @@
 #include <memory>
 #include <string_view>
 
+#include <bsoncxx/json.hpp>
+#include <mongocxx/client.hpp>
+#include <mongocxx/instance.hpp>
+
 /***
 ###############################################################################
 # Constants
@@ -36,6 +40,42 @@
 namespace po = boost::program_options;
 
 int main(int argc, char *argv[]) {
+  std::string mongoDbUrl = "mongodb+srv://user:password@host/?retryWrites=true&w=majority&appName=app";
+  if (auto envMongoDbUrl = Environment::getVariable("MONGODB_URL")) {
+    spdlog::debug("MONGODB_URL => {}", envMongoDbUrl.value());
+    mongoDbUrl = envMongoDbUrl.value();
+  } else {
+    spdlog::warn("Unspecified environment variable MONGODB_URL using default: {}",
+                 mongoDbUrl);
+  }
+  try
+  {
+    // Create an instance.
+    mongocxx::instance inst{};
+
+    const auto uri = mongocxx::uri{mongoDbUrl};
+
+    // Set the version of the Stable API on the client
+    mongocxx::options::client client_options;
+    const auto api = mongocxx::options::server_api{mongocxx::options::server_api::version::k_version_1};
+    client_options.server_api_opts(api);
+
+    // Setup the connection and get a handle on the "admin" database.
+    mongocxx::client conn{ uri, client_options };
+    mongocxx::database db = conn["admin"];
+
+    // Ping the database.
+    const auto ping_cmd = bsoncxx::builder::basic::make_document(bsoncxx::builder::basic::kvp("ping", 1));
+    db.run_command(ping_cmd.view());
+    spdlog::info("connected on mongodb");
+  }
+  catch (const std::exception& e)
+  {
+    // Handle errors
+    std::cout<< "Exception: " << e.what() << std::endl;
+  }
+
+
   try {
     po::options_description desc("Allowed options");
     desc.add_options()("help,h", "Produce help message")(
