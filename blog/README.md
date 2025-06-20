@@ -22,6 +22,7 @@ docker compose up --renew-anon-volumes
 
 ### Configure the Build
 ```bash
+export LD_LIBRARY_PATH=/usr/local/lib:/opt/boost/current/lib:/opt/mongo-c-driver/current/lib
 meson setup build --prefer-static --default-library=static
 ```
 
