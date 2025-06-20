@@ -26,8 +26,14 @@ RUN echo "Configuring build..." && \
 RUN echo "Compiling application..." && \
     meson compile -C build
 
+RUN echo "Cleaning up..." && \
+    rm -rf /opt/mongo-c-driver/2.0.2
+
 # Runtime stage: Use Debian Bookworm Slim for runtime
 FROM debian:bookworm-slim
+
+# Set runtime library path
+ENV LD_LIBRARY_PATH=/usr/local/lib
 
 # Install runtime dependencies
 RUN echo "Installing runtime packages..." && \
@@ -36,7 +42,13 @@ RUN echo "Installing runtime packages..." && \
     openssl \
     ca-certificates \
     libmongoc-1.0-0 \
+    libbson-1.0-0 \
     && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /opt/mongo-c-driver/current/lib /usr/local/lib/
+RUN echo "Linking MongoDB C Driver..." && \
+    echo "/usr/local/lib" > /etc/ld.so.conf.d/mongo.conf \
+    && ldconfig
 
 # Create nonroot user and group
 RUN echo "Configuring nonroot account..." && \
