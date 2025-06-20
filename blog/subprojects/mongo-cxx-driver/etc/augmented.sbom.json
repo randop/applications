@@ -1,0 +1,85 @@
+{
+  "components": [
+    {
+      "bom-ref": "pkg:github/mongodb/mongo-c-driver@v2.0.0",
+      "copyright": "Copyright 2009-present MongoDB, Inc.",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://github.com/mongodb/mongo-c-driver/archive/refs/tags/v2.0.0.tar.gz"
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/mongodb/mongo-c-driver/tree/v2.0.0"
+        }
+      ],
+      "group": "mongodb",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "name": "mongo-c-driver",
+      "purl": "pkg:github/mongodb/mongo-c-driver@v2.0.0",
+      "type": "library",
+      "version": "v2.0.0"
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "pkg:github/mongodb/mongo-c-driver@v2.0.0"
+    }
+  ],
+  "metadata": {
+    "timestamp": "2025-04-02T19:47:45.682404+00:00",
+    "tools": [
+      {
+        "externalReferences": [
+          {
+            "type": "build-system",
+            "url": "https://github.com/CycloneDX/cyclonedx-python-lib/actions"
+          },
+          {
+            "type": "distribution",
+            "url": "https://pypi.org/project/cyclonedx-python-lib/"
+          },
+          {
+            "type": "documentation",
+            "url": "https://cyclonedx-python-library.readthedocs.io/"
+          },
+          {
+            "type": "issue-tracker",
+            "url": "https://github.com/CycloneDX/cyclonedx-python-lib/issues"
+          },
+          {
+            "type": "license",
+            "url": "https://github.com/CycloneDX/cyclonedx-python-lib/blob/main/LICENSE"
+          },
+          {
+            "type": "release-notes",
+            "url": "https://github.com/CycloneDX/cyclonedx-python-lib/blob/main/CHANGELOG.md"
+          },
+          {
+            "type": "vcs",
+            "url": "https://github.com/CycloneDX/cyclonedx-python-lib"
+          },
+          {
+            "type": "website",
+            "url": "https://github.com/CycloneDX/cyclonedx-python-lib/#readme"
+          }
+        ],
+        "name": "cyclonedx-python-lib",
+        "vendor": "CycloneDX",
+        "version": "6.4.4"
+      }
+    ]
+  },
+  "serialNumber": "urn:uuid:d27194f6-e5a2-45d3-b9cd-0da1502fb655",
+  "version": 1,
+  "$schema": "http://cyclonedx.org/schema/bom-1.5.schema.json",
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.5",
+  "vulnerabilities": []
+}

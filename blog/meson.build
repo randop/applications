@@ -57,6 +57,14 @@ spdlog = subproject(
 )
 spdlog_dep = spdlog.get_variable('spdlog_dep')
 
+mongoc = cmake.subproject('mongo-c-driver')
+mongoc_dep = mongoc.dependency('mongoc_static')
+bson_dep = mongoc.dependency('bson_static')
+
+mongocxx = cmake.subproject('mongo-cxx-driver')
+mongocxx_dep = mongocxx.dependency('mongocxx_static')
+bsoncxx_dep = mongocxx.dependency('bsoncxx_static')
+
 ###############################################################################
 # Includes
 ###############################################################################
@@ -104,6 +112,10 @@ executable(
     boost_dep,
     fmt_dep,
     spdlog_dep,
+    mongoc_dep,
+    bson_dep,
+    mongocxx_dep,
+    bsoncxx_dep
   ],
   include_directories: inc_dirs,
   cpp_args: ['-DPQXX_HEADER_ONLY=1', '-DBOOST_ALL_NO_LIB', '-DFMT_HEADER_ONLY'],
