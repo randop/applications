@@ -47,5 +47,15 @@ services:
       - ./resources/database/004-seed.sql:/resources.d/004-seed.sql:ro
     network_mode: host
 
+  mongodb:
+    image: mongodb/mongodb-community-server:8.0.6-ubi9
+    container_name: mongodb
+    network_mode: host
+    ports:
+      - "27017:27017"
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=user
+      - MONGO_INITDB_ROOT_PASSWORD=pass
+
 volumes:
   postgres_data:
