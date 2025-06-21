@@ -12,7 +12,6 @@
 #include "project.hpp"
 
 #include <boost/program_options.hpp>
-#include <cmark.h>
 #include <spdlog/spdlog.h>
 
 #include <cstdlib>
@@ -23,6 +22,7 @@
 #include <bsoncxx/json.hpp>
 #include <mongocxx/client.hpp>
 #include <mongocxx/instance.hpp>
+#include <mongocxx/uri.hpp>
 
 /***
 ###############################################################################
@@ -40,43 +40,6 @@
 namespace po = boost::program_options;
 
 int main(int argc, char *argv[]) {
-  std::string mongoDbUrl = "mongodb+srv://user:password@host/?retryWrites=true&w=majority&appName=app";
-  if (auto envMongoDbUrl = Environment::getVariable("MONGODB_URL")) {
-    spdlog::debug("MONGODB_URL => {}", envMongoDbUrl.value());
-    mongoDbUrl = envMongoDbUrl.value();
-  } else {
-    spdlog::warn("Unspecified environment variable MONGODB_URL using default: {}",
-                 mongoDbUrl);
-  }
-  try
-  {
-    // Create an instance.
-    mongocxx::instance inst{};
-
-    const auto uri = mongocxx::uri{mongoDbUrl};
-
-    // Set the version of the Stable API on the client
-    mongocxx::options::client client_options;
-    const auto api = mongocxx::options::server_api{mongocxx::options::server_api::version::k_version_1};
-    client_options.server_api_opts(api);
-
-    // Setup the connection and get a handle on the "admin" database.
-    mongocxx::client conn{ uri, client_options };
-    mongocxx::database db = conn["admin"];
-
-    // Ping the database.
-    const auto ping_cmd = bsoncxx::builder::basic::make_document(bsoncxx::builder::basic::kvp("ping", 1));
-    db.run_command(ping_cmd.view());
-    spdlog::info("connected on mongodb");
-  }
-  catch (const std::exception& e)
-  {
-    // Handle errors
-    spdlog::error("mongodb error: {}", e.what());
-    return EXIT_SUCCESS;
-  }
-
-
   try {
     po::options_description desc("Allowed options");
     desc.add_options()("help,h", "Produce help message")(
@@ -102,6 +65,45 @@ int main(int argc, char *argv[]) {
 
   spdlog::info("Blog server project: {} (build: {})", PROJECT_VERSION,
                PROJECT_BUILD);
+
+  std::string mongoDbUrl = "mongodb+srv://user:password@host/"
+                           "?retryWrites=true&w=majority&appName=app";
+  if (auto envMongoDbUrl = Environment::getVariable("MONGODB_URL")) {
+    spdlog::debug("MONGODB_URL => {}", envMongoDbUrl.value());
+    mongoDbUrl = envMongoDbUrl.value();
+  } else {
+    spdlog::warn(
+        "Unspecified environment variable MONGODB_URL using default: {}",
+        mongoDbUrl);
+  }
+
+  std::shared_ptr<mongocxx::pool> mongoPool;
+
+  try {
+    // Initialize the MongoDB C++ driver
+    mongocxx::instance inst{};
+    mongocxx::uri uri(mongoDbUrl);
+
+    // Set the version of the Stable API on the client
+    mongocxx::options::client client_options;
+    const auto api = mongocxx::options::server_api{
+        mongocxx::options::server_api::version::k_version_1};
+    client_options.server_api_opts(api);
+
+    mongoPool = std::make_shared<mongocxx::pool>(uri, client_options);
+    auto conn = mongoPool->acquire();
+    mongocxx::database db = conn["admin"];
+
+    // Ping the database.
+    const auto ping_cmd = bsoncxx::builder::basic::make_document(
+        bsoncxx::builder::basic::kvp("ping", 1));
+    db.run_command(ping_cmd.view());
+    spdlog::info("connected on mongodb");
+  } catch (const std::exception &e) {
+    // Handle errors
+    spdlog::error("mongodb error: {}", e.what());
+    return EXIT_SUCCESS;
+  }
 
   const char *host = "0.0.0.0";
   auto const address = net::ip::make_address(host);
@@ -136,38 +138,13 @@ int main(int argc, char *argv[]) {
     auto conn = pool->getConnection();
     if (conn) {
       spdlog::info("DB pool connection: OK");
-      pqxx::work txn(*conn);
-      auto result = txn.exec(queryPost, postId);
-
-      int modeId = MODE_MARKDOWN;
-      const char *markdown;
-      for (const auto &row : result) {
-        std::cout << "ID: " << row.at("id").as<int>()
-                  << ", created: " << row.at("created_at").c_str()
-                  << ", updated: " << row.at("updated_at").c_str() << std::endl
-                  << "title: " << row.at("title").c_str() << std::endl
-                  << "content: " << std::endl;
-        modeId = row.at("mode_id").as<int>();
-        if (modeId == MODE_MARKDOWN) {
-          markdown = row.at("content").c_str();
-          auto html = std::unique_ptr<char, void (*)(void *)>(
-              cmark_markdown_to_html(markdown, strlen(markdown),
-                                     CMARK_OPT_DEFAULT),
-              std::free);
-          std::cout << html.get() << std::endl;
-        } else if (modeId == MODE_HTML) {
-          std::cout << row.at("content").c_str() << std::endl;
-        }
-        break;
-      }
-      txn.commit();
       pool->releaseConnection(conn);
     } else {
-      std::cerr << "Failed to get connection from pool" << std::endl;
+      spdlog::error("Failed to get db connection from pool");
     }
 
     auto post = std::make_shared<blog::Post>(pool);
-    auto page = std::make_shared<blog::Page>(pool);
+    auto page = std::make_shared<blog::Page>(mongoPool);
 
     // The io_context is required for all I/O
     net::io_context ioc{threadCount};
