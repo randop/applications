@@ -34,6 +34,8 @@
 #include <unordered_map>
 #include <vector>
 
+#include "include/stringUtil.hpp"
+
 /***
 ###############################################################################
 # Constants
@@ -83,7 +85,6 @@ public:
 
 private:
   std::shared_ptr<mongocxx::pool> pool;
-  std::string titlePlaceholder(std::string content, const char *newTitle) const;
   std::string timestamp(bsoncxx::types::b_date date);
 };
 
@@ -106,21 +107,10 @@ std::string Page::timestamp(bsoncxx::types::b_date date) {
   return buffer;
 }
 
-std::string Page::titlePlaceholder(std::string content,
-                                   const char *newTitle) const {
-  const std::string placeholder = "<title>%REPLACE_WITH_TITLE_ID%</title>";
-  std::string::size_type pos = content.find(placeholder);
-  std::string title = "<title>";
-  title.append(newTitle);
-  title.append("</title>");
-  if (pos != std::string::npos) {
-    content.replace(pos, placeholder.length(), title);
-  }
-  return content;
-}
-
 std::string Page::getPage(const std::string &pageId) {
   std::string page;
+  std::string titleTag;
+
   try {
     auto client = pool->acquire();
     auto db = client["localhost"];
@@ -150,7 +140,10 @@ std::string Page::getPage(const std::string &pageId) {
                      : static_cast<int>(doc[kModeIdField].get_int64().value);
       }
 
-      auto titleField = doc[kTitleField].get_string().value;
+      auto titleValue = doc[kTitleField].get_string().value;
+      titleTag.append("<title>");
+      titleTag.append(titleValue.data(), titleValue.size());
+      titleTag.append("</title>");
 
       auto headerValue = doc[kLayoutField][kHeaderField].get_string().value;
       page.append(headerValue.data(), headerValue.size());
@@ -164,7 +157,7 @@ std::string Page::getPage(const std::string &pageId) {
                                    CMARK_OPT_DEFAULT),
             std::free);
         page.append("<h1>");
-        page.append(titleField.data(), titleField.size());
+        page.append(titleValue.data(), titleValue.size());
         page.append("</h1><h4>");
         page.append(timestamp(createdAt));
         page.append("</h4>");
@@ -190,7 +183,9 @@ std::string Page::getPage(const std::string &pageId) {
     spdlog::error("get page failure: {}", e.what());
   }
 
-  return page;
+  string_util::StringReplacer replacer("<title>%REPLACE_WITH_TITLE_ID%</title>",
+                                       titleTag);
+  return replacer.replace(page, 1);
 }
 
 } // namespace blog
