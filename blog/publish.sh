@@ -20,7 +20,7 @@
 #
 
 docker buildx build \
-    --platform linux/amd64,linux/arm64 \
+    --platform linux/amd64 \
     -t rfledesma/blog:$(cat VERSION | xargs) \
     -t rfledesma/blog:latest \
     --push .
