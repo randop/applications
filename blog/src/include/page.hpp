@@ -14,6 +14,7 @@
 #include <bsoncxx/builder/stream/document.hpp>
 #include <bsoncxx/json.hpp>
 #include <bsoncxx/oid.hpp>
+#include <bsoncxx/stdx/string_view.hpp>
 #include <cmark.h>
 #include <mongocxx/client.hpp>
 #include <mongocxx/collection.hpp>
@@ -23,8 +24,11 @@
 #include <spdlog/spdlog.h>
 
 #include <array>
+#include <chrono>
+#include <iomanip>
 #include <iostream>
 #include <optional>
+#include <sstream>
 #include <string>
 #include <type_traits>
 #include <unordered_map>
@@ -51,20 +55,21 @@ using bsoncxx::builder::stream::open_document;
 namespace pt = boost::posix_time;
 namespace gr = boost::gregorian;
 
-constexpr std::string kIdField{"id"};
-constexpr std::string kFromField{"from"};
-constexpr std::string kLocalField{"localField"};
-constexpr std::string kForeignField{"foreignField"};
-constexpr std::string kModesCollection{"modes"};
-constexpr std::string kModeIdField{"modeId"};
-constexpr std::string kLayoutsCollection{"layouts"};
-constexpr std::string kLayoutIdField{"layoutId"};
-constexpr std::string kPagesCollection{"pages"};
-constexpr std::string kTitleField{"title"};
-constexpr std::string kContentField{"content"};
-constexpr std::string kHeaderField{"header"};
-constexpr std::string kFooterField{"footer"};
-constexpr std::string kLayoutField{"layout"};
+constexpr bsoncxx::stdx::string_view kIdField{"id"};
+constexpr bsoncxx::stdx::string_view kFromField{"from"};
+constexpr bsoncxx::stdx::string_view kLocalField{"localField"};
+constexpr bsoncxx::stdx::string_view kForeignField{"foreignField"};
+constexpr bsoncxx::stdx::string_view kModesCollection{"modes"};
+constexpr bsoncxx::stdx::string_view kModeIdField{"modeId"};
+constexpr bsoncxx::stdx::string_view kLayoutsCollection{"layouts"};
+constexpr bsoncxx::stdx::string_view kLayoutIdField{"layoutId"};
+constexpr bsoncxx::stdx::string_view kPagesCollection{"pages"};
+constexpr bsoncxx::stdx::string_view kTitleField{"title"};
+constexpr bsoncxx::stdx::string_view kContentField{"content"};
+constexpr bsoncxx::stdx::string_view kHeaderField{"header"};
+constexpr bsoncxx::stdx::string_view kFooterField{"footer"};
+constexpr bsoncxx::stdx::string_view kLayoutField{"layout"};
+constexpr bsoncxx::stdx::string_view kCreatedAtField{"createdAt"};
 
 class Page {
 public:
@@ -74,17 +79,31 @@ public:
   // Default destructor
   ~Page() = default;
 
-  std::string titlePlaceholder(std::string content, const char *newTitle) const;
   std::string getPage(const std::string &pageId);
 
 private:
   std::shared_ptr<mongocxx::pool> pool;
+  std::string titlePlaceholder(std::string content, const char *newTitle) const;
+  std::string timestamp(bsoncxx::types::b_date date);
 };
 
 Page::Page(std::shared_ptr<mongocxx::pool> dbPool) : pool(dbPool) {
   if (!pool) {
     throw std::invalid_argument("Invalid or null mongodb pool");
   }
+}
+
+// Format bsoncxx::types::b_date to string like "Thu, June 12, 2025 at 10:33 AM
+// UTC"
+std::string Page::timestamp(bsoncxx::types::b_date date) {
+  // Convert milliseconds since epoch to time_point
+  auto ms = date.value;
+  auto timePoint = std::chrono::system_clock::time_point(ms);
+  auto timeT = std::chrono::system_clock::to_time_t(timePoint);
+  char buffer[32];
+  std::strftime(buffer, sizeof(buffer), "%a, %B %d, %Y at %I:%M %p UTC",
+                std::gmtime(&timeT));
+  return buffer;
 }
 
 std::string Page::titlePlaceholder(std::string content,
@@ -118,7 +137,7 @@ std::string Page::getPage(const std::string &pageId) {
         kvp(kForeignField, kIdField), kvp("as", "layout")));
     pageByIdPipeline.unwind("$layout");
 
-    pageByIdPipeline.match(make_document(kvp("id", pageId)));
+    pageByIdPipeline.match(make_document(kvp(kIdField, pageId)));
     auto cursor = collection.aggregate(pageByIdPipeline);
 
     int modeId = MODE_HTML;
@@ -137,6 +156,7 @@ std::string Page::getPage(const std::string &pageId) {
       page.append(headerValue.data(), headerValue.size());
 
       auto contentValue = doc[kContentField].get_string().value;
+      bsoncxx::types::b_date createdAt = doc[kCreatedAtField].get_date();
 
       if (modeId == MODE_MARKDOWN) {
         auto html = std::unique_ptr<char, void (*)(void *)>(
@@ -145,7 +165,9 @@ std::string Page::getPage(const std::string &pageId) {
             std::free);
         page.append("<h1>");
         page.append(titleField.data(), titleField.size());
-        page.append("</h1>");
+        page.append("</h1><h4>");
+        page.append(timestamp(createdAt));
+        page.append("</h4>");
         page.append(html.get());
       } else if (modeId == MODE_HTML) {
         page.append(contentValue.data(), contentValue.size());
