@@ -64,6 +64,7 @@ int main(int argc, char *argv[]) {
 
   spdlog::info("Blog server project: {} (build: {})", PROJECT_VERSION,
                PROJECT_BUILD);
+  Environment::logOSinfo();
 
   std::string dbUrl = "postgresql://user:password@localhost:5432/database";
   if (auto envDbUrl = Environment::getVariable("DB_URL")) {
