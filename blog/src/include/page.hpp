@@ -16,6 +16,8 @@
 #include <bsoncxx/oid.hpp>
 #include <cmark.h>
 #include <mongocxx/client.hpp>
+#include <mongocxx/collection.hpp>
+#include <mongocxx/pipeline.hpp>
 #include <mongocxx/pool.hpp>
 #include <mongocxx/uri.hpp>
 #include <spdlog/spdlog.h>
@@ -48,6 +50,21 @@ using bsoncxx::builder::stream::open_document;
 
 namespace pt = boost::posix_time;
 namespace gr = boost::gregorian;
+
+constexpr std::string kIdField{"id"};
+constexpr std::string kFromField{"from"};
+constexpr std::string kLocalField{"localField"};
+constexpr std::string kForeignField{"foreignField"};
+constexpr std::string kModesCollection{"modes"};
+constexpr std::string kModeIdField{"modeId"};
+constexpr std::string kLayoutsCollection{"layouts"};
+constexpr std::string kLayoutIdField{"layoutId"};
+constexpr std::string kPagesCollection{"pages"};
+constexpr std::string kTitleField{"title"};
+constexpr std::string kContentField{"content"};
+constexpr std::string kHeaderField{"header"};
+constexpr std::string kFooterField{"footer"};
+constexpr std::string kLayoutField{"layout"};
 
 class Page {
 public:
@@ -88,39 +105,43 @@ std::string Page::getPage(const std::string &pageId) {
   try {
     auto client = pool->acquire();
     auto db = client["localhost"];
-    auto collection = db["pages"];
+    auto collection = db[kPagesCollection];
 
-    mongocxx::pipeline pages;
-    pages.lookup(
-        make_document(kvp("from", "modes"), kvp("localField", "mode_id"),
-                      kvp("foreignField", "id"), kvp("as", "mode_info")));
-    pages.unwind("$mode_info");
-    pages.match(make_document(kvp("id", pageId)));
+    mongocxx::pipeline pageByIdPipeline;
+    pageByIdPipeline.lookup(make_document(
+        kvp(kFromField, kModesCollection), kvp(kLocalField, kModeIdField),
+        kvp(kForeignField, kIdField), kvp("as", "mode")));
+    pageByIdPipeline.unwind("$mode");
 
-    auto cursor = collection.aggregate(pages);
+    pageByIdPipeline.lookup(make_document(
+        kvp(kFromField, kLayoutsCollection), kvp(kLocalField, kLayoutIdField),
+        kvp(kForeignField, kIdField), kvp("as", "layout")));
+    pageByIdPipeline.unwind("$layout");
+
+    pageByIdPipeline.match(make_document(kvp("id", pageId)));
+    auto cursor = collection.aggregate(pageByIdPipeline);
 
     int modeId = MODE_HTML;
     const char *markdown;
+    bool found = false;
     for (const auto &doc : cursor) {
-      if (doc["mode_id"]) {
-        modeId = doc["mode_id"].type() == bsoncxx::type::k_int32
-                     ? doc["mode_id"].get_int32().value
-                     : static_cast<int>(doc["mode_id"].get_int64().value);
+      found = true;
+      if (doc[kModeIdField]) {
+        modeId = doc[kModeIdField].type() == bsoncxx::type::k_int32
+                     ? doc[kModeIdField].get_int32().value
+                     : static_cast<int>(doc[kModeIdField].get_int64().value);
       }
-      spdlog::info("mode: {}", modeId);
-      std::cout << bsoncxx::to_json(doc) << std::endl;
-      break;
-    }
 
-    spdlog::warn("No result for Page::getPage => {}", pageId);
+      auto titleField = doc[kTitleField].get_string().value;
 
-    /*
-    if (result.size() > 0) {
+      auto headerValue = doc[kLayoutField][kHeaderField].get_string().value;
+      page.append(headerValue.data(), headerValue.size());
 
-      for (const auto &row : result) {
-        modeId = row.at("mode_id").as<int>();
-        page.append(row.at("header").c_str());
-        if (modeId == MODE_MARKDOWN) {
+      auto contentValue = doc[kContentField].get_string().value;
+
+      if (modeId == MODE_MARKDOWN) {
+        /**
+         * TODO: markdown processing
           markdown = row.at("content").c_str();
           auto html = std::unique_ptr<char, void (*)(void *)>(
               cmark_markdown_to_html(markdown, strlen(markdown),
@@ -128,16 +149,25 @@ std::string Page::getPage(const std::string &pageId) {
               std::free);
 
           page.append(html.get());
-        } else if (modeId == MODE_HTML) {
-          page.append(row.at("content").c_str());
-        }
-        page.append(row.at("footer").c_str());
-        page = titlePlaceholder(page, row.at("title").c_str());
-        break;
+         **/
+        page.append(contentValue.data(), contentValue.size());
+      } else if (modeId == MODE_HTML) {
+        page.append(contentValue.data(), contentValue.size());
       }
-    }
-    */
 
+      auto footerValue = doc[kLayoutField][kFooterField].get_string().value;
+      page.append(footerValue.data(), footerValue.size());
+
+      /***
+       * //DEBUG
+       * std::cout << bsoncxx::to_json(doc) << std::endl;
+       ***/
+      break;
+    }
+
+    if (!found) {
+      spdlog::warn("No result for Page::getPage => {}", pageId);
+    }
   } catch (const std::exception &e) {
     spdlog::error("get page failure: {}", e.what());
   }

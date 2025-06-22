@@ -6,47 +6,6 @@
 version: "3.8"
 
 services:
-  postgres:
-    image: alpine:3.22
-    container_name: database
-    command: >
-      sh -c "
-        apk update &&
-        apk add tzdata postgresql17 postgresql17-contrib &&
-        ln -s /usr/share/zoneinfo/UTC /etc/localtime &&
-        mkdir -p /var/lib/postgresql/data &&
-        touch /var/log/postgresql.log &&
-        chmod 777 /var/log/postgresql.log &&
-        chown postgres:postgres /var/lib/postgresql/data &&
-        mkdir -p /run/postgresql &&
-        chmod 777 /run/postgresql &&
-        chown postgres:postgres /run/postgresql
-        su postgres -c 'initdb -D /var/lib/postgresql/data' &&
-        sleep 5 &&
-        echo \"listen_addresses = '*'\" >> /var/lib/postgresql/data/postgresql.conf &&
-        echo 'host all all 0.0.0.0/0 md5' >> /var/lib/postgresql/data/pg_hba.conf &&
-        su postgres -c 'pg_ctl start -D /var/lib/postgresql/data -l /var/log/postgresql.log' &&
-        su postgres -c \"psql -c \\\"CREATE USER myuser WITH PASSWORD 'mypassword';\\\"\" &&
-        su postgres -c \"psql -c \\\"CREATE DATABASE mydb OWNER myuser;\\\"\" &&
-        su postgres -c \"psql -d mydb -f /resources.d/001-init.sql\" &&
-        su postgres -c \"psql -d mydb -f /resources.d/002-seed.sql\" &&
-        su postgres -c \"psql -d mydb -f /resources.d/003-seed.sql\" &&
-        su postgres -c \"psql -d mydb -f /resources.d/004-seed.sql\" &&
-        tail -f /var/log/postgresql.log
-      "
-    environment:
-      - POSTGRES_USER=myuser
-      - POSTGRES_PASSWORD=mypassword
-      - POSTGRES_DB=mydb
-    ports:
-      - "5432:5432"
-    volumes:
-      - ./resources/database/001-init.sql:/resources.d/001-init.sql:ro
-      - ./resources/database/002-seed.sql:/resources.d/002-seed.sql:ro
-      - ./resources/database/003-seed.sql:/resources.d/003-seed.sql:ro
-      - ./resources/database/004-seed.sql:/resources.d/004-seed.sql:ro
-    network_mode: host
-
   mongodb:
     image: mongodb/mongodb-community-server:8.0.6-ubi9
     container_name: mongodb
@@ -56,6 +15,9 @@ services:
     environment:
       - MONGO_INITDB_ROOT_USERNAME=user
       - MONGO_INITDB_ROOT_PASSWORD=pass
+      - MONGO_INITDB_DATABASE=localhost
+    volumes:
+      - ./resources/database/seed.js:/docker-entrypoint-initdb.d/seed.js:ro
 
 volumes:
   postgres_data:

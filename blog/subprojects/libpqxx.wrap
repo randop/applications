@@ -1,4 +1,0 @@
-[wrap-git]
-directory = libpqxx
-url = https://github.com/jtv/libpqxx.git
-revision = 7.10.1

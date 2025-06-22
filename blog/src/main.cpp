@@ -3,8 +3,7 @@
 # Includes
 ###############################################################################
 ***/
-#include "include/connectionPool.hpp"
-#include "include/dbConnection.hpp"
+
 #include "include/environment.hpp"
 #include "include/httpServer.hpp"
 #include "include/page.hpp"
@@ -66,50 +65,6 @@ int main(int argc, char *argv[]) {
   spdlog::info("Blog server project: {} (build: {})", PROJECT_VERSION,
                PROJECT_BUILD);
 
-  std::string mongoDbUrl = "mongodb+srv://user:password@host/"
-                           "?retryWrites=true&w=majority&appName=app";
-  if (auto envMongoDbUrl = Environment::getVariable("MONGODB_URL")) {
-    spdlog::debug("MONGODB_URL => {}", envMongoDbUrl.value());
-    mongoDbUrl = envMongoDbUrl.value();
-  } else {
-    spdlog::warn(
-        "Unspecified environment variable MONGODB_URL using default: {}",
-        mongoDbUrl);
-  }
-
-  std::shared_ptr<mongocxx::pool> mongoPool;
-
-  try {
-    // Initialize the MongoDB C++ driver
-    mongocxx::instance inst{};
-    mongocxx::uri uri(mongoDbUrl);
-
-    // Set the version of the Stable API on the client
-    mongocxx::options::client client_options;
-    const auto api = mongocxx::options::server_api{
-        mongocxx::options::server_api::version::k_version_1};
-    client_options.server_api_opts(api);
-
-    mongoPool = std::make_shared<mongocxx::pool>(uri, client_options);
-    auto conn = mongoPool->acquire();
-    mongocxx::database db = conn["admin"];
-
-    // Ping the database.
-    const auto ping_cmd = bsoncxx::builder::basic::make_document(
-        bsoncxx::builder::basic::kvp("ping", 1));
-    db.run_command(ping_cmd.view());
-    spdlog::info("connected on mongodb");
-  } catch (const std::exception &e) {
-    // Handle errors
-    spdlog::error("mongodb error: {}", e.what());
-    return EXIT_SUCCESS;
-  }
-
-  const char *host = "0.0.0.0";
-  auto const address = net::ip::make_address(host);
-  auto const port = static_cast<unsigned short>(DEFAULT_PORT);
-  auto const threadCount = std::max<int>(1, 4);
-
   std::string dbUrl = "postgresql://user:password@localhost:5432/database";
   if (auto envDbUrl = Environment::getVariable("DB_URL")) {
     spdlog::debug("DB_URL => {}", envDbUrl.value());
@@ -128,45 +83,70 @@ int main(int argc, char *argv[]) {
                  docRoot->c_str());
   }
 
-  int postId = 1;
+  std::string mongoDbUrl = "mongodb+srv://user:password@host/"
+                           "?retryWrites=true&w=majority&appName=app";
+  if (auto envMongoDbUrl = Environment::getVariable("MONGODB_URL")) {
+    spdlog::debug("MONGODB_URL => {}", envMongoDbUrl.value());
+    mongoDbUrl = envMongoDbUrl.value();
+  } else {
+    spdlog::warn(
+        "Unspecified environment variable MONGODB_URL using default: {}",
+        mongoDbUrl);
+  }
+
+  std::shared_ptr<mongocxx::pool> mongoDbPool;
 
   try {
-    // Initialize connection pool
-    auto pool = std::make_shared<db::ConnectionPool>(dbUrl, MAX_DB_CONNECTION);
+    // Initialize the MongoDB C++ driver
+    mongocxx::instance inst{};
+    mongocxx::uri uri(mongoDbUrl);
 
-    // Get a connection from the pool
-    auto conn = pool->getConnection();
-    if (conn) {
-      spdlog::info("DB pool connection: OK");
-      pool->releaseConnection(conn);
-    } else {
-      spdlog::error("Failed to get db connection from pool");
-    }
+    // Set the version of the Stable API on the client
+    mongocxx::options::client client_options;
+    const auto api = mongocxx::options::server_api{
+        mongocxx::options::server_api::version::k_version_1};
+    client_options.server_api_opts(api);
 
-    auto post = std::make_shared<blog::Post>(pool);
-    auto page = std::make_shared<blog::Page>(mongoPool);
+    mongoDbPool = std::make_shared<mongocxx::pool>(uri, client_options);
+    auto conn = mongoDbPool->acquire();
+    mongocxx::database db = conn["admin"];
 
-    // The io_context is required for all I/O
-    net::io_context ioc{threadCount};
-
-    // Create and launch a listening port
-    std::make_shared<listener>(ioc, tcp::endpoint{address, port}, docRoot, post,
-                               page)
-        ->run();
-
-    spdlog::info("http server listening on {} port {}", host, port);
-
-    // Run the I/O service on the requested number of threads
-    std::vector<std::thread> threads;
-    threads.reserve(threadCount - 1);
-    for (auto i = threadCount - 1; i > 0; --i) {
-      threads.emplace_back([&ioc] { ioc.run(); });
-    }
-    ioc.run();
+    // Ping the database.
+    const auto ping_cmd = bsoncxx::builder::basic::make_document(
+        bsoncxx::builder::basic::kvp("ping", 1));
+    db.run_command(ping_cmd.view());
+    spdlog::info("Bootstrap mongo database connection: OK");
   } catch (const std::exception &e) {
-    spdlog::error("Error: {}", e.what());
-    return EXIT_FAILURE;
+    // Handle errors
+    spdlog::error("mongodb error: {}", e.what());
+    return EXIT_SUCCESS;
   }
+
+  const char *host = ANY_IPV4_HOST;
+  auto const address = net::ip::make_address(host);
+  auto const port = static_cast<unsigned short>(DEFAULT_PORT);
+  auto const threadCount = std::max<int>(1, 4);
+
+  auto post = std::make_shared<blog::Post>(mongoDbPool);
+  auto page = std::make_shared<blog::Page>(mongoDbPool);
+
+  // The io_context is required for all I/O
+  net::io_context ioc{threadCount};
+
+  // Create and launch a listening port
+  std::make_shared<listener>(ioc, tcp::endpoint{address, port}, docRoot, post,
+                             page)
+      ->run();
+
+  spdlog::info("http server listening on {} port {}", host, port);
+
+  // Run the I/O service on the requested number of threads
+  std::vector<std::thread> threads;
+  threads.reserve(threadCount - 1);
+  for (auto i = threadCount - 1; i > 0; --i) {
+    threads.emplace_back([&ioc] { ioc.run(); });
+  }
+  ioc.run();
 
   return EXIT_SUCCESS;
 }

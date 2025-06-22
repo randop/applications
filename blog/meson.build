@@ -28,12 +28,9 @@ configure_file(
 ###############################################################################
 # Dependencies
 ###############################################################################
+deps = []
+
 cmake = import('cmake')
-
-libpq_dep = dependency('libpq', required: true, static: false)
-
-libpqxx = cmake.subproject('libpqxx')
-libpqxx_dep = libpqxx.get_variable('pqxx_dep')
 
 cmark = cmake.subproject('cmark')
 cmark_dep = cmark.get_variable('cmark_dep')
@@ -59,14 +56,19 @@ spdlog_dep = spdlog.get_variable('spdlog_dep')
 
 openssl_dep = dependency('openssl', required: true)
 
-mongocxx = cmake.subproject(
-  'mongo-cxx-driver',
-  cmake_options: [
-    '-DCMAKE_PREFIX_PATH=/opt/mongo-c-driver/current',
-  ],
-)
-mongocxx_dep = mongocxx.dependency('mongocxx_static')
-bsoncxx_dep = mongocxx.dependency('bsoncxx_static')
+mongocxx_dep = dependency('mongocxx', version: '>=4.1.0', required: false)
+bsoncxx_dep = dependency('bsoncxx', version: '>=4.1.0', required: false)
+
+if not mongocxx_dep.found() or not bsoncxx_dep.found()
+  mongocxx = cmake.subproject(
+    'mongo-cxx-driver',
+    cmake_options: [
+      '-DCMAKE_PREFIX_PATH=/opt/mongo-c-driver/current',
+    ],
+  )
+  mongocxx_dep = mongocxx.dependency('mongocxx_static')
+  bsoncxx_dep = mongocxx.dependency('bsoncxx_static')
+endif
 
 ###############################################################################
 # Includes
@@ -102,14 +104,12 @@ endif
 # Sources
 ###############################################################################
 
-sources = ['src/main.cpp', 'src/dbConnection.cpp', 'src/connectionPool.cpp']
+sources = ['src/main.cpp']
 
 executable(
   'blog',
   sources,
   dependencies: [
-    libpq_dep,
-    libpqxx_dep,
     cmark_dep,
     thread_dep,
     boost_dep,

@@ -274,6 +274,9 @@ void fail(beast::error_code ec, char const *what) {
   if (ec.message().find("The socket was closed due to a timeout") !=
       beast::string_view::npos) {
     return;
+  } else if (ec.message().find("Connection reset by peer") !=
+             beast::string_view::npos) {
+    return;
   }
   spdlog::error("{}: {}", what, ec.message());
 }

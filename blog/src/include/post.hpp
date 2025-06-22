@@ -11,7 +11,13 @@
 
 #include <boost/date_time/gregorian/gregorian.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
+#include <bsoncxx/builder/stream/document.hpp>
+#include <bsoncxx/json.hpp>
+#include <bsoncxx/oid.hpp>
 #include <cmark.h>
+#include <mongocxx/client.hpp>
+#include <mongocxx/pool.hpp>
+#include <mongocxx/uri.hpp>
 #include <spdlog/spdlog.h>
 
 #include <iostream>
@@ -24,14 +30,23 @@
 ***/
 #include "include/constants.h"
 
+namespace blog {
+
+using bsoncxx::builder::basic::kvp;
+using bsoncxx::builder::basic::make_document;
+using bsoncxx::builder::stream::close_array;
+using bsoncxx::builder::stream::close_document;
+using bsoncxx::builder::stream::document;
+using bsoncxx::builder::stream::finalize;
+using bsoncxx::builder::stream::open_array;
+using bsoncxx::builder::stream::open_document;
 namespace pt = boost::posix_time;
 namespace gr = boost::gregorian;
 
-namespace blog {
 class Post {
 public:
   // Constructor taking a shared_ptr to ConnectionPool
-  explicit Post(std::shared_ptr<db::ConnectionPool> sharedPool);
+  explicit Post(std::shared_ptr<mongocxx::pool> dbPool);
 
   // Default destructor
   ~Post() = default;
@@ -41,12 +56,12 @@ public:
   std::string getPost(int postId);
 
 private:
-  std::shared_ptr<db::ConnectionPool> pool;
+  std::shared_ptr<mongocxx::pool> pool;
 };
 
-Post::Post(std::shared_ptr<db::ConnectionPool> sharedPool) : pool(sharedPool) {
+Post::Post(std::shared_ptr<mongocxx::pool> dbPool) : pool(dbPool) {
   if (!pool) {
-    throw std::invalid_argument("Connection pool cannot be null");
+    throw std::invalid_argument("Invalid or null mongodb pool");
   }
 }
 
@@ -107,6 +122,7 @@ std::string Post::titlePlaceholder(std::string content,
 std::string Post::getPost(int postId) {
   std::string post;
   try {
+    /*
     auto conn = pool->getConnection();
     pqxx::work txn(*conn);
     auto result = txn.exec(queryPost, postId);
@@ -138,12 +154,9 @@ std::string Post::getPost(int postId) {
         break;
       }
     }
-    txn.commit();
-    pool->releaseConnection(conn);
+    */
   } catch (const std::exception &e) {
-    spdlog::error("get post failure: {}", e.what());
-    pool->releaseAll();
-    spdlog::error("connections release all");
+    spdlog::error("Post::getPost exception: {}", e.what());
   }
 
   return post;
