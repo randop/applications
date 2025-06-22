@@ -66,16 +66,7 @@ int main(int argc, char *argv[]) {
                PROJECT_BUILD);
   Environment::logOSinfo();
 
-  std::string dbUrl = "postgresql://user:password@localhost:5432/database";
-  if (auto envDbUrl = Environment::getVariable("DB_URL")) {
-    spdlog::debug("DB_URL => {}", envDbUrl.value());
-    dbUrl = envDbUrl.value();
-  } else {
-    spdlog::warn("Unspecified environment variable DB_URL using default: {}",
-                 dbUrl);
-  }
-
-  auto docRoot = std::make_shared<std::string>("/tmp");
+  auto docRoot = std::make_shared<std::string>("/var/www/html");
   if (auto envDocRoot = Environment::getVariable("DOC_ROOT")) {
     docRoot = std::make_shared<std::string>(envDocRoot.value());
     spdlog::info("DOC_ROOT => {}", docRoot->c_str());
@@ -120,7 +111,7 @@ int main(int argc, char *argv[]) {
   } catch (const std::exception &e) {
     // Handle errors
     spdlog::error("mongodb error: {}", e.what());
-    return EXIT_SUCCESS;
+    return EXIT_FAILURE;
   }
 
   const char *host = ANY_IPV4_HOST;
