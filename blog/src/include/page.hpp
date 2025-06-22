@@ -81,7 +81,9 @@ public:
   // Default destructor
   ~Page() = default;
 
-  std::string getPage(const std::string &pageId);
+  std::string getPage(const std::string_view &host,
+                      const bsoncxx::stdx::string_view &dbName,
+                      const std::string &pageId);
 
 private:
   std::shared_ptr<mongocxx::pool> pool;
@@ -107,13 +109,16 @@ std::string Page::timestamp(bsoncxx::types::b_date date) {
   return buffer;
 }
 
-std::string Page::getPage(const std::string &pageId) {
+std::string Page::getPage(const std::string_view &host,
+                          const bsoncxx::stdx::string_view &dbName,
+                          const std::string &pageId) {
   std::string page;
   std::string titleTag;
 
   try {
     auto client = pool->acquire();
-    auto db = client["localhost"];
+    auto db = client[dbName];
+
     auto collection = db[kPagesCollection];
 
     mongocxx::pipeline pageByIdPipeline;

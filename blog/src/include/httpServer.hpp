@@ -15,14 +15,6 @@
 #include "include/post.hpp"
 
 #include <algorithm>
-#include <boost/asio/coroutine.hpp>
-#include <boost/asio/dispatch.hpp>
-#include <boost/asio/strand.hpp>
-#include <boost/beast/core.hpp>
-#include <boost/beast/http.hpp>
-#include <boost/beast/version.hpp>
-#include <boost/config.hpp>
-#include <boost/url.hpp>
 #include <charconv>
 #include <cstdlib>
 #include <functional>
@@ -32,6 +24,19 @@
 #include <system_error>
 #include <thread>
 #include <vector>
+
+#include <boost/asio/coroutine.hpp>
+#include <boost/asio/dispatch.hpp>
+#include <boost/asio/strand.hpp>
+#include <boost/beast/core.hpp>
+#include <boost/beast/http.hpp>
+#include <boost/beast/version.hpp>
+#include <boost/config.hpp>
+#include <boost/url.hpp>
+#include <bsoncxx/stdx/string_view.hpp>
+
+constexpr bsoncxx::stdx::string_view LOCALHOST_DB{"localhost"};
+constexpr bsoncxx::stdx::string_view QUIZBIN_DB{"quizbin"};
 
 namespace beast = boost::beast;   // from <boost/beast.hpp>
 namespace http = beast::http;     // from <boost/beast/http.hpp>
@@ -171,10 +176,22 @@ handle_request(std::shared_ptr<blog::Post> post,
     return bad_request("Illegal request-target");
   }
 
+  // Get the host from the Host header
+  std::string_view host = req[http::field::host];
+  bsoncxx::stdx::string_view dbName = LOCALHOST_DB;
+  if (host.find("quizbin.com") != beast::string_view::npos) {
+    dbName = QUIZBIN_DB;
+  }
+
   // Build the path to the requested file
   std::string path = path_cat(doc_root, req.target());
+
+  /** DEBUG
+  spdlog::debug("load page <{}> host <{}> db <{}>", req.target(), host, dbName);
+  **/
+
   if (req.target().back() == '/') {
-    std::string content = page->getPage("index");
+    std::string content = page->getPage(host, dbName, "index");
     http::response<http::string_body> res{http::status::ok, req.version()};
     res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
     res.set(http::field::content_type, "text/html");
@@ -185,7 +202,7 @@ handle_request(std::shared_ptr<blog::Post> post,
   }
 
   if (req.method() == http::verb::get && req.target() == "/about") {
-    std::string content = page->getPage("about");
+    std::string content = page->getPage(host, dbName, "about");
     http::response<http::string_body> res{http::status::ok, req.version()};
     res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
     res.set(http::field::content_type, "text/html");
