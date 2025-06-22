@@ -184,6 +184,17 @@ handle_request(std::shared_ptr<blog::Post> post,
     return res;
   }
 
+  if (req.method() == http::verb::get && req.target() == "/about") {
+    std::string content = page->getPage("about");
+    http::response<http::string_body> res{http::status::ok, req.version()};
+    res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
+    res.set(http::field::content_type, "text/html");
+    res.keep_alive(req.keep_alive());
+    res.body() = content;
+    res.prepare_payload();
+    return res;
+  }
+
   // Handle posts route
   if (req.method() == http::verb::get &&
       req.target().find("/posts/") != beast::string_view::npos) {

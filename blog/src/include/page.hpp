@@ -122,7 +122,6 @@ std::string Page::getPage(const std::string &pageId) {
     auto cursor = collection.aggregate(pageByIdPipeline);
 
     int modeId = MODE_HTML;
-    const char *markdown;
     bool found = false;
     for (const auto &doc : cursor) {
       found = true;
@@ -140,17 +139,14 @@ std::string Page::getPage(const std::string &pageId) {
       auto contentValue = doc[kContentField].get_string().value;
 
       if (modeId == MODE_MARKDOWN) {
-        /**
-         * TODO: markdown processing
-          markdown = row.at("content").c_str();
-          auto html = std::unique_ptr<char, void (*)(void *)>(
-              cmark_markdown_to_html(markdown, strlen(markdown),
-                                     CMARK_OPT_DEFAULT),
-              std::free);
-
-          page.append(html.get());
-         **/
-        page.append(contentValue.data(), contentValue.size());
+        auto html = std::unique_ptr<char, void (*)(void *)>(
+            cmark_markdown_to_html(contentValue.data(), contentValue.size(),
+                                   CMARK_OPT_DEFAULT),
+            std::free);
+        page.append("<h1>");
+        page.append(titleField.data(), titleField.size());
+        page.append("</h1>");
+        page.append(html.get());
       } else if (modeId == MODE_HTML) {
         page.append(contentValue.data(), contentValue.size());
       }
