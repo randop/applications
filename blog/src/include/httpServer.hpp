@@ -190,7 +190,23 @@ handle_request(std::shared_ptr<blog::Post> post,
   spdlog::debug("load page <{}> host <{}> db <{}>", req.target(), host, dbName);
   **/
 
-  if (req.target().back() == '/') {
+  std::string urlRequest{"http://"};
+  urlRequest.append(host);
+  urlRequest.append(req.target());
+  boost::system::result<boost::urls::url_view> urlResult = boost::urls::parse_uri(urlRequest);
+
+  if (!urlResult.has_value()) {
+    return server_error("URL error encountered");
+  }
+  if (urlResult.has_error()) {
+    return server_error("URL error encountered");
+  }
+
+  boost::urls::url_view urlView = urlResult.value();
+  auto segments = urlView.segments();
+
+  if (req.method() == http::verb::get && segments.size() == 0) {
+    // Handle the index route (/)
     std::string content = page->getPage(host, dbName, "index");
     http::response<http::string_body> res{http::status::ok, req.version()};
     res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
@@ -199,9 +215,7 @@ handle_request(std::shared_ptr<blog::Post> post,
     res.body() = content;
     res.prepare_payload();
     return res;
-  }
-
-  if (req.method() == http::verb::get && req.target() == "/about") {
+  } else if (req.method() == http::verb::get && req.target() == "/about") {
     std::string content = page->getPage(host, dbName, "about");
     http::response<http::string_body> res{http::status::ok, req.version()};
     res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
@@ -210,15 +224,9 @@ handle_request(std::shared_ptr<blog::Post> post,
     res.body() = content;
     res.prepare_payload();
     return res;
-  }
-
-  // Handle posts route
-  if (req.method() == http::verb::get &&
+  } else if (req.method() == http::verb::get &&
       req.target().find("/posts/") != beast::string_view::npos) {
     int postId = NONE_POST_ID;
-    boost::urls::url urlTarget;
-    urlTarget.set_path(req.target());
-    auto segments = urlTarget.encoded_segments();
     if (segments.size() >= 2) {
       int index = 0;
 
