@@ -165,6 +165,18 @@ handle_request(std::shared_ptr<blog::Post> post,
     return res;
   };
 
+  // Returns html response
+  auto const html_response = [&req](std::string &response) {
+    http::response<http::string_body> res{http::status::internal_server_error,
+                                          req.version()};
+    res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
+    res.set(http::field::content_type, CONTENT_TYPE_HTML);
+    res.keep_alive(req.keep_alive());
+    res.body() = response;
+    res.prepare_payload();
+    return res;
+  };
+
   // Make sure we can handle the method
   if (req.method() != http::verb::get && req.method() != http::verb::head) {
     return bad_request("Unknown HTTP-method");
@@ -193,7 +205,8 @@ handle_request(std::shared_ptr<blog::Post> post,
   std::string urlRequest{"http://"};
   urlRequest.append(host);
   urlRequest.append(req.target());
-  boost::system::result<boost::urls::url_view> urlResult = boost::urls::parse_uri(urlRequest);
+  boost::system::result<boost::urls::url_view> urlResult =
+      boost::urls::parse_uri(urlRequest);
 
   if (!urlResult.has_value()) {
     return server_error("URL error encountered");
@@ -208,24 +221,13 @@ handle_request(std::shared_ptr<blog::Post> post,
   if (req.method() == http::verb::get && segments.size() == 0) {
     // Handle the index route (/)
     std::string content = page->getPage(host, dbName, "index");
-    http::response<http::string_body> res{http::status::ok, req.version()};
-    res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
-    res.set(http::field::content_type, "text/html");
-    res.keep_alive(req.keep_alive());
-    res.body() = content;
-    res.prepare_payload();
-    return res;
-  } else if (req.method() == http::verb::get && req.target() == "/about") {
+    return html_response(content);
+  } else if (req.method() == http::verb::get && segments.size() == 1 &&
+             req.target() == "/about") {
     std::string content = page->getPage(host, dbName, "about");
-    http::response<http::string_body> res{http::status::ok, req.version()};
-    res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
-    res.set(http::field::content_type, "text/html");
-    res.keep_alive(req.keep_alive());
-    res.body() = content;
-    res.prepare_payload();
-    return res;
+    return html_response(content);
   } else if (req.method() == http::verb::get &&
-      req.target().find("/posts/") != beast::string_view::npos) {
+             req.target().find("/posts/") != beast::string_view::npos) {
     int postId = NONE_POST_ID;
     if (segments.size() >= 2) {
       int index = 0;
@@ -252,13 +254,7 @@ handle_request(std::shared_ptr<blog::Post> post,
       std::string content = post->getPost(postId);
 
       if (postId > NONE_POST_ID && !content.empty()) {
-        http::response<http::string_body> res{http::status::ok, req.version()};
-        res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
-        res.set(http::field::content_type, "text/html");
-        res.keep_alive(req.keep_alive());
-        res.body() = content;
-        res.prepare_payload();
-        return res;
+        return html_response(content);
       }
     }
     return not_found(req.target());
