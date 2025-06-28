@@ -5,3 +5,10 @@
 sudo apt update
 sudo apt install -y libmodsecurity-dev libboost-all-dev meson build-essential
 ```
+
+### Download and configure OWASP CRS
+```bash
+mkdir -p rules/owasp-crs
+git clone https://github.com/coreruleset/coreruleset.git rules/owasp-crs
+cp crs-setup.conf.example crs-setup.conf
+```
