@@ -11,7 +11,14 @@ ModSecurityFilter::ModSecurityFilter() {
 
   // Load OWASP CRS rules
   std::string rules_dir = "rules/owasp-crs/";
-  rules_->loadFromUri(std::string(rules_dir + "REQUEST-901-INITIALIZATION.conf").c_str());
+  int result = rules_->loadFromUri(std::string(rules_dir + "crs-setup.conf").c_str());
+  std::cout << "[ModSecurity] Loading crs-setup.conf configuration file: "
+               << (result >= 0 ? " [Success]" : " [Failed]")
+               << std::endl;
+  result = rules_->loadFromUri(std::string(rules_dir + "REQUEST-901-INITIALIZATION.conf").c_str());
+  std::cout << "[ModSecurity] Loading REQUEST-901-INITIALIZATION.conf rule file: "
+               << (result >= 0 ? " [Success]" : " [Failed]")
+               << std::endl;
   rules_->loadFromUri(std::string(rules_dir + "REQUEST-910-IP-REPUTATION.conf").c_str());
   rules_->loadFromUri(std::string(rules_dir + "REQUEST-911-METHOD-ENFORCEMENT.conf").c_str());
   rules_->loadFromUri(std::string(rules_dir + "REQUEST-912-DOS-PROTECTION.conf").c_str());

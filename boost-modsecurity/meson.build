@@ -1,7 +1,7 @@
 project(
   'boost-modsec',
   'cpp',
-  version: '0.1.0',
+  version: '0.1.3',
   default_options: [
     'cpp_std=c++20',
     'optimization=3',
