@@ -1,19 +1,20 @@
 #ifndef HTTP_SERVER_HPP
 #define HTTP_SERVER_HPP
 
-#include <boost/beast.hpp>
-#include <boost/asio.hpp>
 #include "common.hpp"
 #include "modSecurityFilter.hpp"
+#include <boost/asio.hpp>
+#include <boost/beast.hpp>
 
 namespace App {
 
 class HttpServer {
- public:
-  HttpServer(boost::asio::io_context& ioc, StringView address, unsigned short port);
+public:
+  HttpServer(boost::asio::io_context &ioc, StringView address,
+             unsigned short port);
   void Start();
 
- private:
+private:
   boost::asio::ip::tcp::acceptor acceptor_;
   boost::asio::ip::tcp::socket socket_;
   ModSecurityFilter filter_;
@@ -21,6 +22,6 @@ class HttpServer {
   void Accept();
 };
 
-}  // namespace App
+} // namespace App
 
-#endif  // HTTP_SERVER_HPP
+#endif // HTTP_SERVER_HPP

@@ -1,26 +1,26 @@
 #ifndef MODSECURITY_FILTER_HPP
 #define MODSECURITY_FILTER_HPP
 
+#include "common.hpp"
+#include <memory>
 #include <modsecurity/modsecurity.h>
 #include <modsecurity/transaction.h>
-#include <memory>
-#include "common.hpp"
 
 namespace App {
 
 class ModSecurityFilter {
- public:
+public:
   ModSecurityFilter();
   ~ModSecurityFilter();
 
   bool ProcessRequest(StringView method, StringView uri, StringView body,
-                     StringView client_ip);
+                      StringView client_ip);
 
- private:
+private:
   std::unique_ptr<modsecurity::ModSecurity> modsec_;
   std::unique_ptr<modsecurity::RulesSet> rules_;
 };
 
-}  // namespace App
+} // namespace App
 
-#endif  // MODSECURITY_FILTER_HPP
+#endif // MODSECURITY_FILTER_HPP
