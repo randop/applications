@@ -24,22 +24,22 @@ add_project_arguments(
 )
 
 # Dependencies
-libmodsecurity_dep = dependency('libmodsecurity', required: true)
+libmodsecurity_dep = dependency('modsecurity', version: '>=3.0.12', required: true)
 boost_dep = dependency(
   'boost',
-  version: '>=1.88.0',
+  version: '>=1.83.0',
   modules: ['system', 'coroutine', 'thread', 'context', 'json'],
   required: true,
 )
 
 # Source files
-sources = ['src/http_server.cpp', 'src/main.cpp', 'src/modsecurity_filter.cpp']
+sources = ['src/httpServer.cpp', 'src/main.cpp', 'src/modSecurityFilter.cpp']
 
 # Executable
 executable(
   'boost-modsec',
   sources: sources,
-  include_directories: include_directories('include'),
+  include_directories: include_directories('src'),
   dependencies: [libmodsecurity_dep, boost_dep],
   cpp_args: ['-Wall', '-Wextra', '-Wpedantic'],
   link_args: ['-flto', '-fno-rtti'],

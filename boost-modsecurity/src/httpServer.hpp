@@ -4,7 +4,7 @@
 #include <boost/beast.hpp>
 #include <boost/asio.hpp>
 #include "common.hpp"
-#include "modsecurity_filter.hpp"
+#include "modSecurityFilter.hpp"
 
 namespace App {
 

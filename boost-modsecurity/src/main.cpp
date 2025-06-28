@@ -10,7 +10,7 @@ int main(int argc, char* argv[]) {
     const unsigned short port = 8080;
 
     boost::asio::io_context ioc{static_cast<int>(num_threads)};
-    HttpServer server(ioc, address, port);
+    App::HttpServer server(ioc, address, port);
     server.Start();
 
     std::vector<std::thread> threads;
@@ -23,7 +23,7 @@ int main(int argc, char* argv[]) {
       thread.join();
     }
   } catch (const std::exception& e) {
-    std::cerr << "Error: " << e.what() << '\n';
+    std::cerr << "main Error: " << e.what() << '\n';
     return 1;
   }
   return 0;

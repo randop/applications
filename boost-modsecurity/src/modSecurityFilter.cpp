@@ -9,26 +9,26 @@ ModSecurityFilter::ModSecurityFilter() {
   rules_ = std::make_unique<modsecurity::RulesSet>();
 
   // Load OWASP CRS rules
-  const char* rules_dir = "rules/owasp-crs/rules/";
-  rules_->loadFromFile(rules_dir + std::string("REQUEST-901-INITIALIZATION.conf"));
-  rules_->loadFromFile(rules_dir + std::string("REQUEST-910-IP-REPUTATION.conf"));
-  rules_->loadFromFile(rules_dir + std::string("REQUEST-911-METHOD-ENFORCEMENT.conf"));
-  rules_->loadFromFile(rules_dir + std::string("REQUEST-912-DOS-PROTECTION.conf"));
-  rules_->loadFromFile(rules_dir + std::string("REQUEST-913-SCANNER-DETECTION.conf"));
-  rules_->loadFromFile(rules_dir + std::string("REQUEST-920-PROTOCOL-ENFORCEMENT.conf"));
-  rules_->loadFromFile(rules_dir + std::string("REQUEST-921-PROTOCOL-ATTACK.conf"));
-  rules_->loadFromFile(rules_dir + std::string("REQUEST-930-APPLICATION-ATTACK-LFI.conf"));
-  rules_->loadFromFile(rules_dir + std::string("REQUEST-931-APPLICATION-ATTACK-RFI.conf"));
-  rules_->loadFromFile(rules_dir + std::string("REQUEST-932-APPLICATION-ATTACK-RCE.conf"));
-  rules_->loadFromFile(rules_dir + std::string("REQUEST-933-APPLICATION-ATTACK-PHP.conf"));
-  rules_->loadFromFile(rules_dir + std::string("REQUEST-941-APPLICATION-ATTACK-XSS.conf"));
-  rules_->loadFromFile(rules_dir + std::string("REQUEST-942-APPLICATION-ATTACK-SQLI.conf"));
-  rules_->loadFromFile(rules_dir + std::string("REQUEST-943-APPLICATION-ATTACK-SESSION-FIXATION.conf"));
-  rules_->loadFromFile(rules_dir + std::string("RESPONSE-950-DATA-LEAKAGES.conf"));
-  rules_->loadFromFile(rules_dir + std::string("RESPONSE-951-DATA-LEAKAGES-SQL.conf"));
-  rules_->loadFromFile(rules_dir + std::string("RESPONSE-952-DATA-LEAKAGES-JAVA.conf"));
-  rules_->loadFromFile(rules_dir + std::string("RESPONSE-953-DATA-LEAKAGES-PHP.conf"));
-  rules_->loadFromFile(rules_dir + std::string("RESPONSE-954-DATA-LEAKAGES-IIS.conf"));
+  const char* rules_dir = "rules/owasp-crs/";
+  rules_->loadFromUri(rules_dir + std::string("REQUEST-901-INITIALIZATION.conf"));
+  rules_->loadFromUri(rules_dir + std::string("REQUEST-910-IP-REPUTATION.conf"));
+  rules_->loadFromUri(rules_dir + std::string("REQUEST-911-METHOD-ENFORCEMENT.conf"));
+  rules_->loadFromUri(rules_dir + std::string("REQUEST-912-DOS-PROTECTION.conf"));
+  rules_->loadFromUri(rules_dir + std::string("REQUEST-913-SCANNER-DETECTION.conf"));
+  rules_->loadFromUri(rules_dir + std::string("REQUEST-920-PROTOCOL-ENFORCEMENT.conf"));
+  rules_->loadFromUri(rules_dir + std::string("REQUEST-921-PROTOCOL-ATTACK.conf"));
+  rules_->loadFromUri(rules_dir + std::string("REQUEST-930-APPLICATION-ATTACK-LFI.conf"));
+  rules_->loadFromUri(rules_dir + std::string("REQUEST-931-APPLICATION-ATTACK-RFI.conf"));
+  rules_->loadFromUri(rules_dir + std::string("REQUEST-932-APPLICATION-ATTACK-RCE.conf"));
+  rules_->loadFromUri(rules_dir + std::string("REQUEST-933-APPLICATION-ATTACK-PHP.conf"));
+  rules_->loadFromUri(rules_dir + std::string("REQUEST-941-APPLICATION-ATTACK-XSS.conf"));
+  rules_->loadFromUri(rules_dir + std::string("REQUEST-942-APPLICATION-ATTACK-SQLI.conf"));
+  rules_->loadFromUri(rules_dir + std::string("REQUEST-943-APPLICATION-ATTACK-SESSION-FIXATION.conf"));
+  rules_->loadFromUri(rules_dir + std::string("RESPONSE-950-DATA-LEAKAGES.conf"));
+  rules_->loadFromUri(rules_dir + std::string("RESPONSE-951-DATA-LEAKAGES-SQL.conf"));
+  rules_->loadFromUri(rules_dir + std::string("RESPONSE-952-DATA-LEAKAGES-JAVA.conf"));
+  rules_->loadFromUri(rules_dir + std::string("RESPONSE-953-DATA-LEAKAGES-PHP.conf"));
+  rules_->loadFromUri(rules_dir + std::string("RESPONSE-954-DATA-LEAKAGES-IIS.conf"));
 
   modsec_->setServerLogCb([](void*, const void*) -> int { return 0; }, modsecurity::LogProperty::TextLogProperty);
 }
