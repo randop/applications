@@ -22,3 +22,8 @@ meson setup build
 ```bash
 meson compile -C build
 ```
+
+### Test rules
+```bash
+curl -X POST -d "data=<script>alert('xss')</script>" "http://localhost:8080/"
+```
