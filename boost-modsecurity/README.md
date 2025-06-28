@@ -17,3 +17,8 @@ cp crs-setup.conf.example crs-setup.conf
 ```bash
 meson setup build
 ```
+
+### Compile
+```bash
+meson compile -C build
+```
