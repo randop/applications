@@ -19,7 +19,7 @@ add_project_arguments(
   '-march=native', # Optimize for host CPU
   '-ffast-math', # Fast floating-point optimizations
   '-fno-exceptions', # Disable exceptions for performance
-  '-fno-rtti', # Disable RTTI for lower memory usage
+  '-fexceptions',
   language: 'cpp',
 )
 

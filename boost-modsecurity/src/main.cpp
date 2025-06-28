@@ -12,6 +12,7 @@ int main(int argc, char* argv[]) {
     boost::asio::io_context ioc{static_cast<int>(num_threads)};
     App::HttpServer server(ioc, address, port);
     server.Start();
+    std::cout << "Server running on " << address << " port " << port << std::endl;
 
     std::vector<std::thread> threads;
     threads.reserve(num_threads);
@@ -23,7 +24,7 @@ int main(int argc, char* argv[]) {
       thread.join();
     }
   } catch (const std::exception& e) {
-    std::cerr << "main Error: " << e.what() << '\n';
+    std::cerr << "main Error: " << e.what() << std::endl;
     return 1;
   }
   return 0;

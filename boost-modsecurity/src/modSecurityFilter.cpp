@@ -1,4 +1,5 @@
 #include "modSecurityFilter.hpp"
+#include "common.hpp"
 #include <modsecurity/modsecurity.h>
 #include <modsecurity/rules_set.h>
 
@@ -9,28 +10,30 @@ ModSecurityFilter::ModSecurityFilter() {
   rules_ = std::make_unique<modsecurity::RulesSet>();
 
   // Load OWASP CRS rules
-  const char* rules_dir = "rules/owasp-crs/";
-  rules_->loadFromUri(rules_dir + std::string("REQUEST-901-INITIALIZATION.conf"));
-  rules_->loadFromUri(rules_dir + std::string("REQUEST-910-IP-REPUTATION.conf"));
-  rules_->loadFromUri(rules_dir + std::string("REQUEST-911-METHOD-ENFORCEMENT.conf"));
-  rules_->loadFromUri(rules_dir + std::string("REQUEST-912-DOS-PROTECTION.conf"));
-  rules_->loadFromUri(rules_dir + std::string("REQUEST-913-SCANNER-DETECTION.conf"));
-  rules_->loadFromUri(rules_dir + std::string("REQUEST-920-PROTOCOL-ENFORCEMENT.conf"));
-  rules_->loadFromUri(rules_dir + std::string("REQUEST-921-PROTOCOL-ATTACK.conf"));
-  rules_->loadFromUri(rules_dir + std::string("REQUEST-930-APPLICATION-ATTACK-LFI.conf"));
-  rules_->loadFromUri(rules_dir + std::string("REQUEST-931-APPLICATION-ATTACK-RFI.conf"));
-  rules_->loadFromUri(rules_dir + std::string("REQUEST-932-APPLICATION-ATTACK-RCE.conf"));
-  rules_->loadFromUri(rules_dir + std::string("REQUEST-933-APPLICATION-ATTACK-PHP.conf"));
-  rules_->loadFromUri(rules_dir + std::string("REQUEST-941-APPLICATION-ATTACK-XSS.conf"));
-  rules_->loadFromUri(rules_dir + std::string("REQUEST-942-APPLICATION-ATTACK-SQLI.conf"));
-  rules_->loadFromUri(rules_dir + std::string("REQUEST-943-APPLICATION-ATTACK-SESSION-FIXATION.conf"));
-  rules_->loadFromUri(rules_dir + std::string("RESPONSE-950-DATA-LEAKAGES.conf"));
-  rules_->loadFromUri(rules_dir + std::string("RESPONSE-951-DATA-LEAKAGES-SQL.conf"));
-  rules_->loadFromUri(rules_dir + std::string("RESPONSE-952-DATA-LEAKAGES-JAVA.conf"));
-  rules_->loadFromUri(rules_dir + std::string("RESPONSE-953-DATA-LEAKAGES-PHP.conf"));
-  rules_->loadFromUri(rules_dir + std::string("RESPONSE-954-DATA-LEAKAGES-IIS.conf"));
+  std::string rules_dir = "rules/owasp-crs/";
+  rules_->loadFromUri(std::string(rules_dir + "REQUEST-901-INITIALIZATION.conf").c_str());
+  rules_->loadFromUri(std::string(rules_dir + "REQUEST-910-IP-REPUTATION.conf").c_str());
+  rules_->loadFromUri(std::string(rules_dir + "REQUEST-911-METHOD-ENFORCEMENT.conf").c_str());
+  rules_->loadFromUri(std::string(rules_dir + "REQUEST-912-DOS-PROTECTION.conf").c_str());
+  rules_->loadFromUri(std::string(rules_dir + "REQUEST-913-SCANNER-DETECTION.conf").c_str());
+  rules_->loadFromUri(std::string(rules_dir + "REQUEST-920-PROTOCOL-ENFORCEMENT.conf").c_str());
+  rules_->loadFromUri(std::string(rules_dir + "REQUEST-921-PROTOCOL-ATTACK.conf").c_str());
+  rules_->loadFromUri(std::string(rules_dir + "REQUEST-930-APPLICATION-ATTACK-LFI.conf").c_str());
+  rules_->loadFromUri(std::string(rules_dir + "REQUEST-931-APPLICATION-ATTACK-RFI.conf").c_str());
+  rules_->loadFromUri(std::string(rules_dir + "REQUEST-932-APPLICATION-ATTACK-RCE.conf").c_str());
+  rules_->loadFromUri(std::string(rules_dir + "REQUEST-933-APPLICATION-ATTACK-PHP.conf").c_str());
+  rules_->loadFromUri(std::string(rules_dir + "REQUEST-941-APPLICATION-ATTACK-XSS.conf").c_str());
+  rules_->loadFromUri(std::string(rules_dir + "REQUEST-942-APPLICATION-ATTACK-SQLI.conf").c_str());
+  rules_->loadFromUri(std::string(rules_dir + "REQUEST-943-APPLICATION-ATTACK-SESSION-FIXATION.conf").c_str());
+  rules_->loadFromUri(std::string(rules_dir + "RESPONSE-950-DATA-LEAKAGES.conf").c_str());
+  rules_->loadFromUri(std::string(rules_dir + "RESPONSE-951-DATA-LEAKAGES-SQL.conf").c_str());
+  rules_->loadFromUri(std::string(rules_dir + "RESPONSE-952-DATA-LEAKAGES-JAVA.conf").c_str());
+  rules_->loadFromUri(std::string(rules_dir + "RESPONSE-953-DATA-LEAKAGES-PHP.conf").c_str());
+  rules_->loadFromUri(std::string(rules_dir + "RESPONSE-954-DATA-LEAKAGES-IIS.conf").c_str());
 
+  /** TODO: Fix logging
   modsec_->setServerLogCb([](void*, const void*) -> int { return 0; }, modsecurity::LogProperty::TextLogProperty);
+   */
 }
 
 ModSecurityFilter::~ModSecurityFilter() = default;
