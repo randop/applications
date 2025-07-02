@@ -1,0 +1,5 @@
+FROM gcr.io/distroless/cc-debian12:debug-nonroot AS debug
+FROM gcr.io/distroless/cc-debian12:nonroot
+
+# Copy BusyBox shell for debugging
+COPY --from=debug /busybox/busybox /bin/busybox
