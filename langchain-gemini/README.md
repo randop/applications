@@ -21,6 +21,14 @@ Final Answer: The team with the most wins is 'Three Team' with 3 wins.
 
 > Finished chain.
 ```
+--- FINAL ANSWER ---
+```xml
+<top_winner>
+  <MLB_Team>Three Team</MLB_Team>
+  <Payroll_in_millions>$5.00</Payroll_in_millions>
+  <Wins>3</Wins>
+</top_winner>
+```
 
 ### Sing a ballad of LangChain
 ```
