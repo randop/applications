@@ -29,15 +29,17 @@ agent = create_pandas_dataframe_agent(
 prompt = """
 Who is top winner? Let's do it step by step.
 MUST format the final answer as an XML string.
-The XML structure must be exactly: <result><winner>$TEAM</winner></result>
+The XML structure must be exactly: <result><winner>$TEAM</winner><wins>$WINS</wins></result>
 
 Replace $TEAM with the actual name of the team.
+Replace $WINS with the number won by the team.
 Do not include any other text, markdown, explanations, code, or any non xml formatting in your final answer. The output should ONLY be the XML string.
 """
 
 def parseResult(xmlData):
     root = ET.fromstring(xmlData)
     print("\nWinner: " + root.find('winner').text)
+    print("Wins: " + root.find('wins').text)
 
 def main():
     print("Team Winner AI")
