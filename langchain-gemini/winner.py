@@ -1,5 +1,6 @@
 import os
 import pandas as pd
+import xml.etree.ElementTree as ET
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_experimental.agents.agent_toolkits import create_pandas_dataframe_agent
 
@@ -21,7 +22,7 @@ llm = ChatGoogleGenerativeAI(
 agent = create_pandas_dataframe_agent(
     llm,
     df,
-    verbose=True,
+    verbose=False,
     allow_dangerous_code=True
 )
 
@@ -34,13 +35,19 @@ Replace $TEAM with the actual name of the team.
 Do not include any other text, explanations, or code in your final answer. The output should ONLY be the XML string.
 """
 
+def parseResult(xmlData):
+    root = ET.fromstring(xmlData)
+    print("\nWinner: " + root.find('winner').text)
+
 def main():
     print("Team Winner AI")
     result = agent.invoke(prompt)
 
     # Print the final answer from the agent
-    print("\n--- FINAL ANSWER ---")
-    print('<?xml version="1.0" encoding="UTF-8"?>' + result['output'])
+    print("\n--- RESULT ---")
+    xmlData = '<?xml version="1.0" encoding="UTF-8"?>' + result['output']
+    print(xmlData)
+    parseResult(xmlData)
 
 if __name__ == "__main__":
     main()
