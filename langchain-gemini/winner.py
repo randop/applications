@@ -28,9 +28,9 @@ agent = create_pandas_dataframe_agent(
 prompt = """
 Who is top winner? Let's do it step by step.
 MUST format the final answer as an XML string.
-The XML structure must be exactly: <result><winner>TEAM_NAME</winner></result>
+The XML structure must be exactly: <result><winner>$TEAM</winner></result>
 
-Replace TEAM_NAME with the actual name of the team.
+Replace $TEAM with the actual name of the team.
 Do not include any other text, explanations, or code in your final answer. The output should ONLY be the XML string.
 """
 result = agent.invoke(prompt)
