@@ -33,8 +33,14 @@ The XML structure must be exactly: <result><winner>$TEAM</winner></result>
 Replace $TEAM with the actual name of the team.
 Do not include any other text, explanations, or code in your final answer. The output should ONLY be the XML string.
 """
-result = agent.invoke(prompt)
 
-# Print the final answer from the agent
-print("\n--- FINAL ANSWER ---")
-print(result['output'])
+def main():
+    print("Team Winner AI")
+    result = agent.invoke(prompt)
+
+    # Print the final answer from the agent
+    print("\n--- FINAL ANSWER ---")
+    print('<?xml version="1.0" encoding="UTF-8"?>' + result['output'])
+
+if __name__ == "__main__":
+    main()
