@@ -1,6 +1,27 @@
 # LangChain Gemini
 AI project using LangChain and Google Gemini  
 
+## Team Winner
+```
+uv run winner.py
+```
+```
+> Entering new AgentExecutor chain...
+Thought: The user wants to find the team with the most wins from the provided dataframe `df`. I need to identify the 'Wins' column, find the maximum value in that column, and then identify the corresponding 'MLB Team'.
+
+1.  **Inspect the data**: I have the head of the dataframe, which shows the columns 'MLB Team', 'Payroll in millions', and 'Wins'.
+2.  **Find the maximum wins**: I will use the `.max()` method on the 'Wins' column to find the highest number of wins.
+3.  **Find the winning team**: I will locate the row corresponding to the maximum wins and extract the 'MLB Team' name. A good way to do this is using `idxmax()` to get the index of the maximum value and then using `.loc` to retrieve the data for that row.Action: python_repl_ast
+Action Input: df.loc[df['Wins'].idxmax()]MLB Team               Three Team
+Payroll in millions         $5.00
+Wins                            3
+Name: 2, dtype: object
+I now know the final answer
+Final Answer: The team with the most wins is 'Three Team' with 3 wins.
+
+> Finished chain.
+```
+
 ### Sing a ballad of LangChain
 ```
 (Hark, gather 'round, ye coders bold, a tale of modern days be told. Pluck the strings of a synth guitar, and sing of a new and shining star.)
