@@ -25,7 +25,14 @@ agent = create_pandas_dataframe_agent(
     allow_dangerous_code=True
 )
 
-prompt = "Who is the top winner? First, identify the column that represents wins. Then, find the team with the maximum value in that column. Let's do it step by step. The final result must be the full row for that team, presented in an XML format."
+prompt = """
+Who is top winner? Let's do it step by step.
+MUST format the final answer as an XML string.
+The XML structure must be exactly: <result><winner>TEAM_NAME</winner></result>
+
+Replace TEAM_NAME with the actual name of the team.
+Do not include any other text, explanations, or code in your final answer. The output should ONLY be the XML string.
+"""
 result = agent.invoke(prompt)
 
 # Print the final answer from the agent
