@@ -41,13 +41,16 @@ def parseResult(xmlData):
 
 def main():
     print("Team Winner AI")
-    result = agent.invoke(prompt)
+    try:
+        result = agent.invoke(prompt)
 
-    # Print the final answer from the agent
-    print("\n--- RESULT ---")
-    xmlData = '<?xml version="1.0" encoding="UTF-8"?>' + result['output']
-    print(xmlData)
-    parseResult(xmlData)
+        # Print the final answer from the agent
+        print("\n--- RESULT ---")
+        xmlData = '<?xml version="1.0" encoding="UTF-8"?>' + result['output']
+        print(xmlData)
+        parseResult(xmlData)
+    except Exception as e:
+        print(f"An error occurred: {e}")
 
 if __name__ == "__main__":
     main()
