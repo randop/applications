@@ -1,4 +1,4 @@
-# LangChain Google
+# LangChain Gemini
 AI project using LangChain and Google Gemini  
 
 ### Sing a ballad of LangChain
