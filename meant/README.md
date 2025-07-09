@@ -13,11 +13,3 @@ console.log(`
 * **A**ngular
 * **N**odejs
 * **T**ypescript
-
-
-
-
-
-
-
-

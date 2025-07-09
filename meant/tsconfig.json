@@ -1,0 +1,27 @@
+{
+  "compilerOptions": {
+    "outDir": "./dist/",
+    "sourceMap": true,
+    "target": "ES2022",
+    "module": "ESNext",
+    "rootDir": "./src",
+    "moduleResolution": "node",
+    "strict": true,
+    "moduleDetection": "force", // Treat all files as modules
+    "isolatedModules": true, // Each file must be a module
+    "allowSyntheticDefaultImports": true,
+    "skipLibCheck": true,
+    "types": ["node", "express"]
+  },
+  "ts-node": {
+    "typeCheck": true, // Force type checking
+    "transpileOnly": false, // Ensure full compilation
+    "files": true, // Include files outside tsconfig
+    "compilerOptions": {
+      "strict": true,
+      "noEmit": true
+    }
+  },
+  "include": ["./src/**/*"],
+  "exclude": ["node_modules", ".git", "dist"]
+}
