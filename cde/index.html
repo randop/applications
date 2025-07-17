@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Exam App</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f7f7f7;
+      margin: 0;
+      padding: 0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+    }
+    #root {
+      width: 100%;
+      max-width: 500px;
+      margin: 40px auto 0 auto;
+      background: #fff;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+      padding: 32px 24px 80px 24px;
+      position: relative;
+    }
+    .bottom-right {
+      position: fixed;
+      right: 32px;
+      bottom: 32px;
+      z-index: 10;
+    }
+    button {
+      background: #1976d2;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      padding: 12px 24px;
+      font-size: 1rem;
+      cursor: pointer;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+      transition: background 0.2s;
+    }
+    button:disabled {
+      background: #b0b0b0;
+      cursor: not-allowed;
+    }
+    .score {
+      margin-top: 24px;
+      font-size: 1.1rem;
+      text-align: center;
+    }
+    .message {
+      margin: 16px 0 0 0;
+      font-weight: bold;
+      font-size: 1.1rem;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div id="root">
+    <!-- Exam app will render here -->
+  </div>
+  <script src="main.js"></script>
+</body>
+</html> 
