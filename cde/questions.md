@@ -167,15 +167,6 @@
 
 ---
 
-### Sa normal na traffic violation, sino ang maaaring kumumpiska ng lisensya?
-1. Ang mga ahente o enforcer lamang na itinalaga ng LTO
-2. Kahit sino, basta ang paglabag ay nakapaloob sa R.A. No. 4136
-3. Kahit sino, basta ang enforcer ay permanenteng empleyado ng gobyerno
-
-> 1
-
----
-
 ### Alin sa mga sumusunod ang kwalipikasyon ng isang maayos na drayber?
 1. mga drayber na marunong gumamit ng clutch at preno habang nagmamaneho
 2. Mga drayber na maykaalaman sa pagmintina ng sasakyan
@@ -194,36 +185,18 @@
 
 ---
 
-### Alin sa mga ito ang layunin ng pagkolekta ng Motor Vehicle User's Charge (MVUC)  
-1. Dagdag pondo para sa mga nagbabantay sa weighing scale  
-2. Para pondohan ang sahod ng mga traffic enforcers  
-3. Para pondohan at maiwasan ang pagkasira ng mga kalsada  
+### Anong kulay ng ilaw ang maaaring idagdag sa harap ng sasakyan?
+1. kahit anong kulay ay maaari
+2. Pula
+3. Puti o Dilawang puti
 
 > 3
 
 ---
 
-### Maaari bang bigyan ng 10 taon na lisensya ang isang drayber kung ito ay mayroong huli o traffic violation?  
-1. Hindi  
-2. Oo  
-3. Oo kung ang penalty ay nabayaran labinlimang taon bago mag-renew  
-
-> 1
-
----
-
-### Anong kulay ng ilaw ang maaaring idagdag sa harap ng sasakyan?  
-1. kahit anong kulay ay maaari  
-2. Pula  
-3. Puti o Dilawang puti  
-
-> 3
-
----
-
-### Sinong mga drayber ang dapat na gumamit ng seat belt?  
-1. Sa mga may hawak ng lisensyang nonprofessional at professional  
-2. Para sa mga drayber ng pampublikong sasakyan  
+### Sinong mga drayber ang dapat na gumamit ng seat belt?
+1. Sa mga may hawak ng lisensyang nonprofessional at professional
+2. Para sa mga drayber ng pampublikong sasakyan
 3. Para sa mga hindi propesyunal na drayber, partikular sa mga magagaan na sasakyan
 
 > 1
@@ -290,15 +263,6 @@
 3. magbigay daan sa mga siklista
 
 > 1
-
----
-
-### Anong mga sasakyan ang nasasakop ng Motor Vehicle User's Charge (MVUC)?
-1. Lahat ng mga sasakyan na nakarehistro sa DPWH at LTO
-2. Lahat ng mga sasakyang nakarehistro sa LTO
-3. Lahat ng mga sasakyang tumatakbo sa mga pribadong kakalsadahan
-
-> 2
 
 ---
 
@@ -392,15 +356,6 @@
 
 ---
 
-### Ano ang taas ng isang bata upang ito ay hindi na kailangang gumamit ng child restraint system?
-1. 100 sentimetro pataas
-2. 150 sentimetro pataas
-3. 180 sentimetro pataas
-
-> 2
-
----
-
 ### Nagmamaneho ka ng mahaba at malapad na trak sa isang kurbada, nang ikaw ay liliko at isang motorsiklo ang nag overtake sa kurbada na nanggaling sa kasalubong na direksyon. Ano ang gagawin mo?
 1. kung maaari, huminto upang maiwasan ang pag-crash ng kalsada
 2. tapakan ang accelerator
@@ -425,5 +380,158 @@
 3. Hindi
 
 > 3
+
+---
+
+### Ano ang taas ng isang bata upang ito ay hindi na kailangang gumamit ng child restraint system?
+1. 100 sentimetro pataas
+2. 150 sentimetro pataas
+3. 180 sentimetro pataas
+
+> 2
+
+---
+
+### Maaari bang bigyan ng 10 taon na lisensya ang isang drayber kung ito ay mayroong huli o traffic violation?
+1. Hindi
+2. Oo
+3. Oo kung ang penalty ay nabayaran labinlimang taon bago mag-renew
+
+> 1
+
+---
+
+### Alin sa mga ito ang layunin ng pagkolekta ng Motor Vehicle User's Charge (MvUC)?
+1. Dagdag pondo para sa mga nagbabantay sa weighing scale
+2. Para pondohan ang sahod ng mga traffic enforcers
+3. Para pondohan at maiwasan ang pagkasira ng mga kalsada
+
+> 3
+
+---
+
+### Sa normal na traffic violation, sino ang maaaring kumumpiska ng lisensya?
+1. Ang mga ahente o enforcer lamang na itinalaga ng LTO
+2. Kahit sino, basta ang paglabag ay nakapaloob sa R.A. No. 4136
+3. Kahit sino, basta ang enforcer ay permanenteng empleyado ng gobyerno
+
+> 1
+
+---
+
+### Kailan maaaring gumamit ng telepono habang nagmamaneho?
+1. Tawagan ang kapatid upang isara ang mga pinto bago matulog
+2. Tawagan ang mga awtoridad para ipaalam ang sirang traffic light
+3. Pagtawag sa mga awtoridad para ireport ang krimen o aksidente
+
+> 3
+
+---
+
+### Anong mga sasakyan ang nasasakop ng Motor Vehicle User's Charge (MvUC)?
+1. Lahat ng mga sasakyan na nakarehistro sa DPWH at LTO
+2. Lahat ng mga sasakyang nakarehistro sa LTO
+3. Lahat ng mga sasakyang tumatakbo sa mga pribadong kakalsadahan
+
+> 2
+
+---
+
+### Maaari ka bang magparada katabi ng isang nakaparadang sasakyan sa loob ng pampublikong kalsada?
+1. Hindi
+2. Hindi, maliban kung ang may-ari ay pumayag para magparada
+3. Hindi, maliban kung pinahintulutan ng traffic enforcer
+
+> 1
+
+---
+
+### Maaaring isuspinde ang rehistro ng sasakyan kung ito ay:
+1. kung ang sasakyan ay masyadong magaan upang makatawid sa mga pampublikong daan
+2. ang sasakyan ay hindi pangharap na pagmamaneho
+3. ang sasakyan ay makakasira sa pampublikong kalsada
+
+> 3
+
+---
+
+### Ayon sa Children's Safety on Motorcycles Act, ang isang batang wala pang 18 taong gulang ay hindi maaaring sumakay ng motorsiklo sa mga pampublikong kalsada maliban kung:
+1. Ang bata ay komportable na maabot nang kanyang mga paa ang foot peg ng motorsiklo, ang kanyang mga kamay ay maaring masalikop ang katawan ng drayber, at siya ay may suot na karaniwang proteksiyon na helmet
+2. Nasa maraming mga sasakyang mabibilis o ang pinataw na pinakamabilis na takbo ay lagpas sa 60 kph
+3. Ang drayber ay pwedeng mayakap ang baywang ng batang nakaupo sa harapan ng drayber at ang bata ay nakasuot ng karaniwang helmet
+
+> 1
+
+---
+
+### Ano ang dapat gawin ng isang law enforcer kung makumpiska ang isang motorsiklo?
+1. Gamitin ang motorsiklo pansamantala
+2. I-surrender ang motorsiklo sa awtoridad
+3. Dalhin ang motorsiklo sa pinakamalapit na impounding area
+
+> 3
+
+---
+
+### Ano ang ibig sabihin ng patay sinding kulay pulang ilaw trapiko?
+1. huminto at maghintay ng berdeng ilaw trapiko
+2. Huminto sa tamang hintuan at magpatuloy kung ito'y ligtas
+3. Ipagpatuloy ang pagmamaneho
+
+> 2
+
+---
+
+### Ano ang dapat na kulay ng headlight?
+1. kahit anong kulay ay maaari
+2. Pula
+3. Puti o Dilawang puti
+
+> 3
+
+---
+
+### Ano ang maaaring ipataw na paglabag kung ang isang drayber ay nakapasa sa field sobriety test?
+1. pagwalang bahala sa senyas trapiko
+2. pagmamaneho ng lasing
+3. inisyal na traffic violation
+
+> 3
+
+---
+
+### Ano ang kailangan mong gawin bago tumawid sa isang pangunahing highway?
+1. huminto at maghintay ng traffic enforcer
+2. magpatuloy ng mabilis
+3. huminto, tumingin at magpatuloy kung ligtas
+
+> 3
+
+---
+
+### Anong klaseng helmet ang dapat gamitin ng rider ng motorsiklo?
+1. Standard motorcycle helmet na sumunod sa regulasyon ng DTI
+2. Standard motorcycle helmet na sumunod sa panuntunan ng DENR
+3. Standard motorcycle helmet na naaayon sa panuntunan ng DTI
+
+> 3
+
+---
+
+### Maaari bang gamitin ang isang child restraint system kung ito ay expired na kahit maayos pa ang kondisyon?
+1. Oo
+2. Hindi
+3. Oo, basta't ito ay pinapayagan ng traffic enforcer
+
+> 2
+
+---
+
+### Ano ang dapat na kulay ng ilaw ng preno?
+1. puti
+2. kumikinang na pula
+3. Dilaw
+
+> 2
 
 ---
