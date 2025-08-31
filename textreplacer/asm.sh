@@ -21,6 +21,7 @@
 
 set -euo pipefail
 
+mkdir -p build
 rm -fv build/textreplacer build/module.o
 nasm -f elf64 module.asm -o build/module.o
 ld build/module.o -o build/textreplacer
