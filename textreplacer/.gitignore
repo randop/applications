@@ -1,0 +1,4 @@
+module.o
+textreplacer
+temp.txt
+build/test.txt
