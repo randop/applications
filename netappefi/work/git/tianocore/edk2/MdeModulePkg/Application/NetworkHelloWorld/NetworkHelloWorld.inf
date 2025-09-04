@@ -1,0 +1,31 @@
+[Defines]
+  INF_VERSION                    = 0x00010005
+  BASE_NAME                      = NetworkHelloWorld
+  FILE_GUID                      = a1234567-89ab-cdef-0123-456789abcdef  # Generate a unique GUID
+  MODULE_TYPE                    = UEFI_APPLICATION
+  VERSION_STRING                 = 1.0
+  ENTRY_POINT                    = UefiMain
+
+[Sources]
+  NetworkHelloWorld.c
+
+[Packages]
+  MdePkg/MdePkg.dec
+  MdeModulePkg/MdeModulePkg.dec
+
+[LibraryClasses]
+  UefiApplicationEntryPoint
+  UefiBootServicesTableLib
+  UefiLib
+  PrintLib
+  BaseMemoryLib
+  MemoryAllocationLib
+
+[Protocols]
+  gEfiSimpleNetworkProtocolGuid
+  gEfiDhcp4ServiceBindingProtocolGuid
+  gEfiDhcp4ProtocolGuid
+
+[Guids]
+
+[BuildOptions]
