@@ -39,4 +39,43 @@ pnpm create @angular client --standalone --style=css --routing
 # hint:
 # hint:   git branch -m <name>
 #     Successfully initialized git.
+
+# Initialize server nestjs sub project
+pnpm i -g @nestjs/cli
+nest new server
+# ✨  We will scaffold your app in a few seconds..
 #
+# ? Which package manager would you ❤️  to use?
+#   npm
+#   yarn
+# ❯ pnpm
+# CREATE server/.prettierrc (51 bytes)
+# CREATE server/README.md (5036 bytes)
+# CREATE server/eslint.config.mjs (836 bytes)
+# CREATE server/nest-cli.json (171 bytes)
+# CREATE server/package.json (1977 bytes)
+# CREATE server/tsconfig.build.json (97 bytes)
+# CREATE server/tsconfig.json (677 bytes)
+# CREATE server/src/app.controller.ts (274 bytes)
+# CREATE server/src/app.module.ts (249 bytes)
+# CREATE server/src/app.service.ts (142 bytes)
+# CREATE server/src/main.ts (228 bytes)
+# CREATE server/src/app.controller.spec.ts (617 bytes)
+# CREATE server/test/jest-e2e.json (183 bytes)
+# CREATE server/test/app.e2e-spec.ts (674 bytes)
+#
+# ✔ Installation in progress... ☕
+#
+# 🚀  Successfully created project server
+# 👉  Get started with the following commands:
+#
+# $ cd server
+# $ pnpm run start
+#
+#
+#                           Thanks for installing Nest 🙏
+#                  Please consider donating to our open collective
+#                         to help us maintain this package.
+#
+#
+#                🍷  Donate: https://opencollective.com/nest
