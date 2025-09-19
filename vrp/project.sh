@@ -79,3 +79,31 @@ nest new server
 #
 #
 #                🍷  Donate: https://opencollective.com/nest
+
+# Setup angular cli tool
+pnpm install -g @angular/cli
+
+# Setup CoreUI
+cd client
+ng add @coreui/angular
+# ✔ Determining Package Manager
+#   › Using package manager: pnpm
+# ✔ Searching for compatible package version
+#   › Found compatible package version: @coreui/angular@5.5.12.
+# ✔ Loading package information from registry
+# ✔ Confirming installation
+# ✔ Installing package
+#
+#     Installing @coreui/angular dependencies...
+#     @angular/core version ^20.3.0
+#     Added dependency: @angular/animations@^20.3.0
+#     Added dependency: @angular/common@^20.3.0
+#     Added dependency: @angular/core@^20.3.0
+#     Added dependency: @angular/router@^20.3.0
+#     Added dependency: @angular/cdk@^20.2.0
+#     Added dependency: @coreui/coreui@~5.4.3
+#     Added dependency: @coreui/icons-angular@~5.5.12
+#     Added dependency: @popperjs/core@~2.11.8
+#     Installing @coreui/angular@~5.5.12
+# UPDATE package.json (1386 bytes)
+# ✔ Packages installed successfully.
