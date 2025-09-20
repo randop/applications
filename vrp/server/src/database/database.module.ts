@@ -1,8 +1,18 @@
 import { Module } from '@nestjs/common';
-import { databaseProviders } from './database.providers';
+import { MongooseModule } from '@nestjs/mongoose';
+import { ConfigService } from '@nestjs/config';
+import { DATABASE_CONNECTION, DATABASE_URL } from '@/constants';
 
 @Module({
-  providers: [...databaseProviders],
-  exports: [...databaseProviders],
+  imports: [
+    MongooseModule.forRootAsync({
+      connectionName: DATABASE_CONNECTION,
+      useFactory: async (configService: ConfigService) => ({
+        uri: configService.get<string>(DATABASE_URL, 'mongodb://localhost/db'),
+      }),
+      inject: [ConfigService],
+    }),
+  ],
+  exports: [MongooseModule],
 })
 export class DatabaseModule {}

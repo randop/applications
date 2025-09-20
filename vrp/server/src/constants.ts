@@ -1,7 +1,7 @@
 export const DATABASE_CONNECTION = 'DATABASE_CONNECTION';
 export const DATABASE_URL = 'DATABASE_URL';
 
-export const enum TaskStatus {
+export enum TaskStatus {
   PENDING = 'PENDING',
   WIP = 'WIP',
   COMPLETED = 'COMPLETED',
