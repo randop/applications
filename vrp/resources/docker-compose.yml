@@ -3,8 +3,6 @@
 # IMPORTANT!!! Data is wiped on provision
 ###############################################################################
 
-version: "3.8"
-
 services:
   mongodb:
     image: mongodb/mongodb-community-server:8.0.6-ubi9
