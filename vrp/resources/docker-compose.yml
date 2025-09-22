@@ -1,0 +1,21 @@
+###############################################################################
+# Services for development only
+# IMPORTANT!!! Data is wiped on provision
+###############################################################################
+
+version: "3.8"
+
+services:
+  mongodb:
+    image: mongodb/mongodb-community-server:8.0.6-ubi9
+    container_name: vrpdb
+    network_mode: host
+    ports:
+      - "27017:27017"
+    environment:
+      - MONGODB_INITDB_ROOT_USERNAME=user
+      - MONGODB_INITDB_ROOT_PASSWORD=pass
+      - MONGODB_INITDB_DATABASE=vrp
+    volumes:
+      - ./database/seed.js:/docker-entrypoint-initdb.d/seed.js:ro
+
