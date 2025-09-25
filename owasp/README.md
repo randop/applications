@@ -31,3 +31,13 @@ curl -v -H "Content-Type: application/json" -d '{"id": "1\" OR \"1\"=\"1"}' "htt
 2025/09/25 05:19:59 [error] 54#54: *4 [client 192.168.100.1] ModSecurity: Access denied with code 403 (phase 2). Matched "Operator `Ge' with parameter `5' against variable `TX:BLOCKING_INBOUND_ANOMALY_SCORE' (Value: `8' ) [file "/usr/local/owasp-modsecurity-crs/rules/REQUEST-949-BLOCKING-EVALUATION.conf"] [line "222"] [id "949110"] [rev ""] [msg "Inbound Anomaly Score Exceeded (Total Score: 8)"] [data ""] [severity "0"] [ver "OWASP_CRS/4.18.0"] [maturity "0"] [accuracy "0"] [tag "anomaly-evaluation"] [tag "OWASP_CRS"] [hostname "192.168.100.6"] [uri "/"] [unique_id "175877759921.412810"] [ref ""], client: 192.168.100.1, server: _, request: "POST / HTTP/1.1", host: "192.168.100.6:8080"
 192.168.100.1 - - [25/Sep/2025:05:19:59 +0000] "POST / HTTP/1.1" 403 1381 "-" "curl/7.88.1" "-"
 ```
+
+#### Cross-Site Scripting (XSS) test
+```sh
+curl -v "http://127.0.0.1:8080/?q=<script>alert('XSS')</script>"
+```
+
+```
+2025/09/25 05:21:00 [error] 54#54: *5 [client 192.168.100.1] ModSecurity: Access denied with code 403 (phase 2). Matched "Operator `Ge' with parameter `5' against variable `TX:BLOCKING_INBOUND_ANOMALY_SCORE' (Value: `23' ) [file "/usr/local/owasp-modsecurity-crs/rules/REQUEST-949-BLOCKING-EVALUATION.conf"] [line "222"] [id "949110"] [rev ""] [msg "Inbound Anomaly Score Exceeded (Total Score: 23)"] [data ""] [severity "0"] [ver "OWASP_CRS/4.18.0"] [maturity "0"] [accuracy "0"] [tag "anomaly-evaluation"] [tag "OWASP_CRS"] [hostname "192.168.100.6"] [uri "/"] [unique_id "175877766010.309704"] [ref ""], client: 192.168.100.1, server: _, request: "GET /?q=<script>alert('XSS')</script> HTTP/1.1", host: "192.168.100.6:8080"
+192.168.100.1 - - [25/Sep/2025:05:21:00 +0000] "GET /?q=<script>alert('XSS')</script> HTTP/1.1" 403 1381 "-" "curl/7.88.1" "-"
+```
