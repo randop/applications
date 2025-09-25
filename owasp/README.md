@@ -65,3 +65,10 @@ curl -H "x-format-output: txt-matched-rules" "https://sandbox.coreruleset.org/?s
 949110 PL1 Inbound Anomaly Score Exceeded (Total Score: 20)
 980170 PL1 Anomaly Scores: (Inbound Scores: blocking=20, detection=20, per_pl=20-0-0-0, threshold=5) - (Outbound Scores: blocking=0, detection=0, per_pl=0-0-0-0, threshold=4) - (SQLI=0, XSS=20, RFI=0, LFI=0, RCE=0, PHPI=0, HTTP=0, SESS=0, COMBINED_SCORE=20)
 ```
+
+#### IP to Geolocation lookup test
+```sh
+wget https://download.db-ip.com/free/dbip-city-lite-2025-09.mmdb.gz
+gzip -d dbip-city-lite-2025-09.mmdb.gz
+mmdblookup --file dbip-city-lite-2025-09.mmdb --ip 175.176.21.204
+```
