@@ -2,7 +2,7 @@ ARG NGINX_VER=1.23.3
 
 FROM nginx:${NGINX_VER}-alpine AS base
 
-ARG GEO_DB_RELEASE=2023-03
+ARG GEO_DB_RELEASE=2025-09
 ARG MODSEC_TAG=v3.0.8
 ARG OWASP_TAG=v3.3.4
 
@@ -35,7 +35,7 @@ RUN echo "Installing Dependencies" && \
     zlib-dev
 
 # Clone and compile modsecurity. Binary will be located in /usr/local/modsecurity
-RUN echo "Installing ModSec Library" && \
+RUN echo "Building ModSec Library" && \
     git clone -b ${MODSEC_TAG} --depth 1 https://github.com/SpiderLabs/ModSecurity.git && \
     git -C /opt/ModSecurity submodule update --init --recursive && \
     (cd "/opt/ModSecurity" && \
@@ -56,8 +56,8 @@ RUN echo 'Cloning Modsec Nginx Connector' && \
 RUN echo 'Processing GeoIP...' && \
     git clone -b master --depth 1 https://github.com/leev/ngx_http_geoip2_module.git && \
     mkdir -p /etc/nginx/geoip && \
-    wget -O - https://download.db-ip.com/free/dbip-city-lite-2025-06.mmdb.gz | gzip -d > /etc/nginx/geoip/dbip-city-lite.mmdb && \
-    wget -O - https://download.db-ip.com/free/dbip-country-lite-2025-06.mmdb.gz | gzip -d > /etc/nginx/geoip/dbip-country-lite.mmdb
+    wget -O - https://download.db-ip.com/free/dbip-city-lite-$GEO_DB_RELEASE.mmdb.gz | gzip -d > /etc/nginx/geoip/dbip-city-lite.mmdb && \
+    wget -O - https://download.db-ip.com/free/dbip-country-lite-$GEO_DB_RELEASE.mmdb.gz | gzip -d > /etc/nginx/geoip/dbip-country-lite.mmdb
 
 RUN echo 'Processing ModSec OWASP Rules...' && \
     git clone -b ${OWASP_TAG} --depth 1 https://github.com/coreruleset/coreruleset.git /usr/local/owasp-modsecurity-crs
