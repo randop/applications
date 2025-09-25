@@ -3,8 +3,19 @@ ARG NGINX_VER=1.28.0
 FROM nginx:${NGINX_VER}-alpine AS base
 
 ARG GEO_DB_RELEASE=2025-09
-ARG MODSEC_TAG=v3.0.8
+ARG MODSEC_TAG=v3.0.14
 ARG OWASP_TAG=v3.3.4
+ARG CORERULESET_TAG=v3.3.4
+
+# Download IP to Geolocation databases
+ADD https://download.db-ip.com/free/dbip-country-lite-2025-09.mmdb.gz /tmp/dbip-country-lite.mmdb.gz
+ADD https://download.db-ip.com/free/dbip-city-lite-2025-09.mmdb.gz /tmp/dbip-city-lite.mmdb.gz
+
+RUN echo "Extracting IP to Geolocation databases..." && \
+  mkdir -p /etc/nginx/geoip && \
+  gunzip -c /tmp/dbip-city-lite.mmdb.gz > /etc/nginx/geoip/dbip-city-lite.mmdb && \
+  gunzip -c /tmp/dbip-country-lite.mmdb.gz > /etc/nginx/geoip/dbip-country-lite.mmdb && \
+  rm -f /tmp/dbip*
 
 WORKDIR /opt
 
@@ -54,13 +65,10 @@ RUN echo 'Cloning Modsec Nginx Connector' && \
     wget -O - https://nginx.org/download/nginx-$NGINX_VERSION.tar.gz | tar -xz
 
 RUN echo 'Processing GeoIP...' && \
-    git clone -b master --depth 1 https://github.com/leev/ngx_http_geoip2_module.git && \
-    mkdir -p /etc/nginx/geoip && \
-    wget -O - https://download.db-ip.com/free/dbip-city-lite-$GEO_DB_RELEASE.mmdb.gz | gzip -d > /etc/nginx/geoip/dbip-city-lite.mmdb && \
-    wget -O - https://download.db-ip.com/free/dbip-country-lite-$GEO_DB_RELEASE.mmdb.gz | gzip -d > /etc/nginx/geoip/dbip-country-lite.mmdb
+    git clone -b master --depth 1 https://github.com/leev/ngx_http_geoip2_module.git
 
 RUN echo 'Processing ModSec OWASP Rules...' && \
-    git clone -b ${OWASP_TAG} --depth 1 https://github.com/coreruleset/coreruleset.git /usr/local/owasp-modsecurity-crs
+    git clone -b ${CORERULESET_TAG} --depth 1 https://github.com/coreruleset/coreruleset.git /usr/local/owasp-modsecurity-crs
 
 # Install GeoIP2 and ModSecurity Nginx modules
 RUN echo 'Installing Nginx Modules' && \
