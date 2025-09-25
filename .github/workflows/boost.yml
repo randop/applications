@@ -1,0 +1,30 @@
+name: Boost C++
+
+on:
+  schedule:
+    - cron: '0 0 * * *' # Runs at 00:00 every day UTC
+  workflow_dispatch:
+
+# This ensures that no matter what triggers this workflow (a push, a manual trigger, etc.),
+# only one instance of it will ever run at a time across your entire repository.
+concurrency:
+  # Use the workflow's name as the unique lock.
+  # All runs of this workflow will share the same concurrency group.
+  group: ${{ github.workflow }}
+  # If a new run is triggered, wait for the existing one to finish.
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: boost-ci-cd
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Setup cross-platform build
+        run: docker buildx create --name multiarch --use
+      - name: Build boost app
+        run: docker buildx build --platform linux/amd64 -t boost .
+
