@@ -1,5 +1,40 @@
 # Arduino Project
 
+## Setup
+`dmesg`
+```
+[ 9677.610085] usb 3-2: new full-speed USB device number 3 using xhci_hcd
+[ 9677.750758] usb 3-2: New USB device found, idVendor=1a86, idProduct=7523, bcdDevice= 2.64
+[ 9677.750768] usb 3-2: New USB device strings: Mfr=0, Product=2, SerialNumber=0
+[ 9677.750773] usb 3-2: Product: USB Serial
+[ 9677.796918] usbcore: registered new interface driver usbserial_generic
+[ 9677.796933] usbserial: USB Serial support registered for generic
+[ 9677.798802] usbcore: registered new interface driver ch341
+[ 9677.798829] usbserial: USB Serial support registered for ch341-uart
+[ 9677.798857] ch341 3-2:1.0: ch341-uart converter detected
+[ 9677.811895] usb 3-2: ch341-uart converter now attached to ttyUSB0
+```
+
+`lsusb`
+```
+Bus 003 Device 003: ID 1a86:7523 QinHeng Electronics CH340 serial converter
+```
+
+```
+# /etc/udev/rules.d/99-usb.rules
+SUBSYSTEM=="tty", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="7523", MODE="0666", GROUP="dialout"
+```
+
+```sh
+udevadm control --reload-rules && udevadm trigger
+```
+
+```
+# /etc/pve/lxc/103.conf 
+lxc.cgroup2.devices.allow: c 188:* rwm
+lxc.mount.entry: /dev/ttyUSB0 dev/ttyUSB0 none bind,optional,create=file
+```
+
 ## Building
 
 1. Configure: `meson setup build --cross-file avr-uno.txt`
