@@ -22,7 +22,7 @@ Bus 003 Device 003: ID 1a86:7523 QinHeng Electronics CH340 serial converter
 
 ```
 # /etc/udev/rules.d/99-usb.rules
-SUBSYSTEM=="tty", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="7523", MODE="0666", GROUP="dialout"
+SUBSYSTEM=="tty", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="7523", SYMLINK+="ttyUSB1001", MODE="0666", GROUP="dialout"
 ```
 
 ```sh
@@ -32,7 +32,7 @@ udevadm control --reload-rules && udevadm trigger
 ```
 # /etc/pve/lxc/103.conf 
 lxc.cgroup2.devices.allow: c 188:* rwm
-lxc.mount.entry: /dev/ttyUSB0 /dev/ttyUSB0 none bind,optional,create=file
+dev0: /dev/ttyUSB1001,mode=0666
 ```
 
 ## Installation
@@ -97,7 +97,7 @@ Avrdude done.  Thank you.
 
 ## Monitoring
 ```sh
-arduino-cli monitor -p /dev/ttyUSB0 -b arduino:avr:uno --config 115200
+arduino-cli monitor -p /dev/ttyUSB1001 -b arduino:avr:uno --config 115200
 ```
 
 ```
@@ -109,6 +109,6 @@ Monitor port settings:
   rts=on
   stop_bits=1
 
-Connecting to /dev/ttyUSB0. Press CTRL-C to exit.
-Running Blink project...
+Connecting to /dev/ttyUSB1001. Press CTRL-C to exit.
+Running arduino project...
 ```
