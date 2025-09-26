@@ -27,11 +27,17 @@ core_sources = [
   'ArduinoCore-avr/cores/arduino/hooks.c',
   'ArduinoCore-avr/cores/arduino/wiring.c',
   'ArduinoCore-avr/cores/arduino/wiring_digital.c',
+  'ArduinoCore-avr/cores/arduino/WMath.cpp',
   'ArduinoCore-avr/libraries/Wire/src/Wire.cpp',
   'ArduinoCore-avr/libraries/Wire/src/utility/twi.c',
+  'ArduinoCore-avr/libraries/SPI/src/SPI.cpp',
   'ArduinoCore-avr/libraries/Adafruit_BusIO/Adafruit_GenericDevice.cpp',
   'ArduinoCore-avr/libraries/Adafruit_BusIO/Adafruit_I2CDevice.cpp',
-  'ArduinoCore-avr/libraries/Ds1302/lib/Ds1302/Ds1302.cpp'
+  'ArduinoCore-avr/libraries/Adafruit_BusIO/Adafruit_SPIDevice.cpp',
+  'ArduinoCore-avr/libraries/Ds1302/lib/Ds1302/Ds1302.cpp',
+  'ArduinoCore-avr/libraries/Adafruit-GFX-Library/Adafruit_GFX.cpp',
+  'ArduinoCore-avr/libraries/Adafruit_SSD1306/Adafruit_SSD1306.cpp',
+  'ArduinoCore-avr/libraries/Arduino-I2CScanner/src/I2CScanner.cpp'
 ]
 
 # source sketch
@@ -42,12 +48,15 @@ variant_standard_includes = include_directories('ArduinoCore-avr/variants/standa
 wire_include = include_directories('ArduinoCore-avr/libraries/Wire/src', 'ArduinoCore-avr/libraries/Wire/src/utility')
 busio_include = include_directories('ArduinoCore-avr/libraries/Adafruit_BusIO')
 rtclib_include = include_directories('ArduinoCore-avr/libraries/Ds1302/lib/Ds1302')
+i2c_include = include_directories('ArduinoCore-avr/libraries/Arduino-I2CScanner/src')
+spi_include = include_directories('ArduinoCore-avr/libraries/SPI/src')
+gfx_include = include_directories('ArduinoCore-avr/libraries/Adafruit-GFX-Library', 'ArduinoCore-avr/libraries/Adafruit_SSD1306')
 
 # Executable (ELF)
 exe = executable('main',
   sources: core_sources + sketch_sources,
   name_suffix: 'elf',
-  include_directories : [arduino_includes, variant_standard_includes, wire_include, busio_include, rtclib_include]
+  include_directories : [arduino_includes, variant_standard_includes, wire_include, i2c_include, spi_include, busio_include, rtclib_include, gfx_include]
 )
 
 # Generate HEX from ELF
