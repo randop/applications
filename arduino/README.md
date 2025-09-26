@@ -32,7 +32,12 @@ udevadm control --reload-rules && udevadm trigger
 ```
 # /etc/pve/lxc/103.conf 
 lxc.cgroup2.devices.allow: c 188:* rwm
-lxc.mount.entry: /dev/ttyUSB0 dev/ttyUSB0 none bind,optional,create=file
+lxc.mount.entry: /dev/ttyUSB0 /dev/ttyUSB0 none bind,optional,create=file
+```
+
+## Installation
+```sh
+pacman -Syu base-devel meson avr-gcc avr-libc avrdude make
 ```
 
 ## Building
