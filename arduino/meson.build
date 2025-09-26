@@ -18,19 +18,23 @@ assert(meson.is_cross_build(), 'Arduino projects require cross-compilation.')
 
 # Core sources (minimal for Blink: main() + wiring + digital I/O)
 core_sources = [
-  '/home/johnpaul/ArduinoCore-avr/cores/arduino/main.cpp',
-  '/home/johnpaul/ArduinoCore-avr/cores/arduino/hooks.c',
-  '/home/johnpaul/ArduinoCore-avr/cores/arduino/wiring.c',
-  '/home/johnpaul/ArduinoCore-avr/cores/arduino/wiring_digital.c',
+  'ArduinoCore-avr/cores/arduino/main.cpp',
+  'ArduinoCore-avr/cores/arduino/hooks.c',
+  'ArduinoCore-avr/cores/arduino/wiring.c',
+  'ArduinoCore-avr/cores/arduino/wiring_digital.c',
 ]
 
-# Your sketch
+# source sketch
 sketch_sources = ['Blink.cpp']
+
+arduino_includes = include_directories('ArduinoCore-avr/cores/arduino') 
+variant_standard_includes = include_directories('ArduinoCore-avr/variants/standard')
 
 # Executable (ELF)
 exe = executable('blink',
   sources: core_sources + sketch_sources,
   name_suffix: 'elf',
+  include_directories : [arduino_includes, variant_standard_includes]
 )
 
 # Generate HEX from ELF

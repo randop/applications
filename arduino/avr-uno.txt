@@ -21,8 +21,8 @@ c_args = [
     '-ffunction-sections',
     '-fdata-sections',
     '-fno-fat-lto-objects',
-    '-I/home/johnpaul/ArduinoCore-avr/variants/standard',  # Variant for pins_arduino.h
-    '-I/home/johnpaul/ArduinoCore-avr/cores/arduino']
+    '-I./ArduinoCore-avr/variants/standard',  # Variant for pins_arduino.h
+    '-I./ArduinoCore-avr/cores/arduino']
 
 cpp_args = c_args + [
     '-std=gnu++11',

@@ -14,7 +14,7 @@ void setup() {
 // Loop function: Runs repeatedly
 void loop() {
   digitalWrite(LED_PIN, HIGH);  // Turn LED on
-  delay(1000);                  // Wait 1 second
+  delay(3000);                  // Wait 1 second
   digitalWrite(LED_PIN, LOW);   // Turn LED off
-  delay(1000);                  // Wait 1 second
+  delay(3000);                  // Wait 1 second
 }
