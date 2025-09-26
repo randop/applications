@@ -1,14 +1,14 @@
 #include <Arduino.h>
 
-// Blink.ino - Simple LED blink example for Arduino Uno (renamed to .cpp)
-
 // Define the pin for the built-in LED
 #define LED_PIN 13
 
 // Setup function: Runs once at startup
 void setup() {
+  Serial.begin(115200);
   // Initialize the LED pin as an output
   pinMode(LED_PIN, OUTPUT);
+  Serial.println("Running Blink project...");
 }
 
 // Loop function: Runs repeatedly

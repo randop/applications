@@ -54,3 +54,21 @@ Writing | ################################################## | 100% 0.18 s
 1016 bytes of flash written
 Avrdude done.  Thank you.
 ```
+
+## Monitoring
+```sh
+arduino-cli monitor -p /dev/ttyUSB0 -b arduino:avr:uno --config 115200
+```
+
+```
+Monitor port settings:
+  baudrate=115200
+  bits=8
+  dtr=on
+  parity=none
+  rts=on
+  stop_bits=1
+
+Connecting to /dev/ttyUSB0. Press CTRL-C to exit.
+Running Blink project...
+```

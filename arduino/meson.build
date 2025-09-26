@@ -19,6 +19,9 @@ assert(meson.is_cross_build(), 'Arduino projects require cross-compilation.')
 # Core sources (minimal for Blink: main() + wiring + digital I/O)
 core_sources = [
   'ArduinoCore-avr/cores/arduino/main.cpp',
+  'ArduinoCore-avr/cores/arduino/HardwareSerial.cpp',
+  'ArduinoCore-avr/cores/arduino/HardwareSerial0.cpp',
+  'ArduinoCore-avr/cores/arduino/Print.cpp',
   'ArduinoCore-avr/cores/arduino/hooks.c',
   'ArduinoCore-avr/cores/arduino/wiring.c',
   'ArduinoCore-avr/cores/arduino/wiring_digital.c',
