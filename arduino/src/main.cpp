@@ -1,4 +1,5 @@
 #define ARDUINO 101
+#define SSD1306_NO_SPLASH
 
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
@@ -164,7 +165,7 @@ void setup() {
   // Clear the buffer
   display.clearDisplay();
 
-  Serial.println("Running arduino project v0.1.2 ...");
+  Serial.println("Running arduino project v0.1.3 ...");
 
   // initialize the RTC
   rtc.init();
@@ -271,7 +272,7 @@ void loop() {
 
     display.clearDisplay();
 
-    display.setTextSize(1);
+    display.setTextSize(2);
     display.setTextColor(WHITE);
     display.setCursor(0, 0);
     display.print("20");
@@ -284,9 +285,11 @@ void loop() {
     if (now.day < 10)
       display.print('0');
     display.print(now.day); // 01-31
-    display.print(' ');
+
+    display.setCursor(0, 32);
     display.print(WeekDays[now.dow - 1]); // 1-7
-    display.print(' ');
+
+    display.setCursor(0, 48);
     if (now.hour < 10)
       display.print('0');
     display.print(now.hour); // 00-23
