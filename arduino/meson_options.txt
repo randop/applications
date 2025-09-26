@@ -1,0 +1,2 @@
+option('port', type: 'string', value: '/dev/ttyUSB0',
+       description: 'Serial port for Arduino upload (e.g., /dev/ttyACM0)')

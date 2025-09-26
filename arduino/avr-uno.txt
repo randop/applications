@@ -1,0 +1,45 @@
+[constants]
+prefix = 'avr'
+
+[binaries]
+c = prefix + '-gcc'
+cpp = prefix + '-g++'
+ar = prefix + '-ar'
+strip = prefix + '-strip'
+objcopy = prefix + '-objcopy'
+size = prefix + '-size'
+
+[properties]
+needs_exe_wrapper = true
+
+c_args = [
+    '-mmcu=atmega328p',
+    '-DF_CPU=16000000UL',
+    '-Os',
+    '-g',
+    '-w',
+    '-ffunction-sections',
+    '-fdata-sections',
+    '-fno-fat-lto-objects',
+    '-I/home/johnpaul/ArduinoCore-avr/variants/standard',  # Variant for pins_arduino.h
+    '-I/home/johnpaul/ArduinoCore-avr/cores/arduino']
+
+cpp_args = c_args + [
+    '-std=gnu++11',
+    '-fno-exceptions']
+
+c_link_args = [
+    '-mmcu=atmega328p',
+    '-Wl,--gc-sections',
+    '-Wl,--relax',
+    '-static',
+    '-flto',
+    '-fuse-linker-plugin']
+
+cpp_link_args = c_link_args
+
+[host_machine]
+system = 'arduino'
+cpu_family = 'avr'
+cpu = 'atmega328p'
+endian = 'little'
