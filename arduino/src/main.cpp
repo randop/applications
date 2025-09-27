@@ -33,6 +33,7 @@ bool results[num_addresses] = {false, false, false, false};
 #define PIN_DAT 6
 // DS1302 RTC instance
 Ds1302 rtc(PIN_RST, PIN_CLK, PIN_DAT);
+Ds1302::DateTime now;
 
 const static char *WeekDays[] = {"Monday", "Tuesday",  "Wednesday", "Thursday",
                                  "Friday", "Saturday", "Sunday"};
@@ -165,7 +166,7 @@ void setup() {
   // Clear the buffer
   display.clearDisplay();
 
-  Serial.println("Running arduino project v0.1.3 ...");
+  Serial.println("Running arduino project v0.1.4 ...");
 
   // initialize the RTC
   rtc.init();
@@ -232,12 +233,8 @@ void setup() {
 
 // Loop function: Runs repeatedly
 void loop() {
-  digitalWrite(LED_PIN, HIGH); // Turn LED on
-  delay(200);
-  digitalWrite(LED_PIN, LOW); // Turn LED off
-  delay(200);
+  delay(250);
 
-  Ds1302::DateTime now;
   rtc.getDateTime(&now);
 
   static uint8_t last_second = 0;
@@ -247,26 +244,31 @@ void loop() {
     Serial.print("20");
     Serial.print(now.year); // 00-99
     Serial.print('-');
-    if (now.month < 10)
+    if (now.month < 10) {
       Serial.print('0');
+    }
     Serial.print(now.month); // 01-12
     Serial.print('-');
-    if (now.day < 10)
+    if (now.day < 10) {
       Serial.print('0');
+    }
     Serial.print(now.day); // 01-31
     Serial.print(' ');
     Serial.print(WeekDays[now.dow - 1]); // 1-7
     Serial.print(' ');
-    if (now.hour < 10)
+    if (now.hour < 10) {
       Serial.print('0');
+    }
     Serial.print(now.hour); // 00-23
     Serial.print(':');
-    if (now.minute < 10)
+    if (now.minute < 10) {
       Serial.print('0');
+    }
     Serial.print(now.minute); // 00-59
     Serial.print(':');
-    if (now.second < 10)
+    if (now.second < 10) {
       Serial.print('0');
+    }
     Serial.print(now.second); // 00-59
     Serial.println();
 
@@ -278,29 +280,46 @@ void loop() {
     display.print("20");
     display.print(now.year); // 00-99
     display.print('-');
-    if (now.month < 10)
+    if (now.month < 10) {
       display.print('0');
+    }
     display.print(now.month); // 01-12
     display.print('-');
-    if (now.day < 10)
+    if (now.day < 10) {
       display.print('0');
+    }
     display.print(now.day); // 01-31
 
-    display.setCursor(0, 32);
+    display.setCursor(0, 26);
     display.print(WeekDays[now.dow - 1]); // 1-7
 
     display.setCursor(0, 48);
-    if (now.hour < 10)
-      display.print('0');
-    display.print(now.hour); // 00-23
+
+    int hour = now.hour; // 00-23
+    if (now.hour >= 12) {
+      hour = hour - 12;
+      if (hour <= 0) {
+        hour = 12;
+      }
+    }
+    display.print(hour);
+
     display.print(':');
-    if (now.minute < 10)
+    if (now.minute < 10) {
       display.print('0');
+    }
     display.print(now.minute); // 00-59
     display.print(':');
-    if (now.second < 10)
+    if (now.second < 10) {
       display.print('0');
+    }
     display.print(now.second); // 00-59
+
+    if (now.hour > 11) {
+      display.print("PM");
+    } else {
+      display.print("AM");
+    }
 
     display.display();
   }

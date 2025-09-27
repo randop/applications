@@ -1,5 +1,5 @@
 project('arduino-project', ['c', 'cpp'],  # Languages as a list for mixed C/C++
-  version: '0.1.3',
+  version: '0.1.4',
   default_options: [
     'buildtype=minsize',
     'default_library=static',
