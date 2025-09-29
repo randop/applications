@@ -166,7 +166,7 @@ void setup() {
   // Clear the buffer
   display.clearDisplay();
 
-  Serial.println("Running arduino project v0.1.4 ...");
+  Serial.println("Running arduino project v0.1.5 ...");
 
   // initialize the RTC
   rtc.init();
@@ -295,7 +295,8 @@ void loop() {
 
     display.setCursor(0, 48);
 
-    int hour = now.hour; // 00-23
+    // 00-23
+    int hour = now.hour;
     if (hour == 0) {
       hour = 12;
     } else if (hour >= 12) {
