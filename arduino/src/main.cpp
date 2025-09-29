@@ -296,7 +296,9 @@ void loop() {
     display.setCursor(0, 48);
 
     int hour = now.hour; // 00-23
-    if (now.hour >= 12) {
+    if (hour == 0) {
+      hour = 12;
+    } else if (hour >= 12) {
       hour = hour - 12;
       if (hour <= 0) {
         hour = 12;
