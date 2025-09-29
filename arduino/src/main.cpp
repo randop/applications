@@ -40,7 +40,6 @@ const static char *WeekDays[] = {"Monday", "Tuesday",  "Wednesday", "Thursday",
 
 // OLED display width, in pixels
 #define SCREEN_WIDTH 128
-
 // OLED display height, in pixels
 #define SCREEN_HEIGHT 64
 
@@ -51,12 +50,10 @@ const static char *WeekDays[] = {"Monday", "Tuesday",  "Wednesday", "Thursday",
 // On an arduino LEONARDO:   2(SDA),  3(SCL), ...
 // #define OLED_RESET     -1 // Reset pin # (or -1 if sharing Arduino reset pin)
 #define OLED_RESET -1
-#define SCREEN_ADDRESS                                                         \
-  0x3C ///< See datasheet for Address; 0x3D for 128x64, 0x3C for 128x32
-Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
-#define NUMFLAKES 10 // Number of snowflakes in the animation example
-int8_t f, icons[NUMFLAKES][3];
+// See datasheet for Address; 0x3D for 128x64, 0x3C for 128x32
+#define SCREEN_ADDRESS 0x3C
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 #define LOGO_HEIGHT 16
 #define LOGO_WIDTH 16
@@ -76,52 +73,6 @@ void testdrawbitmap(void) {
                      LOGO_HEIGHT, 1);
   display.display();
   delay(1000);
-}
-
-#define XPOS 0 // Indexes into the 'icons' array in function below
-#define YPOS 1
-#define DELTAY 2
-
-void testanimate(const uint8_t *bitmap, uint8_t w, uint8_t h) {
-
-  // Initialize 'snowflake' positions
-  for (f = 0; f < NUMFLAKES; f++) {
-    icons[f][XPOS] = random(1 - LOGO_WIDTH, display.width());
-    icons[f][YPOS] = -LOGO_HEIGHT;
-    icons[f][DELTAY] = random(1, 6);
-    Serial.print(F("x: "));
-    Serial.print(icons[f][XPOS], DEC);
-    Serial.print(F(" y: "));
-    Serial.print(icons[f][YPOS], DEC);
-    Serial.print(F(" dy: "));
-    Serial.println(icons[f][DELTAY], DEC);
-  }
-}
-
-void testanimateloop(const uint8_t *bitmap, uint8_t w, uint8_t h) {
-
-  display.clearDisplay(); // Clear the display buffer
-
-  // Draw each snowflake:
-  for (f = 0; f < NUMFLAKES; f++) {
-    display.drawBitmap(icons[f][XPOS], icons[f][YPOS], bitmap, w, h,
-                       SSD1306_WHITE);
-  }
-
-  display.display(); // Show the display buffer on the screen
-  delay(200);        // Pause for 1/10 second
-
-  // Then update coordinates of each flake...
-  for (f = 0; f < NUMFLAKES; f++) {
-    icons[f][YPOS] += icons[f][DELTAY];
-    // If snowflake is off the bottom of the screen...
-    if (icons[f][YPOS] >= display.height()) {
-      // Reinitialize to a random position, just off the top
-      icons[f][XPOS] = random(1 - LOGO_WIDTH, display.width());
-      icons[f][YPOS] = -LOGO_HEIGHT;
-      icons[f][DELTAY] = random(1, 6);
-    }
-  }
 }
 
 // Setup function: Runs once at startup
@@ -166,7 +117,7 @@ void setup() {
   // Clear the buffer
   display.clearDisplay();
 
-  Serial.println("Running arduino project v0.1.5 ...");
+  Serial.println("Running arduino project v0.1.6 ...");
 
   // initialize the RTC
   rtc.init();
@@ -223,12 +174,8 @@ void setup() {
   delay(1000);
 
   testdrawbitmap();
-
-  delay(5000);
-  // Clear the buffer
+  delay(2000);
   display.clearDisplay();
-
-  testanimate(logo_bmp, LOGO_WIDTH, LOGO_HEIGHT); // Animate bitmaps
 }
 
 // Loop function: Runs repeatedly
@@ -326,6 +273,4 @@ void loop() {
 
     display.display();
   }
-
-  // testanimateloop(logo_bmp, LOGO_WIDTH, LOGO_HEIGHT); // Animate bitmaps
 }

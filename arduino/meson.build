@@ -1,5 +1,5 @@
 project('arduino-project', ['c', 'cpp'],
-  version: '0.1.5',
+  version: '0.1.6',
   default_options: [
     'buildtype=minsize',
     'default_library=static',
