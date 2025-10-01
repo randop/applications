@@ -25,7 +25,9 @@ arduino-cli core install esp32:esp32
 ```
 
 ### Check esp32 installation
-`arduino-cli core list`
+```sh
+arduino-cli core list
+```
 ```
 ID          Installed Latest Name
 arduino:avr 1.8.6     1.8.6  Arduino AVR Boards
