@@ -3,6 +3,7 @@ define(["van"], function (van) {
   const log = console;
 
   const {
+    article,
     div,
     p,
     ul,
@@ -16,25 +17,15 @@ define(["van"], function (van) {
     input,
     fieldset,
     label,
+    select,
+    option,
+    details,
+    summary,
   } = van.tags;
 
-  const Hello = () =>
-    div(
-      p("👋Hello"),
-      ul(
-        li("🗺️World"),
-        li(
-          a(
-            { href: "https://randop.github.io/" },
-            "🍦 https://randop.github.io",
-          ),
-        ),
-      ),
-    );
-
-  const Login = () => {
-    return section(
-      { id: "login" },
+  const LoginPanel = () => {
+    return article(
+      { id: "login-panel" },
       h3("Login"),
       p("Enter user and password"),
       form(
@@ -71,23 +62,36 @@ define(["van"], function (van) {
     );
   };
 
-  const Counter = () => {
-    const counter = van.state(0);
-    return span(
-      "❤️ ",
-      counter,
-      " ",
-      button({ onclick: () => ++counter.val }, "👍"),
-      " ",
-      button({ onclick: () => --counter.val }, "👎"),
+  const MqttPanel = () => {
+    return article(
+      { id: "mqtt-panel" },
+      h3("MQTT"),
+      p("Enter MQTT connection details"),
+      form(
+        { method: "POST" },
+        label({ for: "mqtt-protocol" }, "Protocol"),
+        select({ id: "mqtt-protocol" }, option({}, "mqtt://")),
+        label({ for: "mqtt-host" }, "Host"),
+        input({
+          id: "mqtt-host",
+          type: "text",
+          placeholder: "Host name or IP address",
+        }),
+        details(
+          summary("Advanced options"),
+          fieldset(
+            label({ for: "mqtt-port" }, "Port"),
+            input({ id: "mqtt-port", type: "text", placeholder: "Port" }),
+          ),
+        ),
+      ),
     );
   };
 
   const init = (vanJs) => {
     const mainContainer = document.querySelector("main.container");
-    vanJs.add(mainContainer, Login());
-    vanJs.add(mainContainer, Hello());
-    vanJs.add(mainContainer, Counter());
+    vanJs.add(mainContainer, LoginPanel());
+    vanJs.add(mainContainer, MqttPanel());
   };
 
   return { init };
