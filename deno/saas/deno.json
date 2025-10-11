@@ -4,12 +4,15 @@
   },
   "imports": {
     "@/": "./src/",
-    "@std/assert": "jsr:@std/assert@1"
-    "@nestjs/": "npm:@nestjs/",
+    "@std/assert": "jsr:@std/assert@1",
+    "@nestjs/": "npm:@nestjs/"
   },
   "compilerOptions": {
     "strict": true,
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true
+  },
+  "fmt": {
+    "exclude": ["pnpm-lock.yml", "**/pnpm-lock.yml"]
   }
 }

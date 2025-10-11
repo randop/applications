@@ -1,2 +1,2 @@
 onlyBuiltDependencies:
-  - '@nestjs/core'
+  - "@nestjs/core"

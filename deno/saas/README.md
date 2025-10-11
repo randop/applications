@@ -1,12 +1,15 @@
 # SaaS
 
 ## Development
+
 ```sh
 deno task dev
 ```
 
 ### TypeScript type-check support
+
 This project supports instant reload with type-check on development.
+
 ```
 Task dev deno run --check --watch --unstable-sloppy-imports --allow-env --allow-net src/main.ts
 Watcher Process started.

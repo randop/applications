@@ -1,14 +1,20 @@
 {
-	"name": "saas",
-	"version": "0.1.0",
-	"private": true,
-	"dependencies": {
-		"@nestjs/common": "^11.1.6",
-		"@nestjs/core": "^11.1.6",
-		"@nestjs/platform-express": "^11.1.6"
-	},
-	"devDependencies": {
-		"@types/express": "^5.0.3",
-		"@types/node": "^24.7.1"
-	}
+  "name": "saas",
+  "version": "0.1.1",
+  "private": true,
+  "scripts": {
+    "build": "nest build"
+  },
+  "dependencies": {
+    "@nestjs/common": "^11.1.6",
+    "@nestjs/core": "^11.1.6",
+    "@nestjs/platform-express": "^11.1.6"
+  },
+  "devDependencies": {
+    "@nestjs/cli": "^11.0.10",
+    "@types/express": "^5.0.3",
+    "@types/node": "^24.7.1",
+    "tsconfig-paths": "^4.2.0",
+    "typescript": "^5.9.3"
+  }
 }
