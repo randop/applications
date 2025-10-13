@@ -1,4 +1,4 @@
-ARG RELEASE_VERSION="1.1.0"
+ARG RELEASE_VERSION="1.1.1"
 
 ARG NGINX_VER=1.28.0
 
@@ -6,7 +6,7 @@ FROM nginx:${NGINX_VER}-alpine AS base
 
 ARG GEO_DB_RELEASE=2025-09
 ARG MODSEC_TAG=v3.0.14
-ARG CORERULESET_TAG=v4.18.0
+ARG CORERULESET_TAG=v4.19.0
 
 # Download IP to Geolocation databases
 ADD https://download.db-ip.com/free/dbip-country-lite-2025-09.mmdb.gz /tmp/dbip-country-lite.mmdb.gz
