@@ -1,0 +1,14 @@
+{
+  "name": "todo-app",
+  "version": "1.0.0",
+  "description": "TODO App",
+  "main": "server.js",
+  "scripts": {},
+  "keywords": [],
+  "author": "Randolph Ledesma",
+  "license": "CFL",
+  "dependencies": {
+    "express": "^5.1.0",
+    "socket.io": "^4.8.1"
+  }
+}
