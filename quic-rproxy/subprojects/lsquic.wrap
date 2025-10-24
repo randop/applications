@@ -1,0 +1,4 @@
+[wrap-git]
+directory = lsquic
+url = https://github.com/litespeedtech/lsquic.git
+revision = 7e0c302ed8271c0019ea1155ebc9357bf4973f42

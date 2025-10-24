@@ -1,0 +1,4 @@
+[wrap-git]
+directory = boringssl
+url = https://boringssl.googlesource.com/boringssl
+revision = 9fc1c33e9c21439ce5f87855a6591a9324e569fd

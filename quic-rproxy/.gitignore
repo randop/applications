@@ -1,0 +1,66 @@
+# Build directory (Meson places all artifacts here)
+build/
+
+# Certificates directory
+certs/
+
+# Subprojects (ignore downloaded/extracted deps, but track wrap files)
+subprojects/*
+!subprojects/*.wrap
+
+# Wrap lock file (if using reproducible builds, commit it; otherwise ignore)
+.wraplock
+
+# Compiled object files
+*.o
+*.obj
+*.slo
+*.lo
+
+# Precompiled headers
+*.gch
+*.pch
+*.gch
+
+# Shared and static libraries
+*.a
+*.la
+*.lai
+*.lib
+*.so
+*.so.*
+*.dylib
+*.dll
+
+# Executables
+*.exe
+*.out
+*.app
+*.i*86
+*.x86_64
+*.hex
+
+# Debug files
+*.dSYM/
+*.su
+*.idb
+*.pdb
+
+# Generated files
+*.mod
+*.smod
+*.d
+
+# IDE/editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS-generated files
+.DS_Store
+Thumbs.db
+
+# Logs (Meson test logs, etc.)
+meson-log.txt
