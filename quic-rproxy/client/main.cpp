@@ -30,7 +30,7 @@ extern "C" {
 #define PROXY_IDLE_TIMEOUT_SEC 10
 #define LOCAL_PORT 3000 // Tunnel to local service on this port
 
-static const char *alpn = "r-tunnel";
+static const char *alpn = "h3";
 
 // ProxyPair for client
 struct ProxyPair {
@@ -268,6 +268,13 @@ int create_client_udp_socket() {
   sa.sin_port = htons(0);
   sa.sin_addr.s_addr = INADDR_ANY;
   if (bind(s, (struct sockaddr *)&sa, sizeof(sa)) < 0) {
+    close(s);
+    return -1;
+  }
+  // Enable broadcast to allow sending to 255.255.255.255
+  int opt = 1;
+  if (setsockopt(s, SOL_SOCKET, SO_BROADCAST, &opt, sizeof(opt)) < 0) {
+    perror("setsockopt SO_BROADCAST");
     close(s);
     return -1;
   }

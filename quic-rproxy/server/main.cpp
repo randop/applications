@@ -27,7 +27,7 @@ extern "C" {
 #define PROXY_IDLE_TIMEOUT_SEC 10 // Robust timeout for proxy pairs
 
 // Custom ALPN for tunnel
-static const char *alpn = "r-tunnel";
+static const char *alpn = "h3";
 
 // Forward declaration for send_packets_out (used before definition)
 static int send_packets_out(void *ctx, const lsquic_out_spec *specs,
