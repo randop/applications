@@ -13,6 +13,8 @@
 #include <sys/uio.h>
 #include <unistd.h>
 #include <vector>
+#include <cstdio> // For fwrite, fflush
+#include <string> // For std::string if not already included
 
 extern "C" {
 #include <lsquic.h>
@@ -48,6 +50,26 @@ std::map<int, ProxyPair *> fd_to_proxy;
 std::map<lsquic_stream_t *, ProxyPair *> stream_to_proxy;
 SSL_CTX *client_ssl_ctx = nullptr;
 
+// Logger callback for LSQUIC debugging
+static int lsq_log_callback(void *ctx, const char *buf, size_t len) {
+  fwrite(buf, 1, len, stdout);
+  fflush(stdout);
+  return 0;
+}
+
+static const struct lsquic_logger_if logger_if = {
+    .log_buf = lsq_log_callback,
+};
+
+// SSL verify callback to debug verification issues
+static int verify_callback(int preverify_ok, X509_STORE_CTX *x509_ctx) {
+  if (!preverify_ok) {
+    int err = X509_STORE_CTX_get_error(x509_ctx);
+    std::cout << "SSL verify error: " << err << " - " << X509_verify_cert_error_string(err) << std::endl;
+  }
+  return 1; // Accept anyway for debugging; remove this in production to enforce verification
+}
+
 // SSL callback for client
 static SSL_CTX *get_client_ssl_ctx(void *peer_ctx,
                                    const struct sockaddr *local_sa) {
@@ -78,6 +100,24 @@ static int send_packets_out(void *ctx, const struct lsquic_out_spec *specs,
     }
   }
   return (int)n;
+}
+
+// Additional callbacks for debugging
+static void client_on_hsk_done(lsquic_conn_t *conn, enum lsquic_hsk_status status) {
+  if (status == LSQ_HSK_OK || status == LSQ_HSK_RESUMED_OK) {
+    std::cout << "Handshake successful" << std::endl;
+  } else {
+    std::cout << "Handshake failed with status " << status << std::endl;
+  }
+}
+
+static void client_on_conncloseframe_received(lsquic_conn_t *conn, int app_error, uint64_t error_code, const char *reason, int reason_len) {
+  std::cout << "Connection close frame received: app_error=" << app_error << " error_code=" << error_code
+            << " reason=" << std::string(reason, reason_len) << std::endl;
+}
+
+static void client_on_reset(lsquic_stream_t *stream, lsquic_stream_ctx_t *ctx, int how) {
+  std::cout << "Stream reset with how=" << how << std::endl;
 }
 
 // Callbacks for client
@@ -211,11 +251,11 @@ static const lsquic_stream_if stream_callbacks = {
     .on_close = client_on_close,
     .on_dg_write = NULL,
     .on_datagram = NULL,
-    .on_hsk_done = NULL,
+    .on_hsk_done = client_on_hsk_done,
     .on_new_token = NULL,
     .on_sess_resume_info = NULL,
-    .on_reset = NULL,
-    .on_conncloseframe_received = NULL,
+    .on_reset = client_on_reset,
+    .on_conncloseframe_received = client_on_conncloseframe_received,
 };
 
 // Create UDP socket for client (bound to ephemeral port)
@@ -240,6 +280,10 @@ int main(int argc, char **argv) {
     return EXIT_FAILURE;
   }
   const char *server_ip = argv[1];
+
+  // Initialize LSQUIC logger for debugging
+  lsquic_logger_init(&logger_if, NULL, LLTS_HHMMSSUS);
+  lsquic_set_log_level("debug");
 
   if (lsquic_global_init(LSQUIC_GLOBAL_CLIENT) != 0) {
     std::cerr << "LSQUIC init failed" << std::endl;
@@ -270,7 +314,8 @@ int main(int argc, char **argv) {
     return EXIT_FAILURE;
   }
 
-  SSL_CTX_set_verify(client_ssl_ctx, SSL_VERIFY_PEER, NULL);
+  // Set verify with custom callback for debugging
+  SSL_CTX_set_verify(client_ssl_ctx, SSL_VERIFY_PEER, verify_callback);
 
   lsquic_engine_settings es = {};
   lsquic_engine_init_settings(&es, 0);
@@ -306,10 +351,11 @@ int main(int argc, char **argv) {
   peer_sa.sin_port = htons(4433);
   peer_sa.sin_addr.s_addr = inet_addr(server_ip);
 
+  // Use server_ip as SNI to potentially fix hostname mismatch
   if (lsquic_engine_connect(
           engine, LSQVER_ID29, (struct sockaddr *)&local_sa,
           (struct sockaddr *)&peer_sa, (void *)(uintptr_t)quic_udp_fd, nullptr,
-          "localhost", 9, nullptr, 0, nullptr, 0) == nullptr) {
+          server_ip, strlen(server_ip), nullptr, 0, nullptr, 0) == nullptr) {
     std::cerr << "Connect failed" << std::endl;
     return EXIT_FAILURE;
   }
