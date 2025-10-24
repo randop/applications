@@ -1,7 +1,7 @@
 project('quic-rproxy', 'cpp',
   version: '0.1.0',
   default_options: ['cpp_std=c++20'],
-  meson_version: '>=1.9.0')
+  meson_version: '>=1.0.0')
 
 cmake = import('cmake')
 fs = import('fs')
