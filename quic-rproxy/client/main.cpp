@@ -312,7 +312,7 @@ int main(int argc, char **argv) {
   // Load server's self-signed cert as trusted CA
   if (SSL_CTX_load_verify_locations(
           client_ssl_ctx,
-          "/home/randolph/projects/applications/quic-rproxy/certs/cert.pem",
+          "/opt/lsquic/certs/cert.pem",
           NULL) != 1) {
 
     std::cerr << "Failed to load CA certificate (cert.pem)" << std::endl;

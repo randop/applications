@@ -1,4 +1,4 @@
-sources = ['main.cpp']
+sources = ['client.c']
 
 executable('quic-rproxy-client',
   sources: sources,

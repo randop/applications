@@ -1,7 +1,10 @@
-project('quic-rproxy', 'cpp',
+project('quic-rproxy', 'c',
   version: '0.1.0',
-  default_options: ['cpp_std=c++20'],
+  default_options: ['c_std=c11'],
   meson_version: '>=1.0.0')
+
+# Get the C compiler
+cc = meson.get_compiler('c')
 
 cmake = import('cmake')
 fs = import('fs')
@@ -35,8 +38,12 @@ lsquic_dep = lsquic_subproj.dependency('lsquic')
 # Zlib dependency (system-installed)
 zlib_dep = dependency('zlib')
 
+event_dep = dependency('libevent', required: true)
+
+m_dep = cc.find_library('m', required : false)
+
 # Common dependencies
-deps = [lsquic_dep, ssl_dep, crypto_dep, zlib_dep]
+deps = [lsquic_dep, ssl_dep, crypto_dep, zlib_dep, event_dep, m_dep]
 
 subdir('server')
 subdir('client')

@@ -267,7 +267,7 @@ int main(int argc, char **argv) {
   // Load certificate and private key - replace with actual paths
   if (SSL_CTX_use_certificate_file(
           ssl_ctx,
-          "/home/randolph/projects/applications/quic-rproxy/certs/cert.pem",
+          "/opt/lsquic/certs/cert.pem",
           SSL_FILETYPE_PEM) <= 0) {
     std::cerr << "Failed to load certificate" << std::endl;
     ERR_print_errors_fp(stderr);
@@ -276,7 +276,7 @@ int main(int argc, char **argv) {
   }
   if (SSL_CTX_use_PrivateKey_file(
           ssl_ctx,
-          "/home/randolph/projects/applications/quic-rproxy/certs/key.pem",
+          "/opt/lsquic/certs/key.pem",
           SSL_FILETYPE_PEM) <= 0) {
     std::cerr << "Failed to load private key" << std::endl;
     ERR_print_errors_fp(stderr);
