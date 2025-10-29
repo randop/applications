@@ -1,8 +1,17 @@
 {
   "tasks": {
-    "dev": "deno run --allow-net --watch main.ts"
+    "dev": "deno run --allow-net --watch index.ts"
   },
   "imports": {
     "@std/assert": "jsr:@std/assert@1"
+  },
+  "fmt": {
+    "exclude": [
+      "dist/",
+      "node_modules/",
+      ".git/",
+      "package-lock.json",
+      "bun.lock"
+    ]
   }
 }
