@@ -1,0 +1,19 @@
+dependencies:
+  espressif/esp-idf-cxx:
+    dependencies:
+    - name: idf
+      version: '>=5.0'
+    source:
+      path: /home/randop/esp/esp-idf-cxx
+      type: local
+    version: 1.0.0
+  idf:
+    source:
+      type: idf
+    version: 5.5.1
+direct_dependencies:
+- espressif/esp-idf-cxx
+- idf
+manifest_hash: 07c10f271e58e5a37870bcb96e36119de1ecfcdccdd53e7ec76c7f5ad505d78b
+target: esp32
+version: 2.0.0
