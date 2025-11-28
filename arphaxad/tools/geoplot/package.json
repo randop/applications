@@ -1,0 +1,11 @@
+{
+  "name": "geoplot",
+  "version": "1.0.0",
+  "description": "Plots gps values to geojson format",
+  "main": "run.mjs",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Randolph Ledesma",
+  "license": "Apache License, Version 2.0"
+}
