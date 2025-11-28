@@ -1,11 +1,11 @@
 project('nmeagps', ['c', 'cpp'],
-  version: '0.1.1',
+  version: '0.2.0',
   default_options: [
     'buildtype=release',
     'optimization=3',
     'strip=true',
     'b_lto=true',
-    'b_ndebug=true',
+    'b_ndebug=false',
     'cpp_std=c++20',
     'c_std=c11'
   ],
@@ -34,18 +34,32 @@ if cpp.get_id() == 'gcc' or cpp.get_id() == 'clang'
   )
 endif
 
-if cpp.get_id() == 'clang'
-  add_project_link_arguments('-static-libstdc++', language: 'cpp')
-endif
+###############################################################################
+# Sources
+###############################################################################
+sources = [
+  'main.cpp',
+  'include/TinyGPS++.cpp',
+  'include/nmea/sentence.cpp',
+  'include/nmea/gga.cpp',
+  'include/nmea/gsa.cpp',
+  'include/nmea/gll.cpp',
+  'include/nmea/gsv.cpp',
+  'include/nmea/parse.cpp'
+]
 
 ###############################################################################
 # Includes
 ###############################################################################
-inc_dirs = []
+inc_dirs = include_directories('include')
 
 ###############################################################################
 # Dependencies
 ###############################################################################
+
+boost_dep = dependency('boost',
+  modules : ['system'],
+  required : true)
 
 nema_sub = subproject(
   'NemaTode',
@@ -58,10 +72,10 @@ nema_sub = subproject(
 
 nematode_dep = nema_sub.get_variable('nematode_dep')
 
-deps = [nematode_dep]
+deps = [nematode_dep, boost_dep]
 
 executable('nmeagps',
-  'main.cpp',
+  sources,
   include_directories: inc_dirs,
   dependencies: deps,
-  link_args: ['-Wl,--gc-sections', '-Wl,-O2', '-static'])
+  link_args: ['-Wl,--gc-sections', '-Wl,-O2'])
