@@ -12,8 +12,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
-import java.io.File;
-
+import android.widget.Toast;
 import android.view.View;
 import android.widget.Button;
 import android.widget.TextView;
@@ -22,10 +21,13 @@ import android.view.WindowManager;
 import org.json.JSONObject;
 
 import java.io.BufferedReader;
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileWriter;
+import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.text.SimpleDateFormat;
@@ -47,6 +49,8 @@ public class MainActivity extends AppCompatActivity {
     private final long REQUEST_INTERVAL = 1000; // 1 second
     private boolean isRequestInProgress = false;
 
+    private File logFile;
+
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -61,6 +65,15 @@ public class MainActivity extends AppCompatActivity {
         textError = findViewById(R.id.textError);
 
         runOnUiThread(() -> textError.setText(""));
+
+        // This directory will be visible via USB MTP
+        File documentsDir = getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS);
+        SimpleDateFormat fileDateFormat = new SimpleDateFormat("yyyyMMdd", Locale.getDefault());
+        String today = fileDateFormat.format(new Date());
+        String fileName = "iot-" + today + ".logs";
+        logFile = new File(documentsDir, fileName);
+
+        runOnUiThread(() -> Toast.makeText(this, "Logging IoT data", Toast.LENGTH_SHORT).show());
 
         startHttpPolling();
     }
@@ -83,6 +96,16 @@ public class MainActivity extends AppCompatActivity {
         // Optional: Clear the flag when app goes to background (saves battery)
         // Remove this if you want screen to stay on even in background (not recommended)
         getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        stopHttpPolling();
+        if (timer != null) {
+            timer.cancel();
+            timer = null;
+        }
     }
 
     private void scheduleNext() {
@@ -108,7 +131,6 @@ public class MainActivity extends AppCompatActivity {
         isRequestInProgress = false;
         scheduleNext();
     }
-
     private void fetchJsonFromEsp() {
         new Thread(() -> {
             HttpURLConnection conn = null;
@@ -130,13 +152,13 @@ public class MainActivity extends AppCompatActivity {
                         sb.append(line);
                     }
                     String rawJson = sb.toString().trim();
-
-                    // Pretty-print JSON (manual, no Gson)
                     String prettyJson = formatJson(rawJson);
 
                     // Add timestamp
                     String timestamp = sdf.format(new Date());
                     String logLine = timestamp + " | " + prettyJson;
+
+                    appendToLogFile(sdf.format(new Date()) + ";" + rawJson);
 
                     runOnUiThread(() -> textJson.setText(logLine));
                 } else {
@@ -145,7 +167,6 @@ public class MainActivity extends AppCompatActivity {
                 }
             } catch (Exception e) {
                 String timestamp = sdf.format(new Date());
-                //appendToFile(timestamp + " | ERROR: " + e.getMessage());
                 runOnUiThread(() -> textError.setText("result: " + timestamp + " | ERROR: " + e.getMessage()));
             } finally {
                 if (reader != null) {
@@ -178,13 +199,20 @@ public class MainActivity extends AppCompatActivity {
         mainHandler.removeCallbacksAndMessages(null);
     }
 
-    @Override
-    protected void onDestroy() {
-        super.onDestroy();
-        stopHttpPolling();
-        if (timer != null) {
-            timer.cancel();
-            timer = null;
-        }
+    private void appendToLogFile(String text) {
+        // Ensure thread-safe UI updates if needed
+        mainHandler.post(() -> {
+            try {
+                if (!logFile.getParentFile().exists()) {
+                    logFile.getParentFile().mkdirs();
+                }
+                FileWriter writer = new FileWriter(logFile, true);
+                writer.append(text).append("\n");
+                writer.flush();
+                writer.close();
+            } catch (IOException ex) {
+                ex.printStackTrace();
+            }
+        });
     }
 }
