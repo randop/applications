@@ -1,16 +1,16 @@
-ARG RELEASE_VERSION="1.1.2"
+ARG RELEASE_VERSION="1.1.3"
 
 ARG NGINX_VER=1.29.3
 
 FROM nginx:${NGINX_VER}-alpine AS base
 
-ARG GEO_DB_RELEASE=2025-11
+ARG GEO_DB_RELEASE=2025-12
 ARG MODSEC_TAG=v3.0.14
-ARG CORERULESET_TAG=v4.20.0
+ARG CORERULESET_TAG=v4.21.0
 
 # Download IP to Geolocation databases
-ADD https://download.db-ip.com/free/dbip-country-lite-2025-11.mmdb.gz /tmp/dbip-country-lite.mmdb.gz
-ADD https://download.db-ip.com/free/dbip-city-lite-2025-11.mmdb.gz /tmp/dbip-city-lite.mmdb.gz
+ADD https://download.db-ip.com/free/dbip-country-lite-2025-12.mmdb.gz /tmp/dbip-country-lite.mmdb.gz
+ADD https://download.db-ip.com/free/dbip-city-lite-2025-12.mmdb.gz /tmp/dbip-city-lite.mmdb.gz
 
 RUN echo "Extracting IP to Geolocation databases..." && \
   mkdir -p /etc/nginx/geoip && \
@@ -43,6 +43,7 @@ RUN echo "Installing Dependencies" && \
     make \
     openssl-dev \
     pcre-dev \
+    pcre2-dev \
     yajl-dev \
     zlib-dev
 
