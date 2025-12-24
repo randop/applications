@@ -1,7 +1,8 @@
 FROM debian:bookworm-slim AS builder
 
 ARG IMAGE_VERSION=1.1.0
-ARG BOOST_VERSION=1.89.0
+ARG BOOST_VERSION=1.90.0
+ARG BOOST_TAG=boost_1_90_0
 
 # Install build tools and dependencies
 RUN echo "Installing build packages..." && \
@@ -18,20 +19,21 @@ RUN echo "Installing build packages..." && \
     wget \
     ca-certificates \
     pkg-config \
+    libz-dev \
     && rm -rf /var/lib/apt/lists/*
 
-ADD https://archives.boost.io/release/1.89.0/source/boost_1_89_0.tar.gz /opt/boost_1_89_0.tar.gz
+ADD https://archives.boost.io/release/1.90.0/source/boost_1_90_0.tar.gz /opt/boost_1_90_0.tar.gz
 
 RUN echo "Extracting Boost..." && \
-    tar xzf /opt/boost_1_89_0.tar.gz -C /opt
+    tar xzf /opt/${BOOST_TAG}.tar.gz -C /opt
 
-RUN echo "Compiling and installing Boost..." && \
-    cd /opt/boost_1_89_0 && /opt/boost_1_89_0/bootstrap.sh --prefix=/usr/local --with-python=python3 \
-    && /opt/boost_1_89_0/b2 threading=multi link=static install \
-    && rm -rf /opt/boost_1_89_0
+RUN echo "Compiling and installing Boost ${BOOST_VERSION}..." && \
+    cd /opt/${BOOST_TAG} && /opt/${BOOST_TAG}/bootstrap.sh --prefix=/usr/local --with-python=python3 \
+    && /opt/${BOOST_TAG}/b2 threading=multi link=static install \
+    && rm -rf /opt/${BOOST_TAG}
 
 RUN echo "Cleaning up..." && \
-    rm /opt/boost_1_89_0.tar.gz
+    rm /opt/${BOOST_TAG}.tar.gz
 
 RUN echo "Linking Boost..." && \
     echo "/usr/local/lib" > /etc/ld.so.conf.d/boost.conf \
