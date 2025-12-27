@@ -1,15 +1,15 @@
+import CacheService from "./services/cache-service";
+import { NullableString } from "./lib/types";
 import { SMTPServer } from "smtp-server";
 import { v7 as uuidv7 } from "uuid";
 import { readFileSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
-import {
+import SMTP_RESPONSE_CODES, {
 	SMTP_551_USERNOTLOCALPLEASETTRY,
 	SMTP_552_EXCEEDEDSTORAGEALLOCATION,
 	SMTP_553_MAILBOXNAMENOTALLOWED,
 	SMTP_554_TRANSACTIONFAILED,
-} from "./response-codes";
-
-import SMTP_RESPONSE_CODES from "./response-codes";
+} from "./lib/response-codes";
 
 type SMTPResponseCode =
 	(typeof SMTP_RESPONSE_CODES)[keyof typeof SMTP_RESPONSE_CODES];
@@ -20,6 +20,8 @@ interface ExtendedError extends Error {
 
 const log = console;
 const EXIT_SUCCESS: number = 0;
+
+const cache = new CacheService();
 
 let verifyAllowLocalhost: boolean = false;
 let verifyServerName: boolean = false;
@@ -70,6 +72,14 @@ const options: any = {
 		if (verifyAllowLocalhost && session.remoteAddress === "127.0.0.1") {
 			return callback(new Error("Connections from localhost are forbidden"));
 		}
+    let reputation: NullableString = cache.get(`reputation_${session.remoteAddress}`); 
+    if (reputation!==null && reputation==ReputationStatus.BANNED) {
+			return callback(
+				Object.assign(new Error("Transaction connection failure"), {
+					responseCode: SMTP_554_TRANSACTIONFAILED,
+				}),
+			);
+    }
 		callback(); // accept
 	},
 	onClose(session) {
