@@ -9,11 +9,11 @@ bun install
 To run:
 
 ```bash
-bun run index.ts
+bun run src/index.ts
 ```
 
 To build:
 
 ```bash
-bun build ./index.ts --outdir ./dist --target=node --format=esm
+bun build ./src/index.ts --outdir ./dist --target=node --format=esm
 ```

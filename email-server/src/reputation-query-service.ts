@@ -54,7 +54,7 @@ export class ReputationQueryService {
 
   constructor(dqsKey: string, options: QueryOptions = {}) {
     if (!dqsKey || dqsKey.length !== 26) {
-      throw new Error('Valid 26-character Spamhaus DQS key is required');
+      throw new Error('API initialization error: Missing required Spamhaus DQS key');
     }
 
     this.dqsKey = dqsKey;
@@ -119,7 +119,7 @@ export class ReputationQueryService {
 
       return this.buildResult(ReputationStatus.UNKNOWN, null, message);
     } catch (err) {
-      const message = `Request failed: ${(err as Error).message}`;
+      const message = `API request error: ${(err as Error).message}`;
       return this.buildResult(ReputationStatus.UNKNOWN, null, message);
     }
   }
