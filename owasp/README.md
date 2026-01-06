@@ -3,7 +3,7 @@
 ## Build and Deploy
 ```bash
 docker buildx create --name multiarch --use
-docker buildx build --platform linux/amd64,linux/arm64 -t rfledesma/nginx-waf:latest -t rfledesma/nginx-waf:1.1.0 --push .
+docker buildx build --platform linux/amd64,linux/arm64 -t rfledesma/nginx-waf:latest -t rfledesma/nginx-waf:1.1.4 --push .
 ```
 
 ## Local Testing
@@ -68,7 +68,7 @@ curl -H "x-format-output: txt-matched-rules" "https://sandbox.coreruleset.org/?s
 
 #### IP to Geolocation lookup test
 ```sh
-wget https://download.db-ip.com/free/dbip-city-lite-2025-09.mmdb.gz
-gzip -d dbip-city-lite-2025-09.mmdb.gz
-mmdblookup --file dbip-city-lite-2025-09.mmdb --ip 175.176.21.204
+wget https://download.db-ip.com/free/dbip-city-lite-2025-12.mmdb.gz
+gzip -d dbip-city-lite-2025-12.mmdb.gz
+mmdblookup --file dbip-city-lite-2025-12.mmdb --ip 175.176.21.204
 ```
