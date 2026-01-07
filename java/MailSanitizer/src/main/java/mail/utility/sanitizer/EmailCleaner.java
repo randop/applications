@@ -7,12 +7,15 @@ import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import org.apache.commons.codec.net.QuotedPrintableCodec;
 import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import jakarta.mail.*;
 import jakarta.mail.internet.MimeMessage;
+import jakarta.mail.internet.MimeMultipart;
 
 public class EmailCleaner {
 
@@ -140,7 +143,7 @@ public class EmailCleaner {
                 if (log.isDebugEnabled()) {
                     log.debug("Converting text/html to plain text");
                 }
-                return Jsoup.parse(text).wholeText();
+                return plain(message, text);
             }
         } else if (content instanceof Multipart mp) {
             if (log.isDebugEnabled()) {
@@ -150,22 +153,18 @@ public class EmailCleaner {
             for (int i = 0; i < mp.getCount(); i++) {
                 BodyPart part = mp.getBodyPart(i);
                 Object partContent = part.getContent();
-                if (part.isMimeType("text/plain") && partContent instanceof String plain) {
-                    if (log.isDebugEnabled()) {
-                        log.debug("Found text/plain part");
-                    }
-                    return plain;
+                if (log.isDebugEnabled()) {
+                    log.info(
+                            "Multi-part email type: {}, {}",
+                            part.getContentType(),
+                            partContent.getClass().descriptorString());
                 }
-            }
-
-            for (int i = 0; i < mp.getCount(); i++) {
-                BodyPart part = mp.getBodyPart(i);
-                Object partContent = part.getContent();
-                if (part.isMimeType("text/html") && partContent instanceof String html) {
-                    if (log.isDebugEnabled()) {
-                        log.debug("Converting text/html part to plain text");
-                    }
-                    return Jsoup.parse(html).wholeText();
+                if (part.isMimeType("text/plain") && partContent instanceof String text) {
+                    return text;
+                } else if (part.isMimeType("text/html") && partContent instanceof String html) {
+                    return plain(message, html);
+                } else if (part.isMimeType("multipart/related") && partContent instanceof MimeMultipart) {
+                    return multipartRecurse(message, 0);
                 }
             }
         }
@@ -209,5 +208,92 @@ public class EmailCleaner {
         String generated = UUID.randomUUID().toString();
         log.warn("Could not resolve valid UUID from filename: {}. Generated new UUID: {}", fileName, generated);
         return generated;
+    }
+
+    /**
+     * Converts HTML to plain text while preserving hyperlinks in a readable format.
+     */
+    private String plain(MimeMessage message, String html) {
+        if (html == null || html.trim().isEmpty()) {
+            return "";
+        }
+
+        try {
+            String[] encoding = message.getHeader("Content-Transfer-Encoding");
+            if (encoding.length > 0 && !encoding[0].trim().isBlank()) {
+                String contentEncoding = encoding[0].trim().toLowerCase();
+                if (contentEncoding.equalsIgnoreCase("quoted-printable")) {
+                    QuotedPrintableCodec codec = new QuotedPrintableCodec();
+                    byte[] decodedBytes = codec.decode(html.getBytes("US-ASCII"));
+                    String decodedHtml = new String(decodedBytes, "UTF-8");
+                    Document doc = Jsoup.parse(decodedHtml);
+                    return doc.wholeText();
+                }
+            }
+        } catch (NullPointerException ex) {
+            if (!ex.getMessage().contains("Cannot read the array length because")) {
+                log.error(ex.getMessage());
+            }
+        } catch (Exception ex) {
+            log.error(ex.getMessage());
+        }
+
+        Document doc = Jsoup.parse(html);
+        return doc.wholeText();
+    }
+
+    /**
+     * Recursively processes MIME parts to extract the best available plain text.
+     * Depth limited to 5 to prevent infinite recursion on malformed emails.
+     *
+     * @param part  The current MIME part (Message or BodyPart)
+     * @param depth Current recursion depth
+     * @return Plain text content, or empty string if none found at this level
+     */
+    private String multipartRecurse(Part part, int depth) throws Exception {
+        if (depth > 5) {
+            return "";
+        }
+
+        Object content = part.getContent();
+
+        if (content instanceof Multipart) {
+            Multipart mp = (Multipart) content;
+            for (int i = 0; i < mp.getCount(); i++) {
+                BodyPart bodyPart = mp.getBodyPart(i);
+
+                String disposition = bodyPart.getDisposition();
+                if (disposition != null
+                        && (disposition.equalsIgnoreCase(Part.ATTACHMENT)
+                                || (disposition.equalsIgnoreCase(Part.INLINE) && bodyPart.getFileName() != null))) {
+                    continue;
+                }
+
+                String result = multipartRecurse(bodyPart, depth + 1);
+                if (result != null && !result.isEmpty()) {
+                    return result;
+                }
+            }
+            return "";
+        }
+
+        if (content instanceof String) {
+            String text = (String) content;
+            String contentType = part.getContentType();
+
+            if (contentType != null) {
+                String lowerType = contentType.toLowerCase();
+
+                if (lowerType.contains("text/html")) {
+                    return Jsoup.parse(text).wholeText();
+                } else if (lowerType.contains("text/plain")) {
+                    return text.trim();
+                }
+            }
+
+            return text.trim();
+        }
+
+        return "";
     }
 }
