@@ -4,11 +4,10 @@
 
   <groupId>mail.utility</groupId>
   <artifactId>MailSanitizer</artifactId>
-  <version>1.0.0-SNAPSHOT</version>
+  <version>1.0.1-SNAPSHOT</version>
 
   <name>MailSanitizer</name>
-  <!-- FIXME change it to the project's website -->
-  <url>http://www.example.com</url>
+  <url>http://www.quizbin.com</url>
 
   <properties>
     <jakarta.mail.version>2.0.2</jakarta.mail.version>

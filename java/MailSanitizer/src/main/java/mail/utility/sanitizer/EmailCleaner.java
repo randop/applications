@@ -220,7 +220,7 @@ public class EmailCleaner {
 
         try {
             String[] encoding = message.getHeader("Content-Transfer-Encoding");
-            if (encoding.length > 0 && !encoding[0].trim().isBlank()) {
+            if (encoding != null && encoding.length > 0 && !encoding[0].trim().isBlank()) {
                 String contentEncoding = encoding[0].trim().toLowerCase();
                 if (contentEncoding.equalsIgnoreCase("quoted-printable")) {
                     QuotedPrintableCodec codec = new QuotedPrintableCodec();
@@ -229,10 +229,6 @@ public class EmailCleaner {
                     Document doc = Jsoup.parse(decodedHtml);
                     return doc.wholeText();
                 }
-            }
-        } catch (NullPointerException ex) {
-            if (!ex.getMessage().contains("Cannot read the array length because")) {
-                log.error(ex.getMessage());
             }
         } catch (Exception ex) {
             log.error(ex.getMessage());
