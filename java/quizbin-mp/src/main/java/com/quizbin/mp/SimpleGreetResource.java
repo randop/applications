@@ -1,14 +1,12 @@
-
 package com.quizbin.mp;
 
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import jakarta.inject.Inject;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
-
-import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 /**
  * A simple JAX-RS resource to greet you. Examples:
@@ -40,6 +38,4 @@ public class SimpleGreetResource {
         message.setMessage(msg);
         return message;
     }
-
-
 }

@@ -2,30 +2,29 @@ package com.quizbin.mp;
 
 public class Message {
 
-  private String message;
+    private String message;
 
-  private String greeting;
+    private String greeting;
 
-  public Message() {
-  }
+    public Message() {}
 
-  public Message(String message) {
-    this.message = message;
-  }
+    public Message(String message) {
+        this.message = message;
+    }
 
-  public void setMessage(String message) {
-    this.message = message;
-  }
+    public void setMessage(String message) {
+        this.message = message;
+    }
 
-  public String getMessage() {
-    return this.message;
-  }
+    public String getMessage() {
+        return this.message;
+    }
 
-  public void setGreeting(String greeting) {
-    this.greeting = greeting;
-  }
+    public void setGreeting(String greeting) {
+        this.greeting = greeting;
+    }
 
-  public String getGreeting() {
-    return this.greeting;
-  }
+    public String getGreeting() {
+        return this.greeting;
+    }
 }
