@@ -1,16 +1,38 @@
-ARG RELEASE_VERSION="1.1.4"
+ARG RELEASE_VERSION="1.1.5"
 
-ARG NGINX_VER=1.29.3
-
-FROM nginx:${NGINX_VER}-alpine AS base
-
-ARG GEO_DB_RELEASE=2025-12
+ARG NGINX_VERSION=1.29.5
+ARG GEO_DB_RELEASE=2026-02
 ARG MODSEC_TAG=v3.0.14
-ARG CORERULESET_TAG=v4.22.0
+ARG CORERULESET_TAG=v4.23.0
+
+# Nginx base
+FROM archlinux:base AS base
+
+ARG NGINX_VERSION
+ARG GEO_DB_RELEASE
+ARG MODSEC_TAG
+ARG CORERULESET_TAG
+
+# Initialize pacman keyring and update system
+RUN echo "Updating nginx base..." && \
+    pacman-key --init && \
+    pacman-key --populate archlinux && \
+    pacman -Syu --noconfirm && \
+    pacman -S --noconfirm --needed \
+    nginx-mainline \
+    nginx-mainline-src
+
+# Build stage
+FROM archlinux:base AS builder
+
+ARG NGINX_VERSION
+ARG GEO_DB_RELEASE
+ARG MODSEC_TAG
+ARG CORERULESET_TAG
 
 # Download IP to Geolocation databases
-ADD https://download.db-ip.com/free/dbip-country-lite-2025-12.mmdb.gz /tmp/dbip-country-lite.mmdb.gz
-ADD https://download.db-ip.com/free/dbip-city-lite-2025-12.mmdb.gz /tmp/dbip-city-lite.mmdb.gz
+ADD https://download.db-ip.com/free/dbip-country-lite-2026-02.mmdb.gz /tmp/dbip-country-lite.mmdb.gz
+ADD https://download.db-ip.com/free/dbip-city-lite-2026-02.mmdb.gz /tmp/dbip-city-lite.mmdb.gz
 
 RUN echo "Extracting IP to Geolocation databases..." && \
   mkdir -p /etc/nginx/geoip && \
@@ -20,36 +42,36 @@ RUN echo "Extracting IP to Geolocation databases..." && \
 
 WORKDIR /opt
 
-# Install dependencies; includes dependencies required for compile-time options:
-# curl, libxml, pcre, and lmdb and Modsec
-RUN echo "Installing Dependencies" && \
-    apk add --no-cache --virtual general-dependencies \
-    autoconf \
-    automake \
-    byacc \
-    curl-dev \
-    flex \
-    g++ \
-    gcc \
-    geoip-dev \
+# Initialize pacman keyring and update system
+RUN echo "Updating build operating system..." && \
+    pacman-key --init && \
+    pacman-key --populate archlinux && \
+    pacman -Syu --noconfirm
+
+# Install build dependencies
+RUN echo "Installing build components and dependencies..." && \
+    pacman -S --noconfirm --needed \
+    base-devel \
     git \
-    libc-dev \
-    libmaxminddb-dev \
-    libstdc++ \
+    wget \
+    curl \
+    pcre \
+    pcre2 \
+    libxml2 \
+    curl \
+    openssl \
+    zlib \
+    libmaxminddb \
+    lmdb \
+    yajl \
+    geoip \
     libtool \
-    libxml2-dev \
-    linux-headers \
-    lmdb-dev \
-    make \
-    openssl-dev \
-    pcre-dev \
-    pcre2-dev \
-    yajl-dev \
-    zlib-dev
+    autoconf \
+    automake
 
 # Clone and compile modsecurity. Binary will be located in /usr/local/modsecurity
-RUN echo "Building ModSec Library" && \
-    git clone -b ${MODSEC_TAG} --depth 1 https://github.com/SpiderLabs/ModSecurity.git && \
+RUN echo "Building ModSec Library..." && \
+    git clone --depth 1 --branch $MODSEC_TAG https://github.com/SpiderLabs/ModSecurity.git && \
     git -C /opt/ModSecurity submodule update --init --recursive && \
     (cd "/opt/ModSecurity" && \
     ./build.sh && \
@@ -70,10 +92,11 @@ RUN echo 'Processing GeoIP...' && \
     git clone -b master --depth 1 https://github.com/leev/ngx_http_geoip2_module.git
 
 RUN echo 'Processing ModSec OWASP Rules...' && \
-    git clone -b ${CORERULESET_TAG} --depth 1 https://github.com/coreruleset/coreruleset.git /usr/local/owasp-modsecurity-crs
+    git clone -b $CORERULESET_TAG --depth 1 https://github.com/coreruleset/coreruleset.git /usr/local/owasp-modsecurity-crs
 
 # Install GeoIP2 and ModSecurity Nginx modules
 RUN echo 'Installing Nginx Modules' && \
+    mkdir -p /usr/lib/nginx/modules && \
     (cd "/opt/nginx-$NGINX_VERSION" && \
     ./configure --with-compat \
     --add-dynamic-module=../ModSecurity-nginx \
@@ -83,29 +106,36 @@ RUN echo 'Installing Nginx Modules' && \
     cp /opt/nginx-$NGINX_VERSION/objs/ngx_http_modsecurity_module.so \
     /opt/nginx-$NGINX_VERSION/objs/ngx_http_geoip2_module.so \
     /usr/lib/nginx/modules/ && \
-    rm -fr /opt/* && \
-    apk del general-dependencies
+    rm -fr /opt/*
 
+# Production stage
+FROM archlinux:base AS production
 
-FROM nginx:${NGINX_VER}-alpine AS production
-
-# Install production dependencies
-RUN apk add --no-cache \
-    curl-dev \
-    libmaxminddb-dev \
-    libstdc++ \
-    libxml2-dev \
-    lmdb-dev \
-    pcre \
-    tzdata \
-    yajl && \
-    chown -R nginx:nginx /usr/share/nginx
+# Install runtime dependencies
+RUN echo "Installing runtime components and dependencies..." && \
+    pacman-key --init && \
+    pacman-key --populate archlinux && \
+    pacman -Syu --noconfirm && \
+    pacman -S --noconfirm --needed \
+    nginx-mainline \
+    pcre2 \
+    libxml2 \
+    curl \
+    openssl \
+    zlib \
+    libmaxminddb \
+    lmdb \
+    yajl \
+    geoip \
+    gcc-libs \
+    tzdata && \
+    pacman -Scc --noconfirm
 
 # Copy nginx, owasp-modsecurity-crs, and modsecurity from the build image
 COPY --from=base /etc/nginx/ /etc/nginx/
-COPY --from=base /usr/local/modsecurity /usr/local/modsecurity
-COPY --from=base /usr/local/owasp-modsecurity-crs /usr/local/owasp-modsecurity-crs
-COPY --from=base /usr/lib/nginx/modules/ /usr/lib/nginx/modules/
+COPY --from=builder /usr/local/modsecurity /usr/local/modsecurity
+COPY --from=builder /usr/local/owasp-modsecurity-crs /usr/local/owasp-modsecurity-crs
+COPY --from=builder /usr/lib/nginx/modules/ /usr/lib/nginx/modules/
 
 # Copy local config files into the image
 COPY errors /usr/share/nginx/errors
