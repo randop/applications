@@ -1,4 +1,4 @@
-ARG RELEASE_VERSION="1.1.5"
+ARG RELEASE_VERSION="1.1.6"
 
 ARG NGINX_VERSION=1.29.5
 ARG GEO_DB_RELEASE=2026-02
@@ -118,6 +118,7 @@ RUN echo "Installing runtime components and dependencies..." && \
     pacman -Syu --noconfirm && \
     pacman -S --noconfirm --needed \
     nginx-mainline \
+    pcre \
     pcre2 \
     libxml2 \
     curl \
@@ -131,11 +132,20 @@ RUN echo "Installing runtime components and dependencies..." && \
     tzdata && \
     pacman -Scc --noconfirm
 
+RUN echo "Setup system accounts..." && \
+    groupadd --system --gid 101 nginx && \
+    useradd --system --gid nginx --no-create-home --home /nonexistent --comment "nginx user" --shell /bin/false --uid 101 nginx && \
+    printf '%s\n' \
+    'nginx soft nofile 65535' \
+    'nginx hard nofile 65535' \
+    >> /etc/security/limits.conf
+
 # Copy nginx, owasp-modsecurity-crs, and modsecurity from the build image
 COPY --from=base /etc/nginx/ /etc/nginx/
+COPY --from=builder /etc/nginx/geoip/ /etc/nginx/geoip/
 COPY --from=builder /usr/local/modsecurity /usr/local/modsecurity
 COPY --from=builder /usr/local/owasp-modsecurity-crs /usr/local/owasp-modsecurity-crs
-COPY --from=builder /usr/lib/nginx/modules/ /usr/lib/nginx/modules/
+COPY --from=builder /usr/lib/nginx/modules/ /etc/nginx/modules/
 
 # Copy local config files into the image
 COPY errors /usr/share/nginx/errors
@@ -146,3 +156,6 @@ COPY conf/owasp/ /usr/local/owasp-modsecurity-crs/
 WORKDIR /usr/share/nginx/html
 
 EXPOSE 80 443
+
+# Start nginx
+CMD ["nginx", "-g", "daemon off;"]
