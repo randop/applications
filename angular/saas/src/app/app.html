@@ -1,0 +1,90 @@
+<div class="container mx-auto py-12 px-4 sm:px-6 lg:px-8">
+  <div class="text-center mb-10">
+    <h1 class="text-4xl font-bold tracking-tight text-foreground sm:text-5xl">
+      shadcn-ng Buttons
+    </h1>
+    <p class="mt-4 text-lg text-muted-foreground">
+      Different variants, sizes and styles
+    </p>
+  </div>
+
+  <!-- Main showcase grid -->
+  <div class="flex flex-col gap-12">
+    <!-- Variant examples -->
+    <div>
+      <h2 class="text-2xl font-semibold mb-6 text-foreground">Variants</h2>
+      <div class="flex flex-wrap gap-4">
+        <button ubButton>Default</button>
+
+        <button ubButton variant="secondary">
+          Secondary
+        </button>
+
+        <button ubButton variant="outline">
+          Outline
+        </button>
+
+        <button ubButton variant="ghost">
+          Ghost
+        </button>
+
+        <button ubButton variant="link">
+          Link
+        </button>
+
+        <button ubButton variant="destructive">
+          Destructive
+        </button>
+      </div>
+    </div>
+
+    <!-- Size examples -->
+    <div>
+      <h2 class="text-2xl font-semibold mb-6 text-foreground">Sizes</h2>
+      <div class="flex flex-wrap items-center gap-4">
+        <button ubButton size="sm">Small</button>
+        <button ubButton>Default</button>
+        <button ubButton size="lg">Large</button>
+        <button ubButton size="icon" aria-label="Add">
+          +
+        </button>
+      </div>
+    </div>
+
+    <!-- With icons example (if you have @ng-icons/radix-icons installed) -->
+    <div>
+      <h2 class="text-2xl font-semibold mb-6 text-foreground">With Icons</h2>
+      <div class="flex flex-wrap gap-4">
+        <button ubButton class="gap-2">
+          <ng-icon name="radixPlus" class="size-4" />
+          New Project
+        </button>
+
+        <button ubButton variant="outline" class="gap-2">
+          <ng-icon name="radixDownload" class="size-4" />
+          Download
+        </button>
+
+        <button ubButton variant="destructive" class="gap-2">
+          <ng-icon name="radixTrash" class="size-4" />
+          Delete
+        </button>
+      </div>
+    </div>
+
+    <!-- Disabled + loading state example -->
+    <div>
+      <h2 class="text-2xl font-semibold mb-6 text-foreground">States</h2>
+      <div class="flex flex-wrap gap-4">
+        <button ubButton disabled>Disabled</button>
+        <!-- You can add a loading spinner with your own logic -->
+        <button ubButton class="gap-2">
+          <span class="animate-spin">⟳</span>
+          Loading...
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<router-outlet />

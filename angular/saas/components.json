@@ -1,0 +1,20 @@
+{
+  "$schema": "https://ui.adrianub.dev/schema.json",
+  "registry": "https://ui.adrianub.dev",
+  "style": "new-york",
+  "tailwind": {
+    "config": "",
+    "css": "src/styles.css",
+    "baseColor": "zinc",
+    "cssVariables": true,
+    "prefix": ""
+  },
+  "aliases": {
+    "components": "~/components",
+    "utils": "~/lib/utils",
+    "ui": "~/components/ui",
+    "lib": "~/lib",
+    "services": "~/services"
+  },
+  "iconLibrary": "lucide"
+}
