@@ -201,6 +201,13 @@
       >Default Checked</span
     >
   </div>
+
+  <z-divider />
+  <div class="grid w-full max-w-xl gap-4 pb-4">
+    <p>Count: {{ count() }} | Square: {{ square() }}</p>
+    <p>Auto: {{ timerSignal() }}</p>
+    <button (click)="increment()">Increment</button>
+  </div>
 </div>
 
 <router-outlet />
