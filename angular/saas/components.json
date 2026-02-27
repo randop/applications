@@ -1,20 +1,17 @@
 {
-  "$schema": "https://ui.adrianub.dev/schema.json",
-  "registry": "https://ui.adrianub.dev",
-  "style": "new-york",
+  "$schema": "https://zardui.com/schema.json",
+  "style": "css",
+  "appConfigFile": "src/app/app.config.ts",
+  "packageManager": "bun",
   "tailwind": {
-    "config": "",
     "css": "src/styles.css",
-    "baseColor": "zinc",
-    "cssVariables": true,
-    "prefix": ""
+    "baseColor": "neutral"
   },
+  "baseUrl": "src/app",
   "aliases": {
-    "components": "~/components",
-    "utils": "~/lib/utils",
-    "ui": "~/components/ui",
-    "lib": "~/lib",
-    "services": "~/services"
-  },
-  "iconLibrary": "lucide"
+    "components": "@/shared/components",
+    "utils": "@/shared/utils",
+    "core": "@/shared/core",
+    "services": "@/shared/services"
+  }
 }

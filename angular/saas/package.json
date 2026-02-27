@@ -13,6 +13,7 @@
   },
   "private": true,
   "dependencies": {
+    "@angular/cdk": "^20",
     "@angular/common": "^20.3.0",
     "@angular/compiler": "^20.3.0",
     "@angular/core": "^20.3.0",
@@ -25,6 +26,7 @@
     "@radix-ng/primitives": "^0.50.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "lucide-angular": "^0.575.0",
     "rxjs": "~7.8.0",
     "tailwind-merge": "^3.5.0",
     "tailwindcss-animate": "^1.0.7",
@@ -45,6 +47,7 @@
     "karma-jasmine-html-reporter": "~2.1.0",
     "postcss": "^8.5.6",
     "tailwindcss": "^4.2.1",
-    "typescript": "~5.9.2"
+    "typescript": "~5.9.2",
+    "zard-cli": "^1.0.0-beta.60"
   }
 }
