@@ -1,24 +1,206 @@
 <div class="container mx-auto py-12 px-4 sm:px-6 lg:px-8">
-  <button
-    z-button
-    zType="outline">
-    Button
-  </button>
-  <button
-    z-button
-    zType="outline">
-    <i
-      z-icon
-      zType="arrow-up"></i>
-  </button>
-  <button
-    z-button
-    zType="outline">
-    Button
-    <i
-      z-icon
-      zType="popcorn"></i>
-  </button>
+  <div class="flex w-full flex-wrap gap-2 pb-4">
+    <button
+      z-button
+      zType="outline">
+      Button
+    </button>
+    <button
+      z-button
+      zType="outline">
+      <i
+        z-icon
+        zType="arrow-up"></i>
+    </button>
+    <button
+      z-button
+      zType="outline">
+      Button
+      <i
+        z-icon
+        zType="popcorn"></i>
+    </button>
+    <ng-icon name="warning"></ng-icon>
+  </div>
+  <z-divider />
+  <div class="grid w-full max-w-xl items-start gap-4 pb-4">
+    <z-alert
+      zIcon="circle-check"
+      zTitle="Success! Your changes have been saved"
+      zDescription="This is an alert with icon, title and description." />
+
+    <z-alert
+      [zIcon]="customIcon"
+      zTitle="This Alert has a title and an icon. No description." />
+
+    <ng-template #customIcon> <z-icon zType="popcorn" /> </ng-template>
+
+    <z-alert
+      zType="destructive"
+      zTitle="Unable to process your payment."
+      [zDescription]="customDescription" />
+
+    <ng-template #customDescription>
+      <p>Please verify your billing information and try again.</p>
+      <ul class="list-disc pl-5">
+        <li>Check your card details</li>
+        <li>Ensure sufficient funds</li>
+        <li>Verify billing address</li>
+      </ul>
+    </ng-template>
+  </div>
+  <z-divider />
+  <div class="grid w-full max-w-xl gap-4 pb-4">
+    <z-avatar
+      zSrc="/images/avatar/imgs/avatar_image.jpg"
+      zFallback="ZA"
+      [zSize]="32" />
+    <z-avatar
+      zSrc="error-image.png"
+      zFallback="ZA"
+      zSize="sm" />
+
+    <z-avatar-group>
+      <z-avatar
+        zSrc="/images/avatar/imgs/avatar_image.jpg"
+        zFallback="JD"
+        zSize="sm" />
+      <z-avatar
+        zSrc="https://github.com/srizzon.png"
+        zFallback="SA"
+        zSize="sm" />
+      <z-avatar
+        zSrc="https://github.com/Luizgomess.png"
+        zFallback="LU"
+        zSize="sm" />
+    </z-avatar-group>
+  </div>
+  <z-divider />
+  <div class="flex flex-col items-center gap-2">
+    <div class="flex w-full flex-wrap gap-2">
+      <z-badge>Badge</z-badge>
+      <z-badge zType="secondary">Secondary</z-badge>
+      <z-badge zType="destructive">Destructive</z-badge>
+      <z-badge zType="outline">Outline</z-badge>
+    </div>
+    <div class="flex w-full flex-wrap gap-2">
+      <z-badge
+        zType="secondary"
+        zShape="pill"
+        class="bg-blue-500 text-white dark:bg-blue-600">
+        <z-icon zType="badge-check" />
+        Verified
+      </z-badge>
+      <z-badge
+        zShape="pill"
+        class="h-5 min-w-5 px-1 font-mono tabular-nums"
+        >8</z-badge
+      >
+      <z-badge
+        zShape="pill"
+        zType="destructive"
+        class="h-5 min-w-5 px-1 font-mono tabular-nums"
+        >99</z-badge
+      >
+      <z-badge
+        zShape="pill"
+        zType="outline"
+        class="h-5 min-w-5 px-1 font-mono tabular-nums"
+        >20+</z-badge
+      >
+    </div>
+  </div>
+  <z-divider />
+  <div class="grid w-full max-w-xl gap-4 pb-4">
+    <z-accordion zDefaultValue="item-2">
+      <z-accordion-item
+        zValue="item-1"
+        zTitle="A Study in Scarlet">
+        The first case of Sherlock Holmes and Dr. Watson. They investigate a murder in London, which
+        leads to a backstory involving Mormons in the U.S. Introduces Holmes’s deductive method.
+      </z-accordion-item>
+
+      <z-accordion-item
+        zValue="item-2"
+        zTitle="The Sign of Four"
+        zDescription="Sir Arthur Conan Doyle">
+        The first case of Sherlock Holmes and Dr. Watson. They investigate a murder in London, which
+        leads to a backstory involving Mormons in the U.S. Introduces Holmes’s deductive method.
+      </z-accordion-item>
+
+      <z-accordion-item
+        zValue="item-3"
+        zTitle="The Hound of the Baskervilles">
+        Holmes and Watson investigate the legend of a demonic hound haunting the Baskerville family.
+        Set in the eerie Dartmoor moorlands, the story involves betrayal and greed.
+      </z-accordion-item>
+    </z-accordion>
+  </div>
+  <z-divider />
+  <div class="grid w-full max-w-xl gap-4 pb-4">
+    <z-card
+      class="w-full md:w-94"
+      zTitle="Login to your account"
+      zDescription="Enter your email below to login to your account"
+      zAction="Sign Up"
+      (zActionClick)="onActionClick()">
+      <div class="space-y-4">
+        <div
+          class="space-y-2"
+          zardId="email"
+          #e="zardId">
+          <label
+            [for]="e.id()"
+            class="text-sm leading-none font-medium peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+            Email
+          </label>
+          <input
+            [id]="e.id()"
+            type="email"
+            placeholder="m@example.com"
+            class="border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring flex h-10 w-full rounded-md border px-3 py-2 text-sm file:border-0 file:bg-transparent file:text-sm file:font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+            required >
+        </div>
+        <div class="space-y-2">
+          <div
+            class="flex items-center"
+            zardId="password"
+            #p="zardId">
+            <label
+              [for]="p.id()"
+              class="text-sm leading-none font-medium peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+              Password
+            </label>
+            <a
+              href="#"
+              class="ml-auto text-sm underline-offset-4 hover:underline"
+              >Forgot your password?</a
+            >
+          </div>
+          <input
+            [id]="p.id()"
+            type="password"
+            class="border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring flex h-10 w-full rounded-md border px-3 py-2 text-sm file:border-0 file:bg-transparent file:text-sm file:font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+            required >
+        </div>
+      </div>
+      <div
+        card-footer
+        class="flex w-full flex-col gap-2">
+        <z-button zType="default">Login</z-button>
+        <z-button zType="outline">Login with Google</z-button>
+      </div>
+    </z-card>
+  </div>
+  <z-divider />
+  <div class="grid w-full max-w-xl gap-4 pb-4">
+    <span z-checkbox></span>
+    <span
+      z-checkbox
+      [(ngModel)]="checked"
+      >Default Checked</span
+    >
+  </div>
 </div>
 
 <router-outlet />
