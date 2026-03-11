@@ -1,9 +1,9 @@
-ARG RELEASE_VERSION="1.1.6"
+ARG RELEASE_VERSION="1.1.7"
 
 ARG NGINX_VERSION=1.29.5
-ARG GEO_DB_RELEASE=2026-02
+ARG GEO_DB_RELEASE=2026-03
 ARG MODSEC_TAG=v3.0.14
-ARG CORERULESET_TAG=v4.24.0
+ARG CORERULESET_TAG=v4.24.1
 
 # Nginx base
 FROM archlinux:base AS base
@@ -31,8 +31,8 @@ ARG MODSEC_TAG
 ARG CORERULESET_TAG
 
 # Download IP to Geolocation databases
-ADD https://download.db-ip.com/free/dbip-country-lite-2026-02.mmdb.gz /tmp/dbip-country-lite.mmdb.gz
-ADD https://download.db-ip.com/free/dbip-city-lite-2026-02.mmdb.gz /tmp/dbip-city-lite.mmdb.gz
+ADD https://download.db-ip.com/free/dbip-country-lite-2026-03.mmdb.gz /tmp/dbip-country-lite.mmdb.gz
+ADD https://download.db-ip.com/free/dbip-city-lite-2026-03.mmdb.gz /tmp/dbip-city-lite.mmdb.gz
 
 RUN echo "Extracting IP to Geolocation databases..." && \
   mkdir -p /etc/nginx/geoip && \
