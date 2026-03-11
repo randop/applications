@@ -1,0 +1,29 @@
+{
+  "name": "spawnerjs",
+  "version": "1.0.0",
+  "description": "Command processing capture",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "test": "node --test"
+  },
+  "keywords": [
+    "child_process",
+    "spawn",
+    "shell",
+    "command",
+    "exec"
+  ],
+  "author": "Randolph Ledesma",
+  "license": "Apache-2.0",
+  "licenses": [
+    {
+      "type": "Apache-2.0",
+      "url": "http://www.apache.org/licenses/LICENSE-2.0"
+    }
+  ],
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "enginesStrict": true
+}
