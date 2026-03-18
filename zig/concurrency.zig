@@ -147,10 +147,10 @@ fn demo_cancel_on_error(gpa: Allocator, io: Io) !void {
     std.debug.print("[3] Cancel-on-error (safe defer pattern)\n", .{});
 
     var task_a = io.async(failable_task, .{ io, false }); // succeeds
-    defer task_a.cancel(io) catch {};                      // no-op after await
+    defer task_a.cancel(io) catch {}; // no-op after await
 
-    var task_b = io.async(failable_task, .{ io, true });  // fails
-    defer task_b.cancel(io) catch {};                      // joins even if try fires
+    var task_b = io.async(failable_task, .{ io, true }); // fails
+    defer task_b.cancel(io) catch {}; // joins even if try fires
 
     try task_a.await(io);
     task_b.await(io) catch |e| {

@@ -65,4 +65,3 @@ fn writeToArrayListCallback(
 
     return byte_count;
 }
-
