@@ -11,3 +11,7 @@ build-*/
 .build-*/
 docgen_tmp/
 .docgen_tmp/
+
+# Local certificates
+server.crt
+server.key

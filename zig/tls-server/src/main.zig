@@ -9,15 +9,22 @@ const c = @cImport({
     @cInclude("unistd.h");
 });
 
+const build_options = @import("build_options");
+
+const logger = @import("log.zig");
+const log = logger.scoped(.main);
+
 pub fn main() !void {
+    log.info("TLS server version {s}", .{build_options.version});
+
     // Initialize OpenSSL
     if (c.OPENSSL_init_ssl(c.OPENSSL_INIT_SSL_DEFAULT, null) != 1) {
-        std.debug.print("OpenSSL init failed\n", .{});
+        log.err("OpenSSL init failed", .{});
         return error.OpenSSLInitFailed;
     }
 
     const ctx = c.SSL_CTX_new(c.TLS_server_method()) orelse {
-        std.debug.print("SSL_CTX_new failed\n", .{});
+        log.err("SSL_CTX_new failed", .{});
         return error.SSLContextFailed;
     };
     defer c.SSL_CTX_free(ctx);
@@ -31,7 +38,7 @@ pub fn main() !void {
         return error.KeyLoadFailed;
     }
 
-    std.debug.print("TLS echo server listening on 0.0.0.0:8443\n", .{});
+    log.info("TLS echo server listening on 0.0.0.0:8443", .{});
 
     // Pure C socket API (works on your exact Zig 0.16.0-dev.2905+5d71e3051)
     const listener = c.socket(c.AF_INET, c.SOCK_STREAM, 0);
@@ -62,7 +69,7 @@ pub fn main() !void {
 
         // Spawn dedicated thread per connection
         const thread = std.Thread.spawn(.{}, handleConnection, .{ ctx, client_fd }) catch |err| {
-            std.debug.print("Failed to spawn thread for fd {}: {}\n", .{ client_fd, err });
+            log.err("Failed to spawn thread for fd {}: {}", .{ client_fd, err });
             _ = c.close(client_fd);
             continue;
         };
@@ -72,7 +79,7 @@ pub fn main() !void {
 
 fn handleConnection(ctx: ?*c.SSL_CTX, fd: c_int) void {
     const ssl = c.SSL_new(ctx) orelse {
-        std.debug.print("SSL_new failed for fd {}\n", .{fd});
+        log.debug("SSL_new failed for fd {}", .{fd});
         _ = c.close(fd);
         return;
     };
@@ -82,12 +89,12 @@ fn handleConnection(ctx: ?*c.SSL_CTX, fd: c_int) void {
 
     if (c.SSL_accept(ssl) <= 0) {
         c.ERR_print_errors_fp(c.stderr);
-        std.debug.print("TLS handshake failed for fd {}\n", .{fd});
+        log.debug("TLS handshake failed for fd {}", .{fd});
         _ = c.close(fd);
         return;
     }
 
-    std.debug.print("TLS connection established (fd {})\n", .{fd});
+    log.debug("TLS connection established (fd {})", .{fd});
 
     var buf: [4096]u8 = undefined;
     while (true) {
@@ -105,5 +112,5 @@ fn handleConnection(ctx: ?*c.SSL_CTX, fd: c_int) void {
 
     _ = c.SSL_shutdown(ssl);
     _ = c.close(fd);
-    std.debug.print("TLS connection closed (fd {})\n", .{fd});
+    log.debug("TLS connection closed (fd {})", .{fd});
 }
