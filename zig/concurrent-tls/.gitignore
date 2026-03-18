@@ -1,0 +1,17 @@
+### zig ###
+# Zig programming language
+
+zig-cache/
+.zig-cache/
+zig-out/
+.zig-out/
+build/
+.build/
+build-*/
+.build-*/
+docgen_tmp/
+.docgen_tmp/
+
+# Local certificates
+server.crt
+server.key
