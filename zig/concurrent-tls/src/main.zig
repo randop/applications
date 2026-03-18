@@ -1,4 +1,4 @@
-//! Concurrent io_uring + TLS echo server
+//! tls_server.zig — io_uring + TLS echo server, millions-of-connections design
 //!
 //! Architecture:
 //!
@@ -63,6 +63,7 @@ const c = @cImport({
     @cInclude("sys/mman.h");
     @cInclude("sys/syscall.h");
     @cInclude("linux/io_uring.h");
+    @cInclude("poll.h");
 });
 
 const build_options = @import("build_options");
@@ -583,15 +584,22 @@ fn handleConnection(io: Io, fd: c_int) error{Canceled}!void {
 // ─────────────────────────────────────────────────────────────────────────────
 // io_uring-backed TLS helpers
 //
-// Each helper follows this pattern:
-//   1. Call the OpenSSL function.
-//   2. WANT_READ  → submit IORING_OP_RECV SQE, then park.
-//   3. WANT_WRITE → submit IORING_OP_SEND SQE, then park.
-//   4. When the reactor's onCqe sets conn.ready = true, parkUntilReady
-//      returns and we retry the OpenSSL call.
+// CRITICAL DESIGN CONSTRAINT: OpenSSL owns the socket's read buffer.
+// We must NEVER submit IORING_OP_RECV/SEND to detect readiness — the kernel
+// would consume bytes from the socket before OpenSSL sees them, corrupting
+// the TLS record layer.
 //
-// Cost per I/O wait: 1 ring write (memset + store) + 1 io_uring_enter +
-// cooperative yield.  No per-fd epoll instance, no epoll_ctl, no epoll_wait.
+// Instead we use IORING_OP_POLL_ADD, which only watches for fd readiness
+// (POLLIN / POLLOUT) and never touches the data stream.  When the CQE
+// arrives (conn.ready = true), we call SSL_read/SSL_write which reads/writes
+// the data through OpenSSL's own buffering.
+//
+// For actual data transfer in uringRead/uringWriteAll, the same rule applies:
+// submit POLL_ADD to wait for readiness, then call SSL_read/SSL_write.
+//
+// POLL_ADD offset in the SQE (addr field holds the poll mask as u32):
+//   poll_events lives in the third union at SQE_OFF_OP_FLAGS (offset 28),
+//   but for POLL_ADD the mask goes in the addr field (offset 16) as u32.
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Yield the virtual thread until the reactor marks this connection ready.
@@ -602,26 +610,27 @@ inline fn parkUntilReady(io: Io, conn: *Conn) error{Canceled}!void {
     conn.ready.store(false, .release);
 }
 
-/// Submit a RECV SQE and enter the ring.
-inline fn submitRecv(fd: c_int, buf: []u8) void {
+/// Submit IORING_OP_POLL_ADD watching for POLLIN readiness.
+/// Does NOT consume any bytes — safe to use while OpenSSL owns the socket.
+inline fn submitPollIn(fd: c_int) void {
     if (g_ring.getSqe()) |sqe| {
-        sqeSet(sqe, u8,  SQE_OFF_OPCODE,    @intCast(c.IORING_OP_RECV));
+        sqeSet(sqe, u8,  SQE_OFF_OPCODE,    @intCast(c.IORING_OP_POLL_ADD));
         sqeSet(sqe, i32, SQE_OFF_FD,        fd);
-        sqeSet(sqe, u64, SQE_OFF_ADDR,      @intFromPtr(buf.ptr));
-        sqeSet(sqe, u32, SQE_OFF_LEN,       @intCast(buf.len));
+        // poll_events: POLLIN — fd has data to read.
+        // For POLL_ADD the mask is stored in the addr field (lower 32 bits).
+        sqeSet(sqe, u32, SQE_OFF_ADDR,      c.POLLIN);
         sqeSet(sqe, u64, SQE_OFF_USER_DATA, @bitCast(UserData{ .tag = .recv, .fd = fd }));
         g_ring.flush();
         g_ring.enter(1, 0) catch {};
     }
 }
 
-/// Submit a SEND SQE and enter the ring.
-inline fn submitSend(fd: c_int, buf: []const u8) void {
+/// Submit IORING_OP_POLL_ADD watching for POLLOUT readiness.
+inline fn submitPollOut(fd: c_int) void {
     if (g_ring.getSqe()) |sqe| {
-        sqeSet(sqe, u8,  SQE_OFF_OPCODE,    @intCast(c.IORING_OP_SEND));
+        sqeSet(sqe, u8,  SQE_OFF_OPCODE,    @intCast(c.IORING_OP_POLL_ADD));
         sqeSet(sqe, i32, SQE_OFF_FD,        fd);
-        sqeSet(sqe, u64, SQE_OFF_ADDR,      @intFromPtr(buf.ptr));
-        sqeSet(sqe, u32, SQE_OFF_LEN,       @intCast(buf.len));
+        sqeSet(sqe, u32, SQE_OFF_ADDR,      c.POLLOUT);
         sqeSet(sqe, u64, SQE_OFF_USER_DATA, @bitCast(UserData{ .tag = .send, .fd = fd }));
         g_ring.flush();
         g_ring.enter(1, 0) catch {};
@@ -629,7 +638,6 @@ inline fn submitSend(fd: c_int, buf: []const u8) void {
 }
 
 fn uringTlsAccept(io: Io, ssl: *c.SSL, fd: c_int, conn: *Conn) error{Canceled}!?[]const u8 {
-    var probe: [1]u8 = undefined;
     while (true) {
         if (nowNs() > conn.deadline) return "handshake timeout";
 
@@ -637,8 +645,8 @@ fn uringTlsAccept(io: Io, ssl: *c.SSL, fd: c_int, conn: *Conn) error{Canceled}!?
         if (rc == 1) return null;
 
         switch (c.SSL_get_error(ssl, rc)) {
-            c.SSL_ERROR_WANT_READ  => { submitRecv(fd, &probe); try parkUntilReady(io, conn); },
-            c.SSL_ERROR_WANT_WRITE => { submitSend(fd, &.{});   try parkUntilReady(io, conn); },
+            c.SSL_ERROR_WANT_READ  => { submitPollIn(fd);  try parkUntilReady(io, conn); },
+            c.SSL_ERROR_WANT_WRITE => { submitPollOut(fd); try parkUntilReady(io, conn); },
             c.SSL_ERROR_ZERO_RETURN => { _ = c.ERR_clear_error(); return "client closed"; },
             c.SSL_ERROR_SYSCALL     => { _ = c.ERR_clear_error(); return "client eof"; },
             else => { c.ERR_print_errors_fp(c.stderr); return "SSL_accept"; },
@@ -652,8 +660,8 @@ fn uringRead(io: Io, ssl: *c.SSL, fd: c_int, conn: *Conn, buf: []u8) error{Cance
         if (n > 0) return n;
 
         switch (c.SSL_get_error(ssl, n)) {
-            c.SSL_ERROR_WANT_READ  => { submitRecv(fd, buf);  try parkUntilReady(io, conn); },
-            c.SSL_ERROR_WANT_WRITE => { submitSend(fd, &.{}); try parkUntilReady(io, conn); },
+            c.SSL_ERROR_WANT_READ  => { submitPollIn(fd);  try parkUntilReady(io, conn); },
+            c.SSL_ERROR_WANT_WRITE => { submitPollOut(fd); try parkUntilReady(io, conn); },
             c.SSL_ERROR_ZERO_RETURN => return 0,
             c.SSL_ERROR_SYSCALL     => { _ = c.ERR_clear_error(); return 0; },
             else => { c.ERR_print_errors_fp(c.stderr); return 0; },
@@ -668,8 +676,8 @@ fn uringWriteAll(io: Io, ssl: *c.SSL, fd: c_int, conn: *Conn, buf: []const u8) e
         if (n > 0) { rem = rem[@intCast(n)..]; continue; }
 
         switch (c.SSL_get_error(ssl, n)) {
-            c.SSL_ERROR_WANT_READ  => { submitRecv(fd, @constCast(rem[0..1])); try parkUntilReady(io, conn); },
-            c.SSL_ERROR_WANT_WRITE => { submitSend(fd, rem); try parkUntilReady(io, conn); },
+            c.SSL_ERROR_WANT_READ  => { submitPollIn(fd);  try parkUntilReady(io, conn); },
+            c.SSL_ERROR_WANT_WRITE => { submitPollOut(fd); try parkUntilReady(io, conn); },
             else => { c.ERR_print_errors_fp(c.stderr); return; },
         }
     }
