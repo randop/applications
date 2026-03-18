@@ -2,7 +2,7 @@
 
 ## Setup
 ```sh
-ZIG_PACKAGE=https://ziglang.org/builds/zig-x86_64-linux-0.16.0-dev.2905+5d71e3051.tar.xz
+export ZIG_PACKAGE=https://ziglang.org/builds/zig-x86_64-linux-0.16.0-dev.2905+5d71e3051.tar.xz
 rm -rf /tmp/zig
 mkdir -p /tmp/zig
 wget -O /tmp/zig/zig-linux.tar.xz $ZIG_PACKAGE
