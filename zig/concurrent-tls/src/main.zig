@@ -261,10 +261,14 @@ fn mmap(ring_fd: c_int, offset: u64, size: usize) ?*anyopaque {
 
 const Conn = struct {
     ssl:      ?*c.SSL = null,
-    /// Atomic flag: reactor sets true when a CQE arrives for this fd.
-    /// The vthread spins/yields on this and clears it before parking again.
+    /// Set by the reactor when a POLL_ADD CQE arrives for this fd.
+    /// Cleared by parkUntilReady before each new park.
     ready:    std.atomic.Value(bool) = .{ .raw = false },
-    deadline: u64 = 0, // handshake deadline in ns
+    /// Set by the vthread just before it begins waiting.
+    /// The reactor only calls ready.store(true) if parked is true,
+    /// preventing spurious pre-wakeups before SSL_accept even runs.
+    parked:   std.atomic.Value(bool) = .{ .raw = false },
+    deadline: u64 = 0,
 };
 
 const ConnTable = struct {
@@ -401,14 +405,13 @@ fn onCqe(cqe: *const c.io_uring_cqe) void {
         },
 
         .recv, .send => {
-            // Wake the vthread waiting on this fd.
-            if (cqe.res < 0 and
-                cqe.res != -@as(i32, @intCast(c.EAGAIN)) and
-                cqe.res != -@as(i32, @intCast(c.EWOULDBLOCK)))
-            {
-                // I/O error — still wake the vthread so it can clean up.
+            // Only wake the vthread if it is actually parked waiting.
+            // If it hasn't reached parkUntilReady yet, the CQE is spurious —
+            // drop it; the vthread will submit a fresh POLL_ADD when it parks.
+            const conn = g_conns.get(ud.fd);
+            if (conn.parked.load(.acquire)) {
+                conn.ready.store(true, .release);
             }
-            g_conns.get(ud.fd).ready.store(true, .release);
         },
     }
 }
@@ -507,30 +510,42 @@ pub fn main(init: std.process.Init.Minimal) !void {
 
     log.info("TLS echo server listening on 0.0.0.0:8443 (io_uring multishot)", .{});
 
-    // ── Main reactor + dispatch loop ──────────────────────────────────────────
+    // ── Reactor vthread + connection dispatch ─────────────────────────────────
     //
-    // One virtual thread (this loop) drives the io_uring ring.
-    // It blocks in io_uring_enter waiting for at least 1 CQE, drains all
-    // available CQEs via onCqe(), then spawns a vthread for each newly
-    // accepted connection.
+    // The reactor runs as a dedicated virtual thread.  It calls io.sleep(0)
+    // after each drain to yield the OS thread, allowing handleConnection
+    // vthreads to make progress.  This is the key fix: a blocking ring.enter
+    // in the main loop would starve all other vthreads on the same OS thread.
     var group: Io.Group = .init;
     defer group.cancel(io);
 
+    // Reactor vthread: drives the ring and populates the new-fd queue.
+    var reactor_future = io.async(reactorLoop, .{io});
+    defer reactor_future.cancel(io) catch {};
+
+    // Dispatcher vthread: spawns handleConnection for each new fd.
     while (true) {
-        // Block until at least 1 CQE is available, submit 0 pending SQEs.
-        g_ring.enter(0, 1) catch |err| {
-            log.err("io_uring_enter: {}", .{err});
-            io.sleep(.fromMilliseconds(ACCEPT_BACKOFF_MS), .awake) catch break;
-            continue;
-        };
-
-        // Process all completed operations.
-        g_ring.drain(onCqe);
-
-        // Spawn a vthread for every newly accepted fd.
         while (newFdPop()) |fd| {
             group.async(io, handleConnection, .{ io, fd });
         }
+        // Yield so the reactor and connection vthreads can run.
+        io.sleep(.fromMilliseconds(0), .awake) catch break;
+    }
+}
+
+/// Reactor loop — runs as a virtual thread alongside handleConnection vthreads.
+/// Drains the CQ ring and sets conn.ready to wake parked vthreads.
+/// Yields after each drain via io.sleep(0) so other vthreads are not starved.
+fn reactorLoop(io: Io) error{Canceled}!void {
+    while (true) {
+        // Non-blocking: submit 0, wait 0. Returns immediately if CQ is empty.
+        // We do NOT block here — that would pin an OS thread and starve vthreads.
+        g_ring.enter(0, 0) catch {};
+
+        g_ring.drain(onCqe);
+
+        // Cooperative yield — give other virtual threads a turn.
+        io.sleep(.fromMilliseconds(0), .awake) catch return error.Canceled;
     }
 }
 
@@ -603,10 +618,17 @@ fn handleConnection(io: Io, fd: c_int) error{Canceled}!void {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Yield the virtual thread until the reactor marks this connection ready.
+/// Sets conn.parked = true before yielding so the reactor knows it is safe
+/// to deliver a wakeup; clears it after waking to prevent stale wakeups.
 inline fn parkUntilReady(io: Io, conn: *Conn) error{Canceled}!void {
+    conn.parked.store(true, .release);
     while (!conn.ready.load(.acquire)) {
-        io.sleep(.fromMilliseconds(0), .awake) catch return error.Canceled;
+        io.sleep(.fromMilliseconds(0), .awake) catch {
+            conn.parked.store(false, .release);
+            return error.Canceled;
+        };
     }
+    conn.parked.store(false, .release);
     conn.ready.store(false, .release);
 }
 
