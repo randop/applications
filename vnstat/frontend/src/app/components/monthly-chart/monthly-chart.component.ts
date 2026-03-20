@@ -12,7 +12,6 @@ import { ChartConfiguration, ChartData } from 'chart.js';
 import { VnstatService } from '../../services/vnstat.service';
 import { ThemeService } from '../../services/theme.service';
 import { StatsResponse, StatsDataPoint } from '../../models/vnstat.model';
-import { Subject, takeUntil } from 'rxjs';
 
 @Component({
   selector: 'app-monthly-chart',
@@ -23,21 +22,16 @@ import { Subject, takeUntil } from 'rxjs';
 export class MonthlyChartComponent implements OnInit, OnChanges, OnDestroy {
   @Input() interfaceId: number | null = null;
 
-  // Signals for state
   loading = signal<boolean>(false);
   error = signal<string | null>(null);
 
-  // Chart data signals
   private totalChartDataRaw = signal<ChartData<'bar'>>({ labels: [], datasets: [] });
   private rxChartDataRaw = signal<ChartData<'line'>>({ labels: [], datasets: [] });
   private txChartDataRaw = signal<ChartData<'line'>>({ labels: [], datasets: [] });
 
-  // Computed chart options based on theme
   chartOptions = computed<ChartConfiguration['options']>(() => {
-    const isDark =
-      this.themeService.getTheme() === 'dark' ||
-      (this.themeService.getTheme() === 'system' &&
-        window.matchMedia('(prefers-color-scheme: dark)').matches);
+    const theme = this.themeService.currentTheme();
+    const isDark = this.themeService.isDark();
 
     return {
       responsive: true,
@@ -85,28 +79,17 @@ export class MonthlyChartComponent implements OnInit, OnChanges, OnDestroy {
   rxChartData = computed(() => this.rxChartDataRaw());
   txChartData = computed(() => this.txChartDataRaw());
 
-  private destroy$ = new Subject<void>();
-
   constructor(
     private vnstatService: VnstatService,
     private themeService: ThemeService
   ) {}
 
   ngOnDestroy(): void {
-    this.destroy$.next();
-    this.destroy$.complete();
+    // No subscriptions to clean up
   }
 
   ngOnInit(): void {
     this.loadData();
-
-    // Listen for theme changes
-    this.themeService
-      .onThemeChange()
-      .pipe(takeUntil(this.destroy$))
-      .subscribe(() => {
-        // chartOptions is computed, so it will automatically update
-      });
   }
 
   ngOnChanges(changes: SimpleChanges): void {

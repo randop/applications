@@ -9,7 +9,6 @@ import { VnstatService } from '../../services/vnstat.service';
   standalone: false,
 })
 export class DashboardComponent implements OnInit {
-  // Use signals for all reactive state
   interfaces = signal<Interface[]>([]);
   selectedInterface = signal<number | null>(null);
   activeTab = signal<'hourly' | 'daily' | 'monthly'>('hourly');
