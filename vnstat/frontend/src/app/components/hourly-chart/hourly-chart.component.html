@@ -1,21 +1,23 @@
-<div class="bg-gray-800 rounded-lg p-6">
+<div
+  class="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm border border-gray-200 dark:border-gray-700"
+>
   <div class="mb-4">
-    <h2 class="text-xl font-semibold text-white mb-2">Hourly Usage</h2>
-    <p class="text-gray-400 text-sm">Network traffic by hour</p>
+    <h2 class="text-xl font-semibold text-gray-900 dark:text-white mb-2">Hourly Usage</h2>
+    <p class="text-gray-600 dark:text-gray-400 text-sm">Network traffic by hour</p>
   </div>
 
   <!-- Filter Controls -->
-  <div class="mb-6 p-4 bg-gray-700 rounded-lg">
+  <div class="mb-6 p-4 bg-gray-100 dark:bg-gray-700 rounded-lg">
     <div class="flex flex-wrap gap-4 items-end">
       <!-- Filter Type -->
       <div class="flex-1 min-w-[150px]">
-        <label class="block text-sm font-medium text-gray-300 mb-2">
+        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
           Time Range
         </label>
         <select
           [value]="filterType"
           (change)="onFilterChange($any($event.target).value)"
-          class="block w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          class="block w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
         >
           <option value="last24hours">Last 24 Hours</option>
           <option value="today">Today Only</option>
@@ -26,14 +28,14 @@
       <!-- Date Picker (shown when custom is selected) -->
       @if (filterType === 'custom') {
         <div class="flex-1 min-w-[150px]">
-          <label class="block text-sm font-medium text-gray-300 mb-2">
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
             Select Date
           </label>
           <input
             type="date"
             [value]="selectedDate"
             (change)="onDateChange($any($event.target).value)"
-            class="block w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            class="block w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
         </div>
       }
@@ -47,11 +49,13 @@
   }
 
   @if (error) {
-    <div class="p-4 bg-red-900/50 border border-red-700 rounded-lg">
-      <p class="text-red-200">{{ error }}</p>
+    <div
+      class="p-4 bg-red-50 dark:bg-red-900/50 border border-red-300 dark:border-red-700 rounded-lg"
+    >
+      <p class="text-red-700 dark:text-red-200">{{ error }}</p>
       <button
         (click)="loadData()"
-        class="mt-2 px-4 py-2 bg-red-700 hover:bg-red-600 text-white rounded transition-colors"
+        class="mt-2 px-4 py-2 bg-red-600 dark:bg-red-700 hover:bg-red-700 dark:hover:bg-red-600 text-white rounded transition-colors"
       >
         Retry
       </button>
@@ -62,8 +66,11 @@
     <div class="space-y-20">
       @if (totalChartData.datasets.length > 0) {
         <div class="h-80">
-          <h3 class="text-lg font-medium text-purple-400 mb-4">Total (Download + Upload)</h3>
-          <canvas baseChart
+          <h3 class="text-lg font-medium text-purple-600 dark:text-purple-400 mb-4">
+            Total (Download + Upload)
+          </h3>
+          <canvas
+            baseChart
             [data]="totalChartData"
             [options]="chartOptions"
             [type]="'bar'"
@@ -73,30 +80,24 @@
 
       @if (rxChartData.datasets.length > 0) {
         <div class="h-80">
-          <h3 class="text-lg font-medium text-blue-400 mb-4">Download (RX)</h3>
-          <canvas baseChart
-            [data]="rxChartData"
-            [options]="chartOptions"
-            [type]="'line'"
-          ></canvas>
+          <h3 class="text-lg font-medium text-blue-600 dark:text-blue-400 mb-4">Download (RX)</h3>
+          <canvas baseChart [data]="rxChartData" [options]="chartOptions" [type]="'line'"></canvas>
         </div>
       }
 
       @if (txChartData.datasets.length > 0) {
         <div class="h-80 pb-12">
-          <h3 class="text-lg font-medium text-green-400 mb-4">Upload (TX)</h3>
-          <canvas baseChart
-            [data]="txChartData"
-            [options]="chartOptions"
-            [type]="'line'"
-          ></canvas>
+          <h3 class="text-lg font-medium text-green-600 dark:text-green-400 mb-4">Upload (TX)</h3>
+          <canvas baseChart [data]="txChartData" [options]="chartOptions" [type]="'line'"></canvas>
         </div>
       }
 
-      @if (rxChartData.datasets.length === 0 && txChartData.datasets.length === 0 && totalChartData.datasets.length === 0) {
-        <div class="text-center py-12 text-gray-400">
-          No data available
-        </div>
+      @if (
+        rxChartData.datasets.length === 0 &&
+        txChartData.datasets.length === 0 &&
+        totalChartData.datasets.length === 0
+      ) {
+        <div class="text-center py-12 text-gray-500 dark:text-gray-400">No data available</div>
       }
     </div>
   }

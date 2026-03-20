@@ -16,7 +16,7 @@ export class VnstatController {
     @Query('interfaceId', new ParseIntPipe({ optional: true })) interfaceId?: number,
     @Query('limit', new ParseIntPipe({ optional: true })) limit: number = 24,
     @Query('startDate') startDate?: string,
-    @Query('endDate') endDate?: string,
+    @Query('endDate') endDate?: string
   ): Promise<StatsResponseDto[]> {
     if (startDate && endDate) {
       return this.vnstatService.getHourlyStatsByDateRange(interfaceId, startDate, endDate);
@@ -27,7 +27,7 @@ export class VnstatController {
   @Get('daily')
   async getDailyStats(
     @Query('interfaceId', new ParseIntPipe({ optional: true })) interfaceId?: number,
-    @Query('limit', new ParseIntPipe({ optional: true })) limit: number = 30,
+    @Query('limit', new ParseIntPipe({ optional: true })) limit: number = 30
   ): Promise<StatsResponseDto[]> {
     return this.vnstatService.getDailyStats(interfaceId, limit);
   }
@@ -35,7 +35,7 @@ export class VnstatController {
   @Get('monthly')
   async getMonthlyStats(
     @Query('interfaceId', new ParseIntPipe({ optional: true })) interfaceId?: number,
-    @Query('limit', new ParseIntPipe({ optional: true })) limit: number = 12,
+    @Query('limit', new ParseIntPipe({ optional: true })) limit: number = 12
   ): Promise<StatsResponseDto[]> {
     return this.vnstatService.getMonthlyStats(interfaceId, limit);
   }

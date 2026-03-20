@@ -12,6 +12,7 @@ import { HourlyChartComponent } from './components/hourly-chart/hourly-chart.com
 import { DailyChartComponent } from './components/daily-chart/daily-chart.component';
 import { MonthlyChartComponent } from './components/monthly-chart/monthly-chart.component';
 import { HumanizeBytesPipe } from './pipes/humanize-bytes.pipe';
+import { ThemeToggleComponent } from './components/theme-toggle/theme-toggle.component';
 
 // Register all Chart.js components
 Chart.register(...registerables);
@@ -23,17 +24,11 @@ Chart.register(...registerables);
     HourlyChartComponent,
     DailyChartComponent,
     MonthlyChartComponent,
-    HumanizeBytesPipe
+    HumanizeBytesPipe,
+    ThemeToggleComponent,
   ],
-  imports: [
-    BrowserModule,
-    BrowserAnimationsModule,
-    BaseChartDirective,
-    AppRoutingModule
-  ],
-  providers: [
-    provideHttpClient()
-  ],
-  bootstrap: [AppComponent]
+  imports: [BrowserModule, BrowserAnimationsModule, BaseChartDirective, AppRoutingModule],
+  providers: [provideHttpClient()],
+  bootstrap: [AppComponent],
 })
-export class AppModule { }
+export class AppModule {}

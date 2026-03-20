@@ -5,7 +5,11 @@ import { Interface } from '../entities/interface.entity';
 import { Hour } from '../entities/hour.entity';
 import { Day } from '../entities/day.entity';
 import { Month } from '../entities/month.entity';
-import { StatsResponseDto, StatsDataPointDto, InterfacesResponseDto } from '../dto/stats-response.dto';
+import {
+  StatsResponseDto,
+  StatsDataPointDto,
+  InterfacesResponseDto,
+} from '../dto/stats-response.dto';
 
 @Injectable()
 export class VnstatService {
@@ -17,7 +21,7 @@ export class VnstatService {
     @InjectRepository(Day)
     private dayRepository: Repository<Day>,
     @InjectRepository(Month)
-    private monthRepository: Repository<Month>,
+    private monthRepository: Repository<Month>
   ) {}
 
   async getInterfaces(): Promise<InterfacesResponseDto[]> {
@@ -33,7 +37,7 @@ export class VnstatService {
   async getHourlyStatsByDateRange(
     interfaceId?: number,
     startDate?: string,
-    endDate?: string,
+    endDate?: string
   ): Promise<StatsResponseDto[]> {
     const query = this.hourRepository
       .createQueryBuilder('hour')
@@ -93,7 +97,7 @@ export class VnstatService {
 
   private async groupByInterface(
     data: any[],
-    type: 'hour' | 'day' | 'month',
+    type: 'hour' | 'day' | 'month'
   ): Promise<StatsResponseDto[]> {
     const interfaces = await this.interfaceRepository.find();
     const grouped: { [key: number]: StatsDataPointDto[] } = {};

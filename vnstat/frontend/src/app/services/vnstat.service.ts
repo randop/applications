@@ -4,36 +4,41 @@ import { Observable } from 'rxjs';
 import { Interface, StatsResponse } from '../models/vnstat.model';
 
 @Injectable({
-  providedIn: 'root'
+  providedIn: 'root',
 })
 export class VnstatService {
   private apiUrl = '/api/vnstat';
 
-  constructor(private http: HttpClient) { }
+  constructor(private http: HttpClient) {}
 
   getInterfaces(): Observable<Interface[]> {
     return this.http.get<Interface[]>(`${this.apiUrl}/interfaces`);
   }
 
-  getHourlyStats(interfaceId?: number, limit: number = 24, startDate?: string, endDate?: string): Observable<StatsResponse[]> {
+  getHourlyStats(
+    interfaceId?: number,
+    limit: number = 24,
+    startDate?: string,
+    endDate?: string
+  ): Observable<StatsResponse[]> {
     let url = `${this.apiUrl}/hourly`;
     const params: string[] = [];
-    
+
     if (startDate && endDate) {
       params.push(`startDate=${startDate}`);
       params.push(`endDate=${endDate}`);
     } else {
       params.push(`limit=${limit}`);
     }
-    
+
     if (interfaceId) {
       params.push(`interfaceId=${interfaceId}`);
     }
-    
+
     if (params.length > 0) {
       url += '?' + params.join('&');
     }
-    
+
     return this.http.get<StatsResponse[]>(url);
   }
 

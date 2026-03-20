@@ -13,7 +13,10 @@
   @if (error) {
     <div class="p-4 bg-red-900/50 border border-red-700 rounded-lg">
       <p class="text-red-200">{{ error }}</p>
-      <button (click)="loadData()" class="mt-2 px-4 py-2 bg-red-700 hover:bg-red-600 text-white rounded transition-colors">
+      <button
+        (click)="loadData()"
+        class="mt-2 px-4 py-2 bg-red-700 hover:bg-red-600 text-white rounded transition-colors"
+      >
         Retry
       </button>
     </div>
@@ -23,7 +26,8 @@
     <div class="space-y-8">
       @if (totalChartData.datasets.length > 0) {
         <div class="h-80">
-          <canvas baseChart
+          <canvas
+            baseChart
             [data]="totalChartData"
             [options]="chartOptions"
             [type]="'bar'"
@@ -32,9 +36,7 @@
       }
 
       @if (totalChartData.datasets.length === 0) {
-        <div class="text-center py-12 text-gray-400">
-          No data available
-        </div>
+        <div class="text-center py-12 text-gray-400">No data available</div>
       }
     </div>
   }

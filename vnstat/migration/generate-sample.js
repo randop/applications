@@ -7,7 +7,7 @@ const db = new sqlite3.Database(DB_PATH);
 // Interfaces
 const interfaces = [
   { id: 2, name: 'enxe0' },
-  { id: 4, name: 'wlan0' }
+  { id: 4, name: 'wlan0' },
 ];
 
 // Date range: January 14, 2026 to March 15, 2026
@@ -39,23 +39,26 @@ async function generateData() {
   // Clear existing data in the date range
   console.log('\nClearing existing data...');
   await new Promise((resolve, reject) => {
-    db.run(`DELETE FROM day WHERE date >= ? AND date <= ?`,
+    db.run(
+      `DELETE FROM day WHERE date >= ? AND date <= ?`,
       [formatDate(startDate), formatDate(endDate)],
-      (err) => err ? reject(err) : resolve()
+      err => (err ? reject(err) : resolve())
     );
   });
 
   await new Promise((resolve, reject) => {
-    db.run(`DELETE FROM hour WHERE date >= ? AND date <= ?`,
+    db.run(
+      `DELETE FROM hour WHERE date >= ? AND date <= ?`,
       [formatDate(startDate), formatDate(endDate) + ' 23:59:59'],
-      (err) => err ? reject(err) : resolve()
+      err => (err ? reject(err) : resolve())
     );
   });
 
   await new Promise((resolve, reject) => {
-    db.run(`DELETE FROM month WHERE date >= ? AND date <= ?`,
+    db.run(
+      `DELETE FROM month WHERE date >= ? AND date <= ?`,
       [formatDate(startDate), formatDate(endDate)],
-      (err) => err ? reject(err) : resolve()
+      err => (err ? reject(err) : resolve())
     );
   });
 
@@ -92,7 +95,7 @@ async function generateData() {
           db.run(
             `INSERT INTO day (interface, date, rx, tx) VALUES (?, ?, ?, ?)`,
             [iface.id, dateStr, rx, tx],
-            (err) => err ? reject(err) : resolve()
+            err => (err ? reject(err) : resolve())
           );
         })
       );
@@ -119,8 +122,10 @@ async function generateData() {
 
         // Traffic varies by hour (peak hours: 18-23, low: 02-06)
         let hourMultiplier = 1.0;
-        if (hour >= 18 && hour <= 23) hourMultiplier = 1.8; // Evening peak
-        else if (hour >= 2 && hour <= 6) hourMultiplier = 0.3; // Night low
+        if (hour >= 18 && hour <= 23)
+          hourMultiplier = 1.8; // Evening peak
+        else if (hour >= 2 && hour <= 6)
+          hourMultiplier = 0.3; // Night low
         else if (hour >= 9 && hour <= 17) hourMultiplier = 1.2; // Work hours
 
         const rx = Math.floor(generateRandomTraffic(0.05, 0.8) * hourMultiplier);
@@ -131,7 +136,7 @@ async function generateData() {
             db.run(
               `INSERT INTO hour (interface, date, rx, tx) VALUES (?, ?, ?, ?)`,
               [iface.id, dateTimeStr, rx, tx],
-              (err) => err ? reject(err) : resolve()
+              err => (err ? reject(err) : resolve())
             );
           })
         );
@@ -185,7 +190,7 @@ async function generateData() {
           db.run(
             `INSERT INTO month (interface, date, rx, tx) VALUES (?, ?, ?, ?)`,
             [iface.id, monthDate, data.rx, data.tx],
-            (err) => err ? reject(err) : resolve()
+            err => (err ? reject(err) : resolve())
           );
         })
       );
@@ -198,21 +203,29 @@ async function generateData() {
   // Update interface totals
   console.log('\nUpdating interface totals...');
   for (const iface of interfaces) {
-    const totalRx = Object.values(monthlyData[iface.id] || {}).reduce((sum, data) => sum + data.rx, 0);
-    const totalTx = Object.values(monthlyData[iface.id] || {}).reduce((sum, data) => sum + data.tx, 0);
+    const totalRx = Object.values(monthlyData[iface.id] || {}).reduce(
+      (sum, data) => sum + data.rx,
+      0
+    );
+    const totalTx = Object.values(monthlyData[iface.id] || {}).reduce(
+      (sum, data) => sum + data.tx,
+      0
+    );
 
     await new Promise((resolve, reject) => {
       db.run(
         `UPDATE interface SET rxtotal = rxtotal + ?, txtotal = txtotal + ?, updated = ? WHERE id = ?`,
         [totalRx, totalTx, formatDate(new Date()), iface.id],
-        (err) => err ? reject(err) : resolve()
+        err => (err ? reject(err) : resolve())
       );
     });
   }
   console.log('✓ Interface totals updated');
 
   console.log('\n✅ Fake data generation complete!');
-  console.log(`Generated data for ${interfaces.length} interfaces from ${formatDate(startDate)} to ${formatDate(endDate)}`);
+  console.log(
+    `Generated data for ${interfaces.length} interfaces from ${formatDate(startDate)} to ${formatDate(endDate)}`
+  );
 
   db.close();
 }

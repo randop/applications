@@ -7,7 +7,7 @@ import { StatsResponse, StatsDataPoint } from '../../models/vnstat.model';
   selector: 'app-total-chart',
   templateUrl: './total-chart.component.html',
   styleUrls: ['./total-chart.component.scss'],
-  standalone: false
+  standalone: false,
 })
 export class TotalChartComponent implements OnInit, OnChanges {
   @Input() interfaceId: number | null = null;
@@ -15,7 +15,7 @@ export class TotalChartComponent implements OnInit, OnChanges {
 
   totalChartData: ChartData<'bar'> = {
     labels: [],
-    datasets: []
+    datasets: [],
   };
 
   chartOptions: ChartConfiguration['options'] = {
@@ -24,44 +24,44 @@ export class TotalChartComponent implements OnInit, OnChanges {
     plugins: {
       legend: {
         labels: {
-          color: '#9ca3af'
-        }
+          color: '#9ca3af',
+        },
       },
       tooltip: {
         callbacks: {
-          label: (context) => {
+          label: context => {
             const label = context.dataset.label || '';
             const value = context.parsed.y ?? 0;
             return `${label}: ${this.humanizeBytes(value)}`;
-          }
-        }
-      }
+          },
+        },
+      },
     },
     scales: {
       x: {
         ticks: {
-          color: '#9ca3af'
+          color: '#9ca3af',
         },
         grid: {
-          color: '#374151'
-        }
+          color: '#374151',
+        },
       },
       y: {
         ticks: {
           color: '#9ca3af',
-          callback: (value) => this.humanizeBytes(Number(value))
+          callback: value => this.humanizeBytes(Number(value)),
         },
         grid: {
-          color: '#374151'
-        }
-      }
-    }
+          color: '#374151',
+        },
+      },
+    },
   };
 
   loading = false;
   error: string | null = null;
 
-  constructor(private vnstatService: VnstatService) { }
+  constructor(private vnstatService: VnstatService) {}
 
   ngOnInit(): void {
     this.loadData();
@@ -97,11 +97,11 @@ export class TotalChartComponent implements OnInit, OnChanges {
         this.processData(responses);
         this.loading = false;
       },
-      error: (err) => {
+      error: err => {
         this.error = `Failed to load ${this.type} total data`;
         this.loading = false;
         console.error(`Error loading ${this.type} total data:`, err);
-      }
+      },
     });
   }
 
@@ -122,17 +122,28 @@ export class TotalChartComponent implements OnInit, OnChanges {
     });
 
     const datasets: any[] = [];
-    const colors = ['#4e79a7', '#f28e2b', '#59a14f', '#e15759', '#76b7b2', '#b07aa1', '#ff9da7', '#9c755f', '#bab0ac', '#499894'];
+    const colors = [
+      '#4e79a7',
+      '#f28e2b',
+      '#59a14f',
+      '#e15759',
+      '#76b7b2',
+      '#b07aa1',
+      '#ff9da7',
+      '#9c755f',
+      '#bab0ac',
+      '#499894',
+    ];
 
     responses.forEach((response, index) => {
       const color = colors[index % colors.length];
-      
+
       datasets.push({
         label: `${response.interfaceName} (Total)`,
         data: response.data.map((p: StatsDataPoint) => p.rx + p.tx),
         backgroundColor: color + '80',
         borderColor: color,
-        borderWidth: 1
+        borderWidth: 1,
       });
     });
 
@@ -141,7 +152,7 @@ export class TotalChartComponent implements OnInit, OnChanges {
 
   humanizeBytes(bytes: number): string {
     if (bytes === 0) return '0 B';
-    
+
     const units = ['B', 'KB', 'MB', 'GB', 'TB'];
     let size = bytes;
     let unitIndex = 0;

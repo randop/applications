@@ -1,79 +1,109 @@
-import { Component, Input, OnInit, OnChanges, SimpleChanges } from '@angular/core';
+import { Component, Input, OnInit, OnChanges, SimpleChanges, OnDestroy } from '@angular/core';
 import { ChartConfiguration, ChartData } from 'chart.js';
 import { VnstatService } from '../../services/vnstat.service';
+import { ThemeService } from '../../services/theme.service';
 import { StatsResponse, StatsDataPoint } from '../../models/vnstat.model';
+import { Subject, takeUntil } from 'rxjs';
 
 @Component({
   selector: 'app-daily-chart',
   templateUrl: './daily-chart.component.html',
   styleUrls: ['./daily-chart.component.scss'],
-  standalone: false
+  standalone: false,
 })
-export class DailyChartComponent implements OnInit, OnChanges {
+export class DailyChartComponent implements OnInit, OnChanges, OnDestroy {
   @Input() interfaceId: number | null = null;
 
   totalChartData: ChartData<'bar'> = {
     labels: [],
-    datasets: []
+    datasets: [],
   };
 
   rxChartData: ChartData<'line'> = {
     labels: [],
-    datasets: []
+    datasets: [],
   };
 
   txChartData: ChartData<'line'> = {
     labels: [],
-    datasets: []
+    datasets: [],
   };
 
-  chartOptions: ChartConfiguration['options'] = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: {
-        labels: {
-          color: '#9ca3af'
-        }
-      },
-      tooltip: {
-        callbacks: {
-          label: (context) => {
-            const label = context.dataset.label || '';
-            const value = context.parsed.y ?? 0;
-            return `${label}: ${this.humanizeBytes(value)}`;
-          }
-        }
-      }
-    },
-    scales: {
-      x: {
-        ticks: {
-          color: '#9ca3af'
-        },
-        grid: {
-          color: '#374151'
-        }
-      },
-      y: {
-        ticks: {
-          color: '#9ca3af',
-          callback: (value) => this.humanizeBytes(Number(value))
-        },
-        grid: {
-          color: '#374151'
-        }
-      }
-    }
-  };
+  chartOptions: ChartConfiguration['options'];
+  private destroy$ = new Subject<void>();
 
   loading = false;
   error: string | null = null;
 
-  constructor(private vnstatService: VnstatService) { }
+  constructor(
+    private vnstatService: VnstatService,
+    private themeService: ThemeService
+  ) {
+    this.chartOptions = this.getChartOptions();
+  }
+
+  private getChartOptions(): ChartConfiguration['options'] {
+    const isDark =
+      this.themeService.getTheme() === 'dark' ||
+      (this.themeService.getTheme() === 'system' &&
+        window.matchMedia('(prefers-color-scheme: dark)').matches);
+
+    return {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          labels: {
+            color: isDark ? '#9ca3af' : '#374151',
+          },
+        },
+        tooltip: {
+          callbacks: {
+            label: context => {
+              const label = context.dataset.label || '';
+              const value = context.parsed.y ?? 0;
+              return `${label}: ${this.humanizeBytes(value)}`;
+            },
+          },
+        },
+      },
+      scales: {
+        x: {
+          ticks: {
+            color: isDark ? '#9ca3af' : '#374151',
+          },
+          grid: {
+            color: isDark ? '#374151' : '#e5e7eb',
+          },
+        },
+        y: {
+          ticks: {
+            color: isDark ? '#9ca3af' : '#374151',
+            callback: value => this.humanizeBytes(Number(value)),
+          },
+          grid: {
+            color: isDark ? '#374151' : '#e5e7eb',
+          },
+        },
+      },
+    };
+  }
+
+  ngOnDestroy(): void {
+    this.destroy$.next();
+    this.destroy$.complete();
+  }
 
   ngOnInit(): void {
     this.loadData();
+
+    // Listen for theme changes
+    this.themeService
+      .onThemeChange()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(() => {
+        this.chartOptions = this.getChartOptions();
+      });
   }
 
   ngOnChanges(changes: SimpleChanges): void {
@@ -91,15 +121,15 @@ export class DailyChartComponent implements OnInit, OnChanges {
         this.processData(responses);
         this.loading = false;
       },
-      error: (err) => {
+      error: err => {
         this.error = 'Failed to load daily data';
         this.loading = false;
         console.error('Error loading daily data:', err);
-      }
+      },
     });
   }
 
-private processData(responses: StatsResponse[]): void {
+  private processData(responses: StatsResponse[]): void {
     if (responses.length === 0) {
       this.totalChartData = { labels: [], datasets: [] };
       this.rxChartData = { labels: [], datasets: [] };
@@ -115,7 +145,18 @@ private processData(responses: StatsResponse[]): void {
     const totalDatasets: any[] = [];
     const rxDatasets: any[] = [];
     const txDatasets: any[] = [];
-    const colors = ['#4e79a7', '#f28e2b', '#59a14f', '#e15759', '#76b7b2', '#b07aa1', '#ff9da7', '#9c755f', '#bab0ac', '#499894'];
+    const colors = [
+      '#4e79a7',
+      '#f28e2b',
+      '#59a14f',
+      '#e15759',
+      '#76b7b2',
+      '#b07aa1',
+      '#ff9da7',
+      '#9c755f',
+      '#bab0ac',
+      '#499894',
+    ];
 
     responses.forEach((response, index) => {
       const color = colors[index % colors.length];
@@ -125,7 +166,7 @@ private processData(responses: StatsResponse[]): void {
         data: response.data.map((p: StatsDataPoint) => p.rx + p.tx),
         backgroundColor: color + '80',
         borderColor: color,
-        borderWidth: 1
+        borderWidth: 1,
       });
 
       rxDatasets.push({
@@ -134,7 +175,7 @@ private processData(responses: StatsResponse[]): void {
         borderColor: color,
         backgroundColor: color + '40',
         fill: false,
-        tension: 0.4
+        tension: 0.4,
       });
 
       txDatasets.push({
@@ -143,7 +184,7 @@ private processData(responses: StatsResponse[]): void {
         borderColor: color,
         backgroundColor: color + '40',
         fill: false,
-        tension: 0.4
+        tension: 0.4,
       });
     });
 
@@ -154,7 +195,7 @@ private processData(responses: StatsResponse[]): void {
 
   humanizeBytes(bytes: number): string {
     if (bytes === 0) return '0 B';
-    
+
     const units = ['B', 'KB', 'MB', 'GB', 'TB'];
     let size = bytes;
     let unitIndex = 0;

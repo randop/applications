@@ -11,9 +11,12 @@
     "dev:frontend": "cd frontend && npm run start",
     "build": "npm run build:backend && npm run build:frontend",
     "build:backend": "cd backend && npm run build",
-    "build:frontend": "cd frontend && npm run build"
+    "build:frontend": "cd frontend && npm run build",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,css,scss,html,md,yml,yaml}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,css,scss,html,md,yml,yaml}\""
   },
   "devDependencies": {
-    "concurrently": "^9.0.0"
+    "concurrently": "^9.0.0",
+    "prettier": "^3.2.0"
   }
 }

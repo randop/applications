@@ -6,14 +6,14 @@ import { VnstatService } from '../../services/vnstat.service';
   selector: 'app-dashboard',
   templateUrl: './dashboard.component.html',
   styleUrls: ['./dashboard.component.scss'],
-  standalone: false
+  standalone: false,
 })
 export class DashboardComponent implements OnInit {
   interfaces: Interface[] = [];
   selectedInterface: number | null = null;
   activeTab: 'hourly' | 'daily' | 'monthly' = 'hourly';
 
-  constructor(private vnstatService: VnstatService) { }
+  constructor(private vnstatService: VnstatService) {}
 
   ngOnInit(): void {
     this.loadInterfaces();
@@ -21,13 +21,13 @@ export class DashboardComponent implements OnInit {
 
   loadInterfaces(): void {
     this.vnstatService.getInterfaces().subscribe({
-      next: (interfaces) => {
+      next: interfaces => {
         this.interfaces = interfaces;
         // selectedInterface remains null to show "All Interfaces" by default
       },
-      error: (error) => {
+      error: error => {
         console.error('Error loading interfaces:', error);
-      }
+      },
     });
   }
 
