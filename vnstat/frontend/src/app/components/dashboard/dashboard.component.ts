@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, signal } from '@angular/core';
 import { Interface } from '../../models/vnstat.model';
 import { VnstatService } from '../../services/vnstat.service';
 
@@ -9,9 +9,10 @@ import { VnstatService } from '../../services/vnstat.service';
   standalone: false,
 })
 export class DashboardComponent implements OnInit {
-  interfaces: Interface[] = [];
-  selectedInterface: number | null = null;
-  activeTab: 'hourly' | 'daily' | 'monthly' = 'hourly';
+  // Use signals for all reactive state
+  interfaces = signal<Interface[]>([]);
+  selectedInterface = signal<number | null>(null);
+  activeTab = signal<'hourly' | 'daily' | 'monthly'>('hourly');
 
   constructor(private vnstatService: VnstatService) {}
 
@@ -22,8 +23,7 @@ export class DashboardComponent implements OnInit {
   loadInterfaces(): void {
     this.vnstatService.getInterfaces().subscribe({
       next: interfaces => {
-        this.interfaces = interfaces;
-        // selectedInterface remains null to show "All Interfaces" by default
+        this.interfaces.set(interfaces);
       },
       error: error => {
         console.error('Error loading interfaces:', error);
@@ -33,10 +33,11 @@ export class DashboardComponent implements OnInit {
 
   onInterfaceChange(event: Event): void {
     const target = event.target as HTMLSelectElement;
-    this.selectedInterface = target.value ? parseInt(target.value, 10) : null;
+    const newValue = target.value ? parseInt(target.value, 10) : null;
+    this.selectedInterface.set(newValue);
   }
 
   setActiveTab(tab: 'hourly' | 'daily' | 'monthly'): void {
-    this.activeTab = tab;
+    this.activeTab.set(tab);
   }
 }

@@ -1,4 +1,12 @@
-import { Component, Input, OnInit, OnChanges, SimpleChanges, OnDestroy } from '@angular/core';
+import {
+  Component,
+  Input,
+  OnInit,
+  OnChanges,
+  SimpleChanges,
+  OnDestroy,
+  ChangeDetectorRef,
+} from '@angular/core';
 import { ChartConfiguration, ChartData } from 'chart.js';
 import { VnstatService } from '../../services/vnstat.service';
 import { ThemeService } from '../../services/theme.service';
@@ -37,7 +45,8 @@ export class DailyChartComponent implements OnInit, OnChanges, OnDestroy {
 
   constructor(
     private vnstatService: VnstatService,
-    private themeService: ThemeService
+    private themeService: ThemeService,
+    private cdr: ChangeDetectorRef
   ) {
     this.chartOptions = this.getChartOptions();
   }
@@ -120,17 +129,19 @@ export class DailyChartComponent implements OnInit, OnChanges, OnDestroy {
       next: (responses: StatsResponse[]) => {
         this.processData(responses);
         this.loading = false;
+        this.cdr.detectChanges();
       },
       error: err => {
         this.error = 'Failed to load daily data';
         this.loading = false;
         console.error('Error loading daily data:', err);
+        this.cdr.detectChanges();
       },
     });
   }
 
   private processData(responses: StatsResponse[]): void {
-    if (responses.length === 0) {
+    if (responses.length === 0 || !responses[0]?.data || responses[0].data.length === 0) {
       this.totalChartData = { labels: [], datasets: [] };
       this.rxChartData = { labels: [], datasets: [] };
       this.txChartData = { labels: [], datasets: [] };
@@ -191,6 +202,7 @@ export class DailyChartComponent implements OnInit, OnChanges, OnDestroy {
     this.totalChartData = { labels, datasets: totalDatasets };
     this.rxChartData = { labels, datasets: rxDatasets };
     this.txChartData = { labels, datasets: txDatasets };
+    this.cdr.markForCheck();
   }
 
   humanizeBytes(bytes: number): string {

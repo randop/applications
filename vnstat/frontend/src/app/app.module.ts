@@ -2,8 +2,7 @@ import { NgModule } from '@angular/core';
 import { BrowserModule } from '@angular/platform-browser';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { provideHttpClient } from '@angular/common/http';
-import { BaseChartDirective } from 'ng2-charts';
-import { Chart, registerables } from 'chart.js';
+import { provideCharts, withDefaultRegisterables, BaseChartDirective } from 'ng2-charts';
 
 import { AppRoutingModule } from './app-routing.module';
 import { AppComponent } from './app.component';
@@ -13,9 +12,6 @@ import { DailyChartComponent } from './components/daily-chart/daily-chart.compon
 import { MonthlyChartComponent } from './components/monthly-chart/monthly-chart.component';
 import { HumanizeBytesPipe } from './pipes/humanize-bytes.pipe';
 import { ThemeToggleComponent } from './components/theme-toggle/theme-toggle.component';
-
-// Register all Chart.js components
-Chart.register(...registerables);
 
 @NgModule({
   declarations: [
@@ -28,7 +24,7 @@ Chart.register(...registerables);
     ThemeToggleComponent,
   ],
   imports: [BrowserModule, BrowserAnimationsModule, BaseChartDirective, AppRoutingModule],
-  providers: [provideHttpClient()],
+  providers: [provideHttpClient(), provideCharts(withDefaultRegisterables())],
   bootstrap: [AppComponent],
 })
 export class AppModule {}

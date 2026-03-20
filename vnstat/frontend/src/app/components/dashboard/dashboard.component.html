@@ -19,11 +19,11 @@
     <select
       id="interface-select"
       class="block w-full md:w-64 px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-md text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-      [value]="selectedInterface || ''"
+      [value]="selectedInterface() || ''"
       (change)="onInterfaceChange($event)"
     >
       <option value="">All Interfaces</option>
-      @for (iface of interfaces; track iface.id) {
+      @for (iface of interfaces(); track iface.id) {
         <option [value]="iface.id">
           {{ iface.name }}{{ iface.alias ? ' (' + iface.alias + ')' : '' }}
         </option>
@@ -36,33 +36,33 @@
     <nav class="flex space-x-8">
       <button
         (click)="setActiveTab('hourly')"
-        [class.text-blue-600]="activeTab === 'hourly'"
-        [class.dark:text-blue-400]="activeTab === 'hourly'"
-        [class.border-blue-600]="activeTab === 'hourly'"
-        [class.dark:border-blue-400]="activeTab === 'hourly'"
-        [class.border-transparent]="activeTab !== 'hourly'"
+        [class.text-blue-600]="activeTab() === 'hourly'"
+        [class.dark:text-blue-400]="activeTab() === 'hourly'"
+        [class.border-blue-600]="activeTab() === 'hourly'"
+        [class.dark:border-blue-400]="activeTab() === 'hourly'"
+        [class.border-transparent]="activeTab() !== 'hourly'"
         class="py-2 px-1 border-b-2 text-sm font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
       >
         Hourly
       </button>
       <button
         (click)="setActiveTab('daily')"
-        [class.text-blue-600]="activeTab === 'daily'"
-        [class.dark:text-blue-400]="activeTab === 'daily'"
-        [class.border-blue-600]="activeTab === 'daily'"
-        [class.dark:border-blue-400]="activeTab === 'daily'"
-        [class.border-transparent]="activeTab !== 'daily'"
+        [class.text-blue-600]="activeTab() === 'daily'"
+        [class.dark:text-blue-400]="activeTab() === 'daily'"
+        [class.border-blue-600]="activeTab() === 'daily'"
+        [class.dark:border-blue-400]="activeTab() === 'daily'"
+        [class.border-transparent]="activeTab() !== 'daily'"
         class="py-2 px-1 border-b-2 text-sm font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
       >
         Daily
       </button>
       <button
         (click)="setActiveTab('monthly')"
-        [class.text-blue-600]="activeTab === 'monthly'"
-        [class.dark:text-blue-400]="activeTab === 'monthly'"
-        [class.border-blue-600]="activeTab === 'monthly'"
-        [class.dark:border-blue-400]="activeTab === 'monthly'"
-        [class.border-transparent]="activeTab !== 'monthly'"
+        [class.text-blue-600]="activeTab() === 'monthly'"
+        [class.dark:text-blue-400]="activeTab() === 'monthly'"
+        [class.border-blue-600]="activeTab() === 'monthly'"
+        [class.dark:border-blue-400]="activeTab() === 'monthly'"
+        [class.border-transparent]="activeTab() !== 'monthly'"
         class="py-2 px-1 border-b-2 text-sm font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
       >
         Monthly
@@ -72,16 +72,16 @@
 
   <!-- Charts -->
   <div class="space-y-8">
-    @if (activeTab === 'hourly') {
-      <app-hourly-chart [interfaceId]="selectedInterface"></app-hourly-chart>
+    @if (activeTab() === 'hourly') {
+      <app-hourly-chart [interfaceId]="selectedInterface()"></app-hourly-chart>
     }
 
-    @if (activeTab === 'daily') {
-      <app-daily-chart [interfaceId]="selectedInterface"></app-daily-chart>
+    @if (activeTab() === 'daily') {
+      <app-daily-chart [interfaceId]="selectedInterface()"></app-daily-chart>
     }
 
-    @if (activeTab === 'monthly') {
-      <app-monthly-chart [interfaceId]="selectedInterface"></app-monthly-chart>
+    @if (activeTab() === 'monthly') {
+      <app-monthly-chart [interfaceId]="selectedInterface()"></app-monthly-chart>
     }
   </div>
 </div>
