@@ -5,7 +5,9 @@ import {
   OnChanges,
   SimpleChanges,
   OnDestroy,
-  ChangeDetectorRef,
+  signal,
+  computed,
+  effect,
 } from '@angular/core';
 import { ChartConfiguration, ChartData } from 'chart.js';
 import { VnstatService } from '../../services/vnstat.service';
@@ -24,39 +26,19 @@ type HourlyFilterType = 'last24hours' | 'today' | 'custom';
 export class HourlyChartComponent implements OnInit, OnChanges, OnDestroy {
   @Input() interfaceId: number | null = null;
 
-  filterType: HourlyFilterType = 'last24hours';
-  selectedDate: string = '';
+  // Signals for state
+  filterType = signal<HourlyFilterType>('last24hours');
+  selectedDate = signal<string>('');
+  loading = signal<boolean>(false);
+  error = signal<string | null>(null);
 
-  totalChartData: ChartData<'bar'> = {
-    labels: [],
-    datasets: [],
-  };
+  // Chart data signals
+  private totalChartDataRaw = signal<ChartData<'bar'>>({ labels: [], datasets: [] });
+  private rxChartDataRaw = signal<ChartData<'line'>>({ labels: [], datasets: [] });
+  private txChartDataRaw = signal<ChartData<'line'>>({ labels: [], datasets: [] });
 
-  rxChartData: ChartData<'line'> = {
-    labels: [],
-    datasets: [],
-  };
-
-  txChartData: ChartData<'line'> = {
-    labels: [],
-    datasets: [],
-  };
-
-  chartOptions: ChartConfiguration['options'];
-  private destroy$ = new Subject<void>();
-
-  loading = false;
-  error: string | null = null;
-
-  constructor(
-    private vnstatService: VnstatService,
-    private themeService: ThemeService,
-    private cdr: ChangeDetectorRef
-  ) {
-    this.chartOptions = this.getChartOptions();
-  }
-
-  private getChartOptions(): ChartConfiguration['options'] {
+  // Computed chart options based on theme
+  chartOptions = computed<ChartConfiguration['options']>(() => {
     const isDark =
       this.themeService.getTheme() === 'dark' ||
       (this.themeService.getTheme() === 'system' &&
@@ -101,6 +83,25 @@ export class HourlyChartComponent implements OnInit, OnChanges, OnDestroy {
         },
       },
     };
+  });
+
+  // Expose chart data for template
+  totalChartData = computed(() => this.totalChartDataRaw());
+  rxChartData = computed(() => this.rxChartDataRaw());
+  txChartData = computed(() => this.txChartDataRaw());
+
+  private destroy$ = new Subject<void>();
+
+  constructor(
+    private vnstatService: VnstatService,
+    private themeService: ThemeService
+  ) {
+    // Effect to reload data when filter type or selected date changes
+    effect(() => {
+      this.filterType();
+      this.selectedDate();
+      this.loadData();
+    });
   }
 
   ngOnDestroy(): void {
@@ -109,7 +110,7 @@ export class HourlyChartComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   ngOnInit(): void {
-    this.selectedDate = this.getTodayDateString();
+    this.selectedDate.set(this.getTodayDateString());
     this.loadData();
 
     // Listen for theme changes
@@ -117,7 +118,7 @@ export class HourlyChartComponent implements OnInit, OnChanges, OnDestroy {
       .onThemeChange()
       .pipe(takeUntil(this.destroy$))
       .subscribe(() => {
-        this.chartOptions = this.getChartOptions();
+        // chartOptions is computed, so it will automatically update
       });
   }
 
@@ -128,18 +129,14 @@ export class HourlyChartComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   onFilterChange(filterType: HourlyFilterType): void {
-    this.filterType = filterType;
+    this.filterType.set(filterType);
     if (filterType === 'today') {
-      this.selectedDate = this.getTodayDateString();
+      this.selectedDate.set(this.getTodayDateString());
     }
-    this.loadData();
   }
 
   onDateChange(date: string): void {
-    this.selectedDate = date;
-    if (this.filterType === 'custom') {
-      this.loadData();
-    }
+    this.selectedDate.set(date);
   }
 
   getTodayDateString(): string {
@@ -147,23 +144,26 @@ export class HourlyChartComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   loadData(): void {
-    this.loading = true;
-    this.error = null;
+    this.loading.set(true);
+    this.error.set(null);
 
     let startDate: string | undefined;
     let endDate: string | undefined;
     let limit: number = 24;
 
-    if (this.filterType === 'last24hours') {
+    const currentFilterType = this.filterType();
+    const currentSelectedDate = this.selectedDate();
+
+    if (currentFilterType === 'last24hours') {
       limit = 24;
-    } else if (this.filterType === 'today') {
+    } else if (currentFilterType === 'today') {
       const today = new Date();
       const startOfDay = new Date(today);
       startOfDay.setHours(0, 0, 0, 0);
       startDate = startOfDay.toISOString();
       endDate = today.toISOString();
-    } else if (this.filterType === 'custom' && this.selectedDate) {
-      const date = new Date(this.selectedDate);
+    } else if (currentFilterType === 'custom' && currentSelectedDate) {
+      const date = new Date(currentSelectedDate);
       const startOfDay = new Date(date);
       startOfDay.setHours(0, 0, 0, 0);
       const endOfDay = new Date(date);
@@ -177,23 +177,21 @@ export class HourlyChartComponent implements OnInit, OnChanges, OnDestroy {
       .subscribe({
         next: (responses: StatsResponse[]) => {
           this.processData(responses);
-          this.loading = false;
-          this.cdr.detectChanges();
+          this.loading.set(false);
         },
         error: err => {
-          this.error = 'Failed to load hourly data';
-          this.loading = false;
+          this.error.set('Failed to load hourly data');
+          this.loading.set(false);
           console.error('Error loading hourly data:', err);
-          this.cdr.detectChanges();
         },
       });
   }
 
   private processData(responses: StatsResponse[]): void {
     if (responses.length === 0) {
-      this.totalChartData = { labels: [], datasets: [] };
-      this.rxChartData = { labels: [], datasets: [] };
-      this.txChartData = { labels: [], datasets: [] };
+      this.totalChartDataRaw.set({ labels: [], datasets: [] });
+      this.rxChartDataRaw.set({ labels: [], datasets: [] });
+      this.txChartDataRaw.set({ labels: [], datasets: [] });
       return;
     }
 
@@ -248,10 +246,9 @@ export class HourlyChartComponent implements OnInit, OnChanges, OnDestroy {
       });
     });
 
-    this.totalChartData = { labels, datasets: totalDatasets };
-    this.rxChartData = { labels, datasets: rxDatasets };
-    this.txChartData = { labels, datasets: txDatasets };
-    this.cdr.markForCheck();
+    this.totalChartDataRaw.set({ labels, datasets: totalDatasets });
+    this.rxChartDataRaw.set({ labels, datasets: rxDatasets });
+    this.txChartDataRaw.set({ labels, datasets: txDatasets });
   }
 
   humanizeBytes(bytes: number): string {

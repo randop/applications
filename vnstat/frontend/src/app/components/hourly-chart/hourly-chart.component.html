@@ -15,7 +15,7 @@
           Time Range
         </label>
         <select
-          [value]="filterType"
+          [value]="filterType()"
           (change)="onFilterChange($any($event.target).value)"
           class="block w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
         >
@@ -26,14 +26,14 @@
       </div>
 
       <!-- Date Picker (shown when custom is selected) -->
-      @if (filterType === 'custom') {
+      @if (filterType() === 'custom') {
         <div class="flex-1 min-w-[150px]">
           <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
             Select Date
           </label>
           <input
             type="date"
-            [value]="selectedDate"
+            [value]="selectedDate()"
             (change)="onDateChange($any($event.target).value)"
             class="block w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
@@ -42,17 +42,17 @@
     </div>
   </div>
 
-  @if (loading) {
+  @if (loading()) {
     <div class="flex items-center justify-center h-64">
       <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
     </div>
   }
 
-  @if (error) {
+  @if (error()) {
     <div
       class="p-4 bg-red-50 dark:bg-red-900/50 border border-red-300 dark:border-red-700 rounded-lg"
     >
-      <p class="text-red-700 dark:text-red-200">{{ error }}</p>
+      <p class="text-red-700 dark:text-red-200">{{ error() }}</p>
       <button
         (click)="loadData()"
         class="mt-2 px-4 py-2 bg-red-600 dark:bg-red-700 hover:bg-red-700 dark:hover:bg-red-600 text-white rounded transition-colors"
@@ -62,9 +62,9 @@
     </div>
   }
 
-  @if (!loading && !error) {
+  @if (!loading() && !error()) {
     <div class="space-y-20">
-      @if (totalChartData.datasets.length > 0) {
+      @if (totalChartData().datasets.length > 0) {
         <div class="h-80">
           <h3 class="text-lg font-medium text-purple-600 dark:text-purple-400 mb-4">
             Total (Download + Upload)
@@ -72,8 +72,8 @@
           <div style="position: relative; height: 300px; width: 100%">
             <canvas
               baseChart
-              [data]="totalChartData"
-              [options]="chartOptions"
+              [data]="totalChartData()"
+              [options]="chartOptions()"
               [type]="'bar'"
               style="width: 100%; height: 100%"
             ></canvas>
@@ -81,14 +81,14 @@
         </div>
       }
 
-      @if (rxChartData.datasets.length > 0) {
+      @if (rxChartData().datasets.length > 0) {
         <div class="h-80">
           <h3 class="text-lg font-medium text-blue-600 dark:text-blue-400 mb-4">Download (RX)</h3>
           <div style="position: relative; height: 300px; width: 100%">
             <canvas
               baseChart
-              [data]="rxChartData"
-              [options]="chartOptions"
+              [data]="rxChartData()"
+              [options]="chartOptions()"
               [type]="'line'"
               style="width: 100%; height: 100%"
             ></canvas>
@@ -96,14 +96,14 @@
         </div>
       }
 
-      @if (txChartData.datasets.length > 0) {
+      @if (txChartData().datasets.length > 0) {
         <div class="h-80 pb-12">
           <h3 class="text-lg font-medium text-green-600 dark:text-green-400 mb-4">Upload (TX)</h3>
           <div style="position: relative; height: 300px; width: 100%">
             <canvas
               baseChart
-              [data]="txChartData"
-              [options]="chartOptions"
+              [data]="txChartData()"
+              [options]="chartOptions()"
               [type]="'line'"
               style="width: 100%; height: 100%"
             ></canvas>
@@ -112,9 +112,9 @@
       }
 
       @if (
-        rxChartData.datasets.length === 0 &&
-        txChartData.datasets.length === 0 &&
-        totalChartData.datasets.length === 0
+        rxChartData().datasets.length === 0 &&
+        txChartData().datasets.length === 0 &&
+        totalChartData().datasets.length === 0
       ) {
         <div class="text-center py-12 text-gray-500 dark:text-gray-400">No data available</div>
       }

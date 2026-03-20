@@ -5,7 +5,8 @@ import {
   OnChanges,
   SimpleChanges,
   OnDestroy,
-  ChangeDetectorRef,
+  signal,
+  computed,
 } from '@angular/core';
 import { ChartConfiguration, ChartData } from 'chart.js';
 import { VnstatService } from '../../services/vnstat.service';
@@ -22,36 +23,17 @@ import { Subject, takeUntil } from 'rxjs';
 export class DailyChartComponent implements OnInit, OnChanges, OnDestroy {
   @Input() interfaceId: number | null = null;
 
-  totalChartData: ChartData<'bar'> = {
-    labels: [],
-    datasets: [],
-  };
+  // Signals for state
+  loading = signal<boolean>(false);
+  error = signal<string | null>(null);
 
-  rxChartData: ChartData<'line'> = {
-    labels: [],
-    datasets: [],
-  };
+  // Chart data signals
+  private totalChartDataRaw = signal<ChartData<'bar'>>({ labels: [], datasets: [] });
+  private rxChartDataRaw = signal<ChartData<'line'>>({ labels: [], datasets: [] });
+  private txChartDataRaw = signal<ChartData<'line'>>({ labels: [], datasets: [] });
 
-  txChartData: ChartData<'line'> = {
-    labels: [],
-    datasets: [],
-  };
-
-  chartOptions: ChartConfiguration['options'];
-  private destroy$ = new Subject<void>();
-
-  loading = false;
-  error: string | null = null;
-
-  constructor(
-    private vnstatService: VnstatService,
-    private themeService: ThemeService,
-    private cdr: ChangeDetectorRef
-  ) {
-    this.chartOptions = this.getChartOptions();
-  }
-
-  private getChartOptions(): ChartConfiguration['options'] {
+  // Computed chart options based on theme
+  chartOptions = computed<ChartConfiguration['options']>(() => {
     const isDark =
       this.themeService.getTheme() === 'dark' ||
       (this.themeService.getTheme() === 'system' &&
@@ -96,7 +78,19 @@ export class DailyChartComponent implements OnInit, OnChanges, OnDestroy {
         },
       },
     };
-  }
+  });
+
+  // Expose chart data for template
+  totalChartData = computed(() => this.totalChartDataRaw());
+  rxChartData = computed(() => this.rxChartDataRaw());
+  txChartData = computed(() => this.txChartDataRaw());
+
+  private destroy$ = new Subject<void>();
+
+  constructor(
+    private vnstatService: VnstatService,
+    private themeService: ThemeService
+  ) {}
 
   ngOnDestroy(): void {
     this.destroy$.next();
@@ -111,7 +105,7 @@ export class DailyChartComponent implements OnInit, OnChanges, OnDestroy {
       .onThemeChange()
       .pipe(takeUntil(this.destroy$))
       .subscribe(() => {
-        this.chartOptions = this.getChartOptions();
+        // chartOptions is computed, so it will automatically update
       });
   }
 
@@ -122,29 +116,27 @@ export class DailyChartComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   loadData(): void {
-    this.loading = true;
-    this.error = null;
+    this.loading.set(true);
+    this.error.set(null);
 
     this.vnstatService.getDailyStats(this.interfaceId ?? undefined, 30).subscribe({
       next: (responses: StatsResponse[]) => {
         this.processData(responses);
-        this.loading = false;
-        this.cdr.detectChanges();
+        this.loading.set(false);
       },
       error: err => {
-        this.error = 'Failed to load daily data';
-        this.loading = false;
+        this.error.set('Failed to load daily data');
+        this.loading.set(false);
         console.error('Error loading daily data:', err);
-        this.cdr.detectChanges();
       },
     });
   }
 
   private processData(responses: StatsResponse[]): void {
     if (responses.length === 0 || !responses[0]?.data || responses[0].data.length === 0) {
-      this.totalChartData = { labels: [], datasets: [] };
-      this.rxChartData = { labels: [], datasets: [] };
-      this.txChartData = { labels: [], datasets: [] };
+      this.totalChartDataRaw.set({ labels: [], datasets: [] });
+      this.rxChartDataRaw.set({ labels: [], datasets: [] });
+      this.txChartDataRaw.set({ labels: [], datasets: [] });
       return;
     }
 
@@ -199,10 +191,9 @@ export class DailyChartComponent implements OnInit, OnChanges, OnDestroy {
       });
     });
 
-    this.totalChartData = { labels, datasets: totalDatasets };
-    this.rxChartData = { labels, datasets: rxDatasets };
-    this.txChartData = { labels, datasets: txDatasets };
-    this.cdr.markForCheck();
+    this.totalChartDataRaw.set({ labels, datasets: totalDatasets });
+    this.rxChartDataRaw.set({ labels, datasets: rxDatasets });
+    this.txChartDataRaw.set({ labels, datasets: txDatasets });
   }
 
   humanizeBytes(bytes: number): string {
