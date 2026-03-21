@@ -1,10 +1,12 @@
 import { Component, HostListener, ElementRef, signal, computed } from '@angular/core';
+import { CommonModule } from '@angular/common';
 import { ThemeService, Theme } from '../../services/theme.service';
 
 @Component({
   selector: 'app-theme-toggle',
   templateUrl: './theme-toggle.component.html',
-  standalone: false,
+  standalone: true,
+  imports: [CommonModule],
 })
 export class ThemeToggleComponent {
   isOpen = signal(false);

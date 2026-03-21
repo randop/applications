@@ -2,7 +2,7 @@ import { Pipe, PipeTransform } from '@angular/core';
 
 @Pipe({
   name: 'humanizeBytes',
-  standalone: false,
+  standalone: true,
 })
 export class HumanizeBytesPipe implements PipeTransform {
   transform(bytes: number, decimals: number = 2): string {

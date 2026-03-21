@@ -9,7 +9,9 @@ import {
   computed,
   effect,
 } from '@angular/core';
+import { CommonModule } from '@angular/common';
 import { ChartConfiguration, ChartData } from 'chart.js';
+import { BaseChartDirective } from 'ng2-charts';
 import { VnstatService } from '../../services/vnstat.service';
 import { ThemeService } from '../../services/theme.service';
 import { StatsResponse, StatsDataPoint } from '../../models/vnstat.model';
@@ -20,7 +22,8 @@ type HourlyFilterType = 'last24hours' | 'today' | 'custom';
   selector: 'app-hourly-chart',
   templateUrl: './hourly-chart.component.html',
   styleUrls: ['./hourly-chart.component.scss'],
-  standalone: false,
+  standalone: true,
+  imports: [CommonModule, BaseChartDirective],
 })
 export class HourlyChartComponent implements OnInit, OnChanges, OnDestroy {
   @Input() interfaceId: number | null = null;

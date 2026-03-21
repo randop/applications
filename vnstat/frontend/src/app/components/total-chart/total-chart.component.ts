@@ -1,5 +1,7 @@
 import { Component, Input, OnInit, OnChanges, SimpleChanges } from '@angular/core';
+import { CommonModule } from '@angular/common';
 import { ChartConfiguration, ChartData } from 'chart.js';
+import { BaseChartDirective } from 'ng2-charts';
 import { VnstatService } from '../../services/vnstat.service';
 import { StatsResponse, StatsDataPoint } from '../../models/vnstat.model';
 
@@ -7,7 +9,8 @@ import { StatsResponse, StatsDataPoint } from '../../models/vnstat.model';
   selector: 'app-total-chart',
   templateUrl: './total-chart.component.html',
   styleUrls: ['./total-chart.component.scss'],
-  standalone: false,
+  standalone: true,
+  imports: [CommonModule, BaseChartDirective],
 })
 export class TotalChartComponent implements OnInit, OnChanges {
   @Input() interfaceId: number | null = null;

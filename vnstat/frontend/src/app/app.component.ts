@@ -1,14 +1,11 @@
 import { Component } from '@angular/core';
+import { DashboardComponent } from './components/dashboard/dashboard.component';
 
 @Component({
   selector: 'app-root',
-  template: `
-    <div class="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-300">
-      <app-dashboard></app-dashboard>
-    </div>
-  `,
-  styles: [],
-  standalone: false,
+  templateUrl: './app.component.html',
+  standalone: true,
+  imports: [DashboardComponent],
 })
 export class AppComponent {
   title = 'VNStat Dashboard';

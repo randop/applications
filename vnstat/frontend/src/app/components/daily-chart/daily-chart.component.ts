@@ -8,7 +8,9 @@ import {
   signal,
   computed,
 } from '@angular/core';
+import { CommonModule } from '@angular/common';
 import { ChartConfiguration, ChartData } from 'chart.js';
+import { BaseChartDirective } from 'ng2-charts';
 import { VnstatService } from '../../services/vnstat.service';
 import { ThemeService } from '../../services/theme.service';
 import { StatsResponse, StatsDataPoint } from '../../models/vnstat.model';
@@ -17,7 +19,8 @@ import { StatsResponse, StatsDataPoint } from '../../models/vnstat.model';
   selector: 'app-daily-chart',
   templateUrl: './daily-chart.component.html',
   styleUrls: ['./daily-chart.component.scss'],
-  standalone: false,
+  standalone: true,
+  imports: [CommonModule, BaseChartDirective],
 })
 export class DailyChartComponent implements OnInit, OnChanges, OnDestroy {
   @Input() interfaceId: number | null = null;

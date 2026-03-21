@@ -1,4 +1,4 @@
-import { Injectable, Inject, Renderer2, RendererFactory2, signal, computed } from '@angular/core';
+import { Injectable, Renderer2, RendererFactory2, signal, computed, inject } from '@angular/core';
 import { DOCUMENT } from '@angular/common';
 
 export type Theme = 'system' | 'light' | 'dark';
@@ -7,6 +7,8 @@ export type Theme = 'system' | 'light' | 'dark';
   providedIn: 'root',
 })
 export class ThemeService {
+  private document = inject(DOCUMENT);
+  private rendererFactory = inject(RendererFactory2);
   private renderer: Renderer2;
   private mediaQuery: MediaQueryList | null = null;
 
@@ -24,11 +26,8 @@ export class ThemeService {
     return false;
   });
 
-  constructor(
-    @Inject(DOCUMENT) private document: Document,
-    rendererFactory: RendererFactory2
-  ) {
-    this.renderer = rendererFactory.createRenderer(null, null);
+  constructor() {
+    this.renderer = this.rendererFactory.createRenderer(null, null);
     this.initTheme();
   }
 
