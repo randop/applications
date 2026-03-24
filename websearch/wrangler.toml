@@ -1,0 +1,31 @@
+# ============================================================
+# wrangler.toml — Cloudflare Worker configuration
+# Deploy with:  npx wrangler deploy
+# ============================================================
+
+name        = "algolia-search-proxy"
+main        = "algolia-proxy-worker.js"
+compatibility_date = "2024-09-23"
+
+# ── Route binding ────────────────────────────────────────────
+# Serve the worker at /api/search on your zone
+[[routes]]
+pattern = "yourdomain.com/api/search"
+zone_name = "yourdomain.com"
+
+# ── KV namespace for rate limiting ───────────────────────────
+# 1. Create the namespace:  npx wrangler kv:namespace create RATE_LIMIT_KV
+# 2. Paste the returned id below
+[[kv_namespaces]]
+binding = "RATE_LIMIT_KV"
+id      = "PASTE_YOUR_KV_NAMESPACE_ID_HERE"
+
+# ── Secrets (set via CLI, never committed to git) ────────────
+# These are available as env.SECRET_NAME inside the worker.
+# Although the worker currently inlines the search-only key,
+# you can move it to a secret for extra safety:
+#
+#   npx wrangler secret put ALGOLIA_SEARCH_KEY
+#
+# Then reference it as:  env.ALGOLIA_SEARCH_KEY
+# ─────────────────────────────────────────────────────────────

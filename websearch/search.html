@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Secure Search</title>
+  <style>
+    :root {
+      --bg: #0f0f0f;
+      --surface: #1a1a1a;
+      --border: #2e2e2e;
+      --accent: #4f8ef7;
+      --text: #e8e8e8;
+      --muted: #888;
+      --radius: 10px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      padding: 2rem 1rem;
+      min-height: 100vh;
+    }
+    .search-wrapper {
+      max-width: 680px;
+      margin: 0 auto;
+    }
+    h1 { font-size: 1.6rem; margin-bottom: 1.5rem; }
+
+    /* ── Input ── */
+    .search-row {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+    }
+    #searchInput {
+      flex: 1;
+      padding: 0.75rem 1rem;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+      color: var(--text);
+      font-size: 1rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    #searchInput:focus { border-color: var(--accent); }
+    #searchBtn {
+      padding: 0.75rem 1.4rem;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: var(--radius);
+      font-size: 0.95rem;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+    #searchBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* ── Status & results ── */
+    #status { font-size: 0.85rem; color: var(--muted); margin-bottom: 0.75rem; min-height: 1.2em; }
+    #results { display: flex; flex-direction: column; gap: 0.75rem; }
+
+    .result-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1rem 1.2rem;
+      text-decoration: none;
+      color: inherit;
+      display: block;
+      transition: border-color 0.2s;
+    }
+    .result-card:hover { border-color: var(--accent); }
+    .result-card h3 { font-size: 1rem; margin-bottom: 0.3rem; }
+    .result-card h3 em { font-style: normal; color: var(--accent); }
+    .result-card p  { font-size: 0.88rem; color: var(--muted); line-height: 1.5; }
+    .result-card p  em { font-style: normal; color: var(--text); }
+    .result-url { font-size: 0.8rem; color: var(--muted); margin-top: 0.4rem; }
+
+    /* ── Pagination ── */
+    #pagination {
+      display: flex;
+      justify-content: center;
+      gap: 0.5rem;
+      margin-top: 1.5rem;
+    }
+    #pagination button {
+      padding: 0.4rem 0.9rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      cursor: pointer;
+      font-size: 0.85rem;
+    }
+    #pagination button.active,
+    #pagination button:hover { border-color: var(--accent); color: var(--accent); }
+    #pagination button:disabled { opacity: 0.4; cursor: not-allowed; }
+  </style>
+</head>
+<body>
+
+<div class="search-wrapper">
+  <h1>🔍 Search</h1>
+
+  <div class="search-row">
+    <input
+      id="searchInput"
+      type="search"
+      placeholder="Search…"
+      autocomplete="off"
+      maxlength="200"
+      aria-label="Search"
+    />
+    <button id="searchBtn">Search</button>
+  </div>
+
+  <div id="status"></div>
+  <div id="results" role="list"></div>
+  <div id="pagination"></div>
+</div>
+
+<script>
+  // ── CONFIG ──────────────────────────────────────────────────
+  // NOTE: No Algolia credentials here — all requests go through your Worker.
+  const PROXY_URL = "/api/search"; // same origin → no CORS preflight needed
+
+  // ── STATE ───────────────────────────────────────────────────
+  let currentQuery = "";
+  let currentPage  = 0;
+  let totalPages   = 0;
+  let isLoading    = false;
+
+  // ── DOM ─────────────────────────────────────────────────────
+  const input      = document.getElementById("searchInput");
+  const btn        = document.getElementById("searchBtn");
+  const statusEl   = document.getElementById("status");
+  const resultsEl  = document.getElementById("results");
+  const paginEl    = document.getElementById("pagination");
+
+  // ── DEBOUNCE ─────────────────────────────────────────────────
+  let debounceTimer;
+  input.addEventListener("input", () => {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => {
+      currentPage = 0;
+      search(input.value.trim());
+    }, 350); // 350ms debounce drastically cuts API calls
+  });
+
+  input.addEventListener("keydown", e => {
+    if (e.key === "Enter") {
+      clearTimeout(debounceTimer);
+      currentPage = 0;
+      search(input.value.trim());
+    }
+  });
+
+  btn.addEventListener("click", () => {
+    clearTimeout(debounceTimer);
+    currentPage = 0;
+    search(input.value.trim());
+  });
+
+  // ── SEARCH ──────────────────────────────────────────────────
+  async function search(query, page = 0) {
+    if (isLoading) return;
+
+    const q = query.trim();
+    // Basic client-side guard: don't fire for empty or unchanged queries
+    if (!q) { clear(); return; }
+
+    currentQuery = q;
+    currentPage  = page;
+    isLoading    = true;
+    btn.disabled = true;
+    statusEl.textContent = "Searching…";
+    resultsEl.innerHTML  = "";
+    paginEl.innerHTML    = "";
+
+    try {
+      const res = await fetch(PROXY_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type":      "application/json",
+          // Include a timestamp so the Worker can verify request freshness
+          "X-Request-Timestamp": Math.floor(Date.now() / 1000).toString(),
+        },
+        body: JSON.stringify({ query: q, page, hitsPerPage: 10 }),
+      });
+
+      if (res.status === 429) {
+        const retryAfter = res.headers.get("Retry-After") || "60";
+        statusEl.textContent = `Rate limit reached. Please wait ${retryAfter}s.`;
+        return;
+      }
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        statusEl.textContent = `Error: ${err.error || "Something went wrong."}`;
+        return;
+      }
+
+      const data = await res.json();
+      totalPages = data.nbPages || 1;
+      renderResults(data);
+      renderPagination(data.page, totalPages);
+
+    } catch (err) {
+      statusEl.textContent = "Network error. Please try again.";
+      console.error(err);
+    } finally {
+      isLoading    = false;
+      btn.disabled = false;
+    }
+  }
+
+  // ── RENDER ───────────────────────────────────────────────────
+  function renderResults(data) {
+    const { hits, nbHits, processingTimeMS, query } = data;
+
+    if (!hits.length) {
+      statusEl.textContent = `No results for "${escHtml(query)}".`;
+      return;
+    }
+
+    statusEl.textContent =
+      `${nbHits.toLocaleString()} result${nbHits !== 1 ? "s" : ""} (${processingTimeMS}ms)`;
+
+    hits.forEach(hit => {
+      const title = highlight(hit._highlightResult?.title?.value || hit.title || "Untitled");
+      const desc  = highlight(hit._highlightResult?.description?.value || hit.description || "");
+      const url   = escHtml(hit.url || "#");
+
+      const card = document.createElement("a");
+      card.className = "result-card";
+      card.href      = url;
+      card.setAttribute("role", "listitem");
+      card.innerHTML = `
+        <h3>${title}</h3>
+        ${desc ? `<p>${desc}</p>` : ""}
+        <div class="result-url">${url}</div>
+      `;
+      resultsEl.appendChild(card);
+    });
+  }
+
+  function renderPagination(page, total) {
+    if (total <= 1) return;
+
+    const prev = document.createElement("button");
+    prev.textContent = "← Prev";
+    prev.disabled    = page === 0;
+    prev.addEventListener("click", () => search(currentQuery, page - 1));
+
+    const info = document.createElement("button");
+    info.textContent = `${page + 1} / ${total}`;
+    info.className   = "active";
+    info.disabled    = true;
+
+    const next = document.createElement("button");
+    next.textContent = "Next →";
+    next.disabled    = page >= total - 1;
+    next.addEventListener("click", () => search(currentQuery, page + 1));
+
+    paginEl.append(prev, info, next);
+  }
+
+  // ── UTILS ────────────────────────────────────────────────────
+  function clear() {
+    statusEl.textContent = "";
+    resultsEl.innerHTML  = "";
+    paginEl.innerHTML    = "";
+  }
+
+  function escHtml(str) {
+    return String(str)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  // Convert Algolia highlight tokens (<em> tags) into safe HTML.
+  // We ONLY allow <em> from Algolia; everything else is escaped.
+  function highlight(str) {
+    // Algolia wraps matches in <em>…</em>; pull them out safely.
+    const parts = String(str).split(/(<em>.*?<\/em>)/g);
+    return parts.map(p => {
+      if (/^<em>.*<\/em>$/.test(p)) {
+        const inner = p.slice(4, -5);
+        return `<em>${escHtml(inner)}</em>`;
+      }
+      return escHtml(p);
+    }).join("");
+  }
+</script>
+</body>
+</html>

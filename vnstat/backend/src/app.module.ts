@@ -13,7 +13,7 @@ import { resolve } from 'path';
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({
         type: 'sqlite',
-        database: configService.get('DB_PATH') || resolve(__dirname, '../../', 'vnstat.db'),
+        database: configService.get('DB_PATH') || resolve(__dirname, '../../vnstat.db'),
         entities: [__dirname + '/**/*.entity{.ts,.js}'],
         synchronize: false,
       }),
