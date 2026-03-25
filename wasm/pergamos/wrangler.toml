@@ -1,0 +1,34 @@
+name = "pergamos"
+main = "shims/index.js"
+compatibility_date = "2026-03-25"
+
+# Required for @cloudflare/workers-wasi (it uses WebAssembly + some internal APIs)
+compatibility_flags = ["nodejs_compat"]
+
+# Optional but recommended
+#workers_dev = true
+
+# If you want to serve on a custom domain (uncomment and adjust)
+# [[routes]]
+# pattern = "wasi.yourdomain.com/*"
+# zone_name = "yourdomain.com"
+
+# Example: if you need to pass environment variables to the worker
+# [vars]
+# ENVIRONMENT = "production"
+
+# If your WASI app needs R2, KV, D1, etc., add them here
+# [[r2_buckets]]
+# binding = "MY_BUCKET"
+# bucket_name = "my-wasi-bucket"
+
+# === Make wrangler dev listen on all interfaces ===
+[dev]
+ip = "0.0.0.0"
+port = 8787
+
+[observability]
+enabled = true
+
+[observability.logs]
+invocation_logs = false

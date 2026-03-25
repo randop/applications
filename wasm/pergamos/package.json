@@ -1,0 +1,18 @@
+{
+  "name": "pergamos",
+  "version": "1.0.1",
+  "description": "",
+  "main": "shims/index.js",
+  "private": true,
+  "scripts": {
+    "start": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "keywords": [],
+  "author": "Randolph Ledesma",
+  "license": "Apache-2.0",
+  "packageManager": "pnpm@10.26.2",
+  "dependencies": {
+    "@cloudflare/workers-wasi": "^0.0.5"
+  }
+}

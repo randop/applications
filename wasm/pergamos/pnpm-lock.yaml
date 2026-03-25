@@ -1,0 +1,22 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+importers:
+
+  .:
+    dependencies:
+      '@cloudflare/workers-wasi':
+        specifier: ^0.0.5
+        version: 0.0.5
+
+packages:
+
+  '@cloudflare/workers-wasi@0.0.5':
+    resolution: {integrity: sha512-Gxu2tt2YY8tRgN7vfY8mSW0Md5wUj5+gb5eYrqsGRM+qJn9jx+ButL6BteLluDe5vlEkxQ69LagEMHjE58O7iQ==}
+
+snapshots:
+
+  '@cloudflare/workers-wasi@0.0.5': {}
