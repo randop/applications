@@ -6,6 +6,8 @@
 #include <optional>
 #include <iostream>
 
+#include "environment.hpp"
+
 std::string read_line_stdin()
 {
     std::string line;

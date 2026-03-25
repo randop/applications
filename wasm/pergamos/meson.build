@@ -14,13 +14,20 @@ project(
 )
 
 sources = ['src/main.cpp']
+inc_src = include_directories('src')
+inc_dirs = [inc_src]
 
 WASM_DIRECTIVES = host_machine.system() == 'wasi' or host_machine.cpu_family() == 'wasm32'
 
 if WASM_DIRECTIVES
     # WASM target
-    executable('pergamos.wasm', sources, install: true)
+    executable(
+        'pergamos.wasm',
+        sources,
+        include_directories: inc_dirs,
+        install: true,
+    )
 else
     # native target
-    executable('pergamos', sources, install: true)
+    executable('pergamos', sources, include_directories: inc_dirs, install: true)
 endif

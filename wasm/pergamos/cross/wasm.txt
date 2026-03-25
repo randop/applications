@@ -4,6 +4,8 @@ cpp = '/opt/wasi-sdk-32/bin/clang++'
 ar = '/opt/wasi-sdk-32/bin/llvm-ar'
 ld = '/opt/wasi-sdk-32/bin/ld.lld'
 strip = '/opt/wasi-sdk-32/bin/llvm-strip'
+c_ld = '/opt/wasi-sdk-32/bin/wasm-ld'
+cpp_ld = '/opt/wasi-sdk-32/bin/wasm-ld'
 
 [host_machine]
 system = 'wasi'
@@ -48,9 +50,7 @@ cpp_link_args = [
     '--target=wasm32-wasip1',
     '-O3',
     '-flto',
-    '-lm',
-    '-lc++',
-    '-lc++abi',
+    '-Wl,-lm,-lc++,-lc++abi',
     '-nostartfiles',
     '-Wl,--no-entry',
     '-Wl,--export-all',

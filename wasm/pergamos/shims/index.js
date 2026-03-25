@@ -44,6 +44,13 @@ export default {
         sock_close: () => 0,
         sock_open: () => 0,
       },
+      env: {
+        abort: () => { throw new Error("Wasm abort"); },
+        sysinfo: (ptr) => {
+          console.warn("sysinfo() is unsupported");
+          return -1;
+        },
+      }
     };
 
     let instance;
