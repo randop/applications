@@ -14,8 +14,18 @@ project(
 )
 
 sources = ['src/main.cpp']
+
+# ================================================================
+# wolfSSL static library
+# ================================================================
+wolfssl_root = '/opt/wolfssl/current'
+
+wolfssl_inc = include_directories(wolfssl_root / 'include')
+
 inc_src = include_directories('src')
-inc_dirs = [inc_src]
+inc_dirs = [inc_src, wolfssl_inc]
+
+deps = []
 
 WASM_DIRECTIVES = host_machine.system() == 'wasi' or host_machine.cpu_family() == 'wasm32'
 
@@ -25,9 +35,17 @@ if WASM_DIRECTIVES
         'pergamos.wasm',
         sources,
         include_directories: inc_dirs,
+        dependencies: deps,
         install: true,
     )
 else
     # native target
-    executable('pergamos', sources, include_directories: inc_dirs, install: true)
+    executable(
+        'pergamos',
+        sources,
+        include_directories: inc_dirs,
+        dependencies: deps,
+        link_args: [wolfssl_root / 'lib' / 'libwolfssl.a'],
+        install: true,
+    )
 endif

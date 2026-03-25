@@ -50,6 +50,7 @@ export default {
           console.warn("sysinfo() is unsupported");
           return -1;
         },
+        Base64_Encode: () => { throw new Error("Base64_Encode not implemented"); },
       }
     };
 
@@ -128,9 +129,11 @@ function responseHeaders(request) {
 async function drainToConsole(readable) {
   try {
     const reader = readable.getReader();
+    const decoder = new TextDecoder();
     while (true) {
       const { done } = await reader.read();
       if (done) break;
+      console.error("[wasm stderr]", decoder.decode(value));
     }
   } catch (_) {
     // best-effort

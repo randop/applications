@@ -1,0 +1,12 @@
+--- /tmp/wolfssl-5.9.0-stable/wolfssl/wolfcrypt/asn.h	2026-03-18 22:57:35.000000000 +0000
++++ /home/johnpaul/works/wolfssl-5.9.0-stable/wolfssl/wolfcrypt/asn.h	2026-03-25 20:44:43.765562927 +0000
+@@ -83,6 +83,9 @@
+     #include <wolfssl/wolfcrypt/md5.h>
+ #endif
+ #include <wolfssl/wolfcrypt/sha256.h>
++#ifdef WOLFSSL_SHA512
++#include <wolfssl/wolfcrypt/sha512.h>
++#endif
+ #ifdef WOLFSSL_SM3
+     #include <wolfssl/wolfcrypt/sm3.h>
+ #endif

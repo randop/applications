@@ -1,0 +1,26 @@
+--- /tmp/wolfssl-5.9.0-stable/wolfcrypt/src/random.c	2026-03-18 22:57:35.000000000 +0000
++++ /home/johnpaul/works/wolfssl-5.9.0-stable/wolfcrypt/src/random.c	2026-03-25 19:44:45.418387103 +0000
+@@ -1387,7 +1387,8 @@
+ 
+ #ifdef CUSTOM_RAND_GENERATE_BLOCK
+     XMEMSET(output, 0, sz);
+-    ret = (int)CUSTOM_RAND_GENERATE_BLOCK(output, sz);
++    extern int myRngFunc(byte* output, word32 sz);
++        ret = (int)CUSTOM_RAND_GENERATE_BLOCK(output, sz);
+     #ifdef WC_VERBOSE_RNG
+     if (ret != 0)
+         WOLFSSL_DEBUG_PRINTF(
+@@ -3421,9 +3422,10 @@
+         return 0;
+     }
+ #elif defined(CUSTOM_RAND_GENERATE_BLOCK)
+-    /* #define CUSTOM_RAND_GENERATE_BLOCK myRngFunc
+-     * extern int myRngFunc(byte* output, word32 sz);
+-     */
++	/*
++    #define CUSTOM_RAND_GENERATE_BLOCK myRngFunc
++    extern int myRngFunc(byte* output, word32 sz);
++    */
+ 
+ #elif defined(__MICROBLAZE__)
+     #warning weak source of entropy

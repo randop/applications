@@ -5,6 +5,7 @@
 * C++20 toolchain (gcc/clang)
 * Meson ≥ 1.0, Ninja
 * Python 3 (≥ 3.8)
+* [wolfSSL v5.9.0](https://github.com/wolfSSL/wolfssl)
 * [WASI SDK v32](https://github.com/WebAssembly/wasi-sdk)
 * [wasmtime v43 - standalone runtime for WebAssembly](https://github.com/bytecodealliance/wasmtime/releases/download/v43.0.0/wasmtime-v43.0.0-x86_64-linux.tar.xz)
 
@@ -30,4 +31,18 @@ meson setup .build-wasm \
   --cross-file cross/wasm.txt \
   --buildtype=release \
   --default-library=static
+```
+
+## wolfSSL configure
+```sh
+./configure --host=wasm32-wasip1 \
+  --prefix=/opt/wolfssl/current-wasm \
+  --enable-static \
+  --disable-shared \
+  --disable-asm \
+  --disable-examples \
+  --disable-benchmark \
+  --disable-crypttests \
+  --disable-filesystem \
+  CFLAGS="-O2 -fPIC -DWOLFSSL_USER_SETTINGS -I/applications/wasm/pergamos/src"
 ```
