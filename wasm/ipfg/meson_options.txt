@@ -1,0 +1,12 @@
+option(
+    'static',
+    type: 'boolean',
+    value: true,
+    description: 'Statically link with musl (native builds)',
+)
+option(
+    'wasi',
+    type: 'boolean',
+    value: false,
+    description: 'Build the WASI/WASM target',
+)

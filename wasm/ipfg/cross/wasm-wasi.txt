@@ -1,0 +1,48 @@
+[binaries]
+c = '/opt/wasi-sdk-32/bin/clang'
+cpp = '/opt/wasi-sdk-32/bin/clang++'
+ar = '/opt/wasi-sdk-32/bin/llvm-ar'
+ld = '/opt/wasi-sdk-32/bin/ld.lld'
+strip = '/opt/wasi-sdk-32/bin/llvm-strip'
+
+[host_machine]
+system = 'wasi'
+cpu_family = 'wasm32'
+cpu = 'wasm32'
+endian = 'little'
+
+[properties]
+sysroot = '/opt/wasi-sdk-32/share/wasi-sysroot'
+exe_suffix = '.wasm'
+
+[built-in options]
+c_args = ['--target=wasm32-wasip1', '-Os', '-flto', '-fno-exceptions', '-fno-rtti']
+
+cpp_args = [
+    '--target=wasm32-wasip1',
+    '-O3',
+    '-flto',
+    '-fno-exceptions',
+    '-fno-rtti',
+    '-isystem/opt/wasi-sdk-32/share/wasi-sysroot/share/libc++/v1']
+
+# Strong fix for duplicate _start when you provide your own
+c_link_args = [
+    '--target=wasm32-wasip1',
+    '-flto',
+    '-nostartfiles',
+    '-Wl,--no-entry',
+    '-Wl,--export-all',
+    '-Wl,--strip-all',
+    '-Wl,--allow-undefined']
+
+cpp_link_args = [
+    '--target=wasm32-wasip1',
+    '-O3',
+    '-flto',
+    '-nostartfiles',
+    '-Wl,--no-entry',
+    '-Wl,--export-all',
+    '-Wl,--strip-all',
+    '-Wl,--allow-undefined',
+    '-L/opt/wasi-sdk-32/share/wasi-sysroot/lib/wasm32-wasi']

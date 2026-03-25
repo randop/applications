@@ -1,0 +1,21 @@
+{
+  "name": "ipfg",
+  "version": "1.0.1",
+  "description": "GeoIP lookup service",
+  "main": "./shims/index.js",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "upload-wasm": "bash ./scripts/upload-wasm.sh",
+    "upload-wasm:preview": "bash ./scripts/upload-wasm.sh --preview",
+    "logs": "wrangler tail"
+  },
+  "keywords": [],
+  "author": "Randolph Ledesma",
+  "license": "Apache-2.0",
+  "packageManager": "pnpm@10.26.2",
+  "dependencies": {
+    "@cloudflare/workers-wasi": "^0.0.5",
+    "wrangler": "^4.77.0"
+  }
+}

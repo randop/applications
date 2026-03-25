@@ -1,0 +1,9 @@
+[project]
+name = "ipfg"
+version = "0.1.0"
+description = "GeoIP lookup service"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "maxminddb>=3.1.1",
+]
