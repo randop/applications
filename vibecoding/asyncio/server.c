@@ -21,6 +21,13 @@
 #define INTERVAL_LINE_BANNER_MS 10000
 #define MAX_LINE_LENGTH 32
 
+/**
+ * The maximum length of the queue for pending connections (passed directly to
+ * the OS listen() syscall). If more connections arrive than the backlog can
+ * hold, the OS silently drops or rejects them.
+ **/
+#define MAX_BACKLOG 64
+
 static unsigned long rng_state;
 
 /* Random line generator */
@@ -188,7 +195,7 @@ int main(void) {
   uv_ip6_addr("::", PORT, &addr);
   uv_tcp_bind(&server, (const struct sockaddr *)&addr, 0);
 
-  int r = uv_listen((uv_stream_t *)&server, 128, on_new_connection);
+  int r = uv_listen((uv_stream_t *)&server, MAX_BACKLOG, on_new_connection);
   if (r) {
     fprintf(stderr, "Listen error: %s\n", uv_err_name(r));
     return 1;
