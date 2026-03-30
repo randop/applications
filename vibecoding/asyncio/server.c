@@ -1,5 +1,5 @@
 #define VERSION_MAJOR 1
-#define VERSION_MINOR 0
+#define VERSION_MINOR 1
 #define VERSION_PATCH 0
 
 #define STRINGIFY0(x) #x
@@ -149,15 +149,21 @@ static void on_new_connection(uv_stream_t *server, int status) {
   if (uv_accept(server, (uv_stream_t *)&client->handle) == 0) {
     printf("Client connected\n");
 
-    /* Set tiny receive buffer + TCP_NODELAY */
+    /* Set receive buffer within the bounds of TCP MTU (~1500 bytes) */
     uv_os_fd_t fd;
     if (uv_fileno((uv_handle_t *)&client->handle, &fd) == 0) {
-      int value = 1;
+      int value = 1024;
       setsockopt((int)fd, SOL_SOCKET, SO_RCVBUF, &value, sizeof(value));
       setsockopt((int)fd, IPPROTO_TCP, TCP_NODELAY, &value, sizeof(value));
     }
 
-    /* Start reading immediately (consume attacker data) */
+    /*
+     * Prevents the Nagle algorithm from adding unnecessary latency
+     * See, https://grokipedia.com/page/nagle
+     */
+    uv_tcp_nodelay(&client->handle, 1);
+
+    /* Start reading immediately to consume and discard data */
     uv_read_start((uv_stream_t *)&client->handle, alloc_buffer, on_read);
 
     /* Schedule first banner line after initial DELAY */
