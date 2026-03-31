@@ -1,5 +1,5 @@
 #define VERSION_MAJOR 1
-#define VERSION_MINOR 1
+#define VERSION_MINOR 2
 #define VERSION_PATCH 0
 
 #define STRINGIFY0(x) #x
@@ -20,15 +20,13 @@
 #define PORT 2222
 #define INTERVAL_LINE_BANNER_MS 10000
 #define MAX_LINE_LENGTH 32
-
+#define READ_BUFFER_SIZE 1024
 /**
  * The maximum length of the queue for pending connections (passed directly to
  * the OS listen() syscall). If more connections arrive than the backlog can
  * hold, the OS silently drops or rejects them.
  **/
 #define MAX_BACKLOG 64
-
-static unsigned long rng_state;
 
 /* Random line generator */
 static unsigned rand16(unsigned long s[1]) {
@@ -53,13 +51,18 @@ typedef struct {
   uv_tcp_t handle;
   uv_timer_t timer;
   int refcount;
+  uv_write_t write_req; /* reused for every banner */
+  char read_buf[READ_BUFFER_SIZE];
+  unsigned long rng_state; /* per‑client RNG */
 } client_t;
 
 /* Buffer allocator for read callbacks */
 static void alloc_buffer(uv_handle_t *handle, size_t suggested_size,
                          uv_buf_t *buf) {
-  buf->base = (char *)malloc(suggested_size);
-  buf->len = suggested_size;
+  client_t *client = (handle->data);
+  buf->base = client->read_buf;
+  buf->len = sizeof(client->read_buf);
+  (void)suggested_size;
 }
 
 /* Close callback: frees client resources */
@@ -85,8 +88,6 @@ static void on_read(uv_stream_t *client_stream, ssize_t nread,
     uv_close((uv_handle_t *)&client->handle, on_close);
     uv_close((uv_handle_t *)&client->timer, on_close);
   }
-
-  free(buf->base);
 }
 
 /* Write callback: schedule next banner line or close on error */
@@ -102,8 +103,6 @@ static void on_write(uv_write_t *req, int status) {
     uv_timer_start(&client->timer, (uv_timer_cb)req->data,
                    INTERVAL_LINE_BANNER_MS, 0);
   }
-
-  free(req);
 }
 
 /* Timer callback: send one random banner line */
@@ -111,15 +110,9 @@ static void on_timer(uv_timer_t *timer) {
   client_t *client = (client_t *)timer->data;
 
   char line[256];
-  int len = randline(line, MAX_LINE_LENGTH, &rng_state);
+  int len = randline(line, MAX_LINE_LENGTH, &client->rng_state);
 
-  uv_write_t *req = (uv_write_t *)malloc(sizeof(uv_write_t));
-  if (!req) {
-    uv_close((uv_handle_t *)&client->handle, on_close);
-    uv_close((uv_handle_t *)&client->timer, on_close);
-    return;
-  }
-
+  uv_write_t *req = &client->write_req;
   /* Store timer callback pointer so on_write can restart the timer */
   req->data = (void *)on_timer;
 
@@ -127,7 +120,6 @@ static void on_timer(uv_timer_t *timer) {
   int r = uv_write(req, (uv_stream_t *)&client->handle, &buf, 1, on_write);
   if (r < 0) {
     fprintf(stderr, "uv_write failed: %s\n", uv_err_name(r));
-    free(req);
     uv_close((uv_handle_t *)&client->handle, on_close);
     uv_close((uv_handle_t *)&client->timer, on_close);
   }
@@ -183,9 +175,6 @@ static void on_new_connection(uv_stream_t *server, int status) {
 
 int main(void) {
   uv_loop_t *loop = uv_default_loop();
-
-  /* Seed the random banner generator */
-  rng_state = (unsigned long)uv_hrtime();
 
   uv_tcp_t server;
   uv_tcp_init(loop, &server);
