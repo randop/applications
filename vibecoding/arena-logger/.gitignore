@@ -1,0 +1,8 @@
+# objects
+*.o
+
+# binaries
+module
+
+# logs
+test.log
