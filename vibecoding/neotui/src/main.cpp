@@ -126,11 +126,13 @@ int main() {
     auto screen = ftxui::ScreenInteractive::Fullscreen();
     std::string code;
     std::string output;
+    std::string firstname;
+    std::string lastname;
 
     auto input_option = ftxui::InputOption::Default();
     input_option.transform = [&theme](ftxui::InputState state) {
         auto bg = theme.background;
-        auto fg = theme.foreground;
+        auto fg = state.is_placeholder ? theme.comment : theme.foreground;
         auto focus_fg = theme.yellow;
         
         auto fg_color = state.focused ? focus_fg : fg;
@@ -145,8 +147,28 @@ int main() {
         return element;
     };
     
-    // Input component for Lua code
-    auto input_component = ftxui::Input(&code, "Enter Lua code here...", input_option);
+    // Input components
+    auto firstname_option = ftxui::InputOption::Default();
+    firstname_option.multiline = false;
+    firstname_option.transform = input_option.transform;
+    auto firstname_input = ftxui::Input(&firstname, "Firstname", firstname_option);
+    
+    auto lastname_option = ftxui::InputOption::Default();
+    lastname_option.multiline = false;
+    lastname_option.transform = input_option.transform;
+    auto lastname_input = ftxui::Input(&lastname, "Lastname", lastname_option);
+    
+    auto code_option = ftxui::InputOption::Default();
+    code_option.transform = input_option.transform;
+    auto code_input = ftxui::Input(&code, "LUA", code_option);
+    
+    // Container to hold code input for size constraint
+    auto code_container = ftxui::Container::Vertical({});
+    code_container->Add(code_input);
+    
+    auto code_renderer = ftxui::Renderer(code_container, [&]() {
+        return code_input->Render() | ftxui::size(ftxui::HEIGHT, ftxui::EQUAL, 3);
+    });
 
     // Button to run the code
     auto run_button = ftxui::Button("Run Lua Code", [&L, &code, &output]() {
@@ -197,7 +219,7 @@ int main() {
             );
         }
 
-        return ftxui::vbox(buffer_lines) | ftxui::bgcolor(bg) | ftxui::yflex;
+        return ftxui::vbox(buffer_lines) | ftxui::bgcolor(bg) | ftxui::size(ftxui::HEIGHT, ftxui::GREATER_THAN, 3);
     });
 
     // Output renderer
@@ -210,7 +232,9 @@ int main() {
 
     // Layout: vertical container with input, button, output
     auto container = ftxui::Container::Vertical({
-        input_component,
+        firstname_input,
+        lastname_input,
+        code_input,
         run_button,
         output_renderer
     });
@@ -237,8 +261,17 @@ int main() {
             buffer_renderer->Render() | ftxui::yflex,
             ftxui::separator() | ftxui::color(border_fg),
             ftxui::hbox({
-                ftxui::text(":") | ftxui::color(accent),
-                input_component->Render() | ftxui::bgcolor(bg) | ftxui::color(fg) | ftxui::xflex,
+                ftxui::text("Firstname: ") | ftxui::color(accent),
+                firstname_input->Render() | ftxui::bgcolor(bg) | ftxui::color(fg) | ftxui::xflex
+            }),
+            ftxui::hbox({
+                ftxui::text("Lastname: ") | ftxui::color(accent),
+                lastname_input->Render() | ftxui::bgcolor(bg) | ftxui::color(fg) | ftxui::xflex
+            }),
+            ftxui::separator() | ftxui::color(border_fg),
+            ftxui::text(":") | ftxui::color(accent),
+            ftxui::hbox({
+                code_input->Render() | ftxui::bgcolor(bg) | ftxui::color(fg) | ftxui::size(ftxui::HEIGHT, ftxui::LESS_THAN, 4),
                 run_button->Render() | ftxui::bgcolor(bg) | ftxui::color(fg)
             }),
             output_renderer->Render(),
