@@ -1,3 +1,4 @@
+#include <iostream>
 #include <lua.hpp>
 #include <ftxui/component/component.hpp>
 #include <ftxui/component/screen_interactive.hpp>
@@ -95,19 +96,16 @@ int main() {
         plugins_path = (cwd / "plugins/init.lua").string();
     }
     
-    if (luaL_loadfile(L, plugins_path.c_str()) == LUA_OK) {
-        if (lua_pcall(L, 0, LUA_MULTRET, 0) != LUA_OK) {
-            fprintf(stderr, "Plugins load error: %s\n", lua_tostring(L, -1));
-            lua_pop(L, 1);
+    // Define process_path after plugins_path
+    std::string process_path = plugins_path;
+    {
+        size_t pos = process_path.rfind("init.lua");
+        if (pos != std::string::npos) {
+            process_path.replace(pos, 8, "process.lua");
         }
     }
 
-    auto themes = loadThemes();
-    std::string selected_theme = "dark";
-    ThemeColors theme = themes[selected_theme];
-    
-    bool config_loaded = false;
-    
+    // Load config/init.lua
     std::string config_path;
     if (std::filesystem::exists(cwd / "config/init.lua")) {
         config_path = (cwd / "config/init.lua").string();
@@ -115,6 +113,19 @@ int main() {
         config_path = (cwd / "build/config/init.lua").string();
     } else {
         config_path = (cwd / "config/init.lua").string();
+    }
+    
+    auto themes = loadThemes();
+    std::string selected_theme = "dark";
+    ThemeColors theme = themes[selected_theme];
+    bool config_loaded = false;
+    
+    // Load plugins/init.lua
+    if (luaL_loadfile(L, plugins_path.c_str()) == LUA_OK) {
+        if (lua_pcall(L, 0, LUA_MULTRET, 0) != LUA_OK) {
+            fprintf(stderr, "Plugins load error: %s\n", lua_tostring(L, -1));
+            lua_pop(L, 1);
+        }
     }
     
     int load_result = luaL_loadfile(L, config_path.c_str());
@@ -215,22 +226,26 @@ int main() {
     });
 
     // Process button - runs plugins/process.lua and shows in workspace_renderer
-    auto process_button = ftxui::Button("Process", [&, L]() {
-        workspace_output = "PROCESS";
+    auto process_button = ftxui::Button("Process", [&L, &workspace_output, &process_path]() {
+        workspace_output.clear();
         
-        // Change path to process.lua
-        std::string process_path = plugins_path;
-        size_t pos = process_path.rfind("init.lua");
-        if (pos != std::string::npos) {
-            process_path.replace(pos, 8, "process.lua");
-        }
+        lua_getglobal(L, "debug");
+        lua_getfield(L, -1, "traceback");
+        lua_remove(L, -2);
         
-        // Run the file
-        if (luaL_dofile(L, process_path.c_str()) == LUA_OK) {
-            if (lua_gettop(L) > 0 && lua_isstring(L, -1)) {
+        int errfunc = lua_gettop(L);
+        
+        if (luaL_loadfile(L, process_path.c_str()) == LUA_OK) {
+            if (lua_pcall(L, 0, 1, errfunc) == LUA_OK) {
                 workspace_output = lua_tostring(L, -1);
                 lua_pop(L, 1);
+            } else {
+                std::cerr << lua_tostring(L, -1) << std::endl;
+                lua_pop(L, 1);
             }
+        } else {
+            std::cerr << lua_tostring(L, -1) << std::endl;
+            lua_pop(L, 1);
         }
         
         lua_settop(L, 0);
@@ -238,11 +253,7 @@ int main() {
 
     // Workspace renderer (displays workspace_output)
     auto workspace_renderer = ftxui::Renderer([&]() {
-        auto bg = theme.background;
-        auto fg = theme.foreground;
-
-        std::string msg = workspace_output.empty() ? "EMPTY" : workspace_output;
-        return ftxui::text(msg) | ftxui::bgcolor(bg) | ftxui::color(fg);
+        return ftxui::text(workspace_output) | ftxui::bgcolor(theme.background) | ftxui::color(theme.foreground);
     });
 
     // Output renderer
