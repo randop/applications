@@ -9,6 +9,37 @@
 #include <vector>
 #include <sstream>
 #include <filesystem>
+#include <map>
+
+struct ThemeColors {
+    ftxui::Color background;
+    ftxui::Color foreground;
+    ftxui::Color accent;
+    ftxui::Color border;
+    ftxui::Color statusbar;
+    std::string name;
+};
+
+std::map<std::string, ThemeColors> loadThemes() {
+    return {
+        {"dark", {
+            ftxui::Color(34, 36, 54),    // background
+            ftxui::Color(200, 211, 245), // foreground
+            ftxui::Color(130, 170, 255), // accent
+            ftxui::Color(59, 66, 97),    // border
+            ftxui::Color(47, 51, 77),    // statusbar
+            "Moon"
+        }},
+        {"light", {
+            ftxui::Color(233, 233, 237), // background
+            ftxui::Color(55, 96, 191),   // foreground
+            ftxui::Color(46, 125, 225),  // accent
+            ftxui::Color(168, 174, 203), // border
+            ftxui::Color(200, 200, 210), // statusbar
+            "Day"
+        }}
+    };
+}
 
 int main() {
     // Initialize Lua state like Neovim does
@@ -18,22 +49,11 @@ int main() {
     lua_newtable(L);
     lua_setglobal(L, "ui");
 
-    // Tokyo Night Moon (dark) colors
-    auto bg_color_dark = ftxui::Color(34, 36, 54);
-    auto fg_color_dark = ftxui::Color(200, 211, 245);
-    auto accent_color_dark = ftxui::Color(130, 170, 255);
-    auto border_color_dark = ftxui::Color(59, 66, 97);
-    auto status_bg_dark = ftxui::Color(47, 51, 77);
-
-    // Tokyo Night Day (light) colors
-    auto bg_color_light = ftxui::Color(233, 233, 237);
-    auto fg_color_light = ftxui::Color(55, 96, 191);
-    auto accent_color_light = ftxui::Color(46, 125, 225);
-    auto border_color_light = ftxui::Color(168, 174, 203);
-    auto status_bg_light = ftxui::Color(200, 200, 210);
+    auto themes = loadThemes();
+    std::string selected_theme = "dark";
+    ThemeColors theme = themes[selected_theme];
 
     // Load config/init.lua
-    bool dark_theme = true; // Default
     bool config_loaded = false;
     
     std::string config_path;
@@ -56,10 +76,9 @@ int main() {
             lua_getfield(L, -1, "theme");
             if (lua_isstring(L, -1)) {
                 const char* theme_str = lua_tostring(L, -1);
-                if (strcmp(theme_str, "light") == 0) {
-                    dark_theme = false;
-                } else if (strcmp(theme_str, "dark") == 0) {
-                    dark_theme = true;
+                if (themes.count(theme_str)) {
+                    selected_theme = theme_str;
+                    theme = themes[selected_theme];
                 }
             }
             lua_pop(L, 1); // pop theme
@@ -110,13 +129,12 @@ int main() {
 
     // Buffer renderer (code with line numbers)
     auto buffer_renderer = ftxui::Renderer([&]() {
-        bool is_dark = dark_theme;
-        auto bg = is_dark ? bg_color_dark : bg_color_light;
-        auto fg = is_dark ? fg_color_dark : fg_color_light;
-        auto gutter_fg = is_dark ? border_color_dark : border_color_light;
+        auto bg = theme.background;
+        auto fg = theme.foreground;
+        auto gutter_fg = theme.border;
 
         std::vector<std::string> lines = split(code, '\n');
-        if (lines.empty()) lines.push_back(""); // at least one line
+        if (lines.empty()) lines.push_back("");
 
         ftxui::Elements buffer_lines;
         for (size_t i = 0; i < lines.size(); ++i) {
@@ -135,10 +153,9 @@ int main() {
 
     // Output renderer
     auto output_renderer = ftxui::Renderer([&]() {
-        bool is_dark = dark_theme;
-        auto bg = is_dark ? bg_color_dark : bg_color_light;
-        auto fg = is_dark ? fg_color_dark : fg_color_light;
-        auto border_fg = is_dark ? border_color_dark : border_color_light;
+        auto bg = theme.background;
+        auto fg = theme.foreground;
+        auto border_fg = theme.border;
         return ftxui::text(output) | ftxui::bgcolor(bg) | ftxui::color(fg) | ftxui::borderStyled(ftxui::BorderStyle::ROUNDED, border_fg);
     });
 
@@ -151,23 +168,21 @@ int main() {
 
     // Main renderer with LazyVim-like layout
     auto renderer = ftxui::Renderer(container, [&]() {
-        bool is_dark = dark_theme;
-        auto bg = is_dark ? bg_color_dark : bg_color_light;
-        auto fg = is_dark ? fg_color_dark : fg_color_light;
-        auto accent = is_dark ? accent_color_dark : accent_color_light;
-        auto border_fg = is_dark ? border_color_dark : border_color_light;
-        auto status_bg = is_dark ? status_bg_dark : status_bg_light;
+        auto bg = theme.background;
+        auto fg = theme.foreground;
+        auto accent = theme.accent;
+        auto border_fg = theme.border;
+        auto status_bg = theme.statusbar;
 
         // Get current time
         auto now = std::chrono::system_clock::now();
         std::time_t t = std::chrono::system_clock::to_time_t(now);
         std::string time_str = std::ctime(&t);
-        time_str.erase(time_str.find_last_not_of(" \n\r\t") + 1); // trim trailing whitespace
+        time_str.erase(time_str.find_last_not_of(" \n\r\t") + 1);
 
         // Status line (LazyVim style)
-        std::string theme_name = dark_theme ? "Moon" : "Day";
         std::string config_status = config_loaded ? "OK" : "Failed";
-        std::string status = " NORMAL  lua  NeoTUI  Theme: " + theme_name + "  Config: " + config_status + "  " + time_str;
+        std::string status = " NORMAL  lua  NeoTUI  Theme: " + theme.name + "  Config: " + config_status + "  " + time_str;
 
         return ftxui::vbox({
             ftxui::text("NeoTUI") | ftxui::bold | ftxui::color(accent) | ftxui::center,
