@@ -4,6 +4,7 @@ build/
 meson-private/
 meson-info/
 meson-logs/
+.cache/
 
 # Executables
 neotui

@@ -1,5 +1,5 @@
 project('neotui', 'cpp',
-  version: '0.1.1',
+  version: '0.1.2',
   default_options: ['cpp_std=c++20']
 )
 
@@ -14,5 +14,6 @@ lua_dep = dependency('lua')
 
 executable('neotui',
   'src/main.cpp',
-  dependencies : [lua_dep, ftxui_dep]
+  dependencies : [lua_dep, ftxui_dep],
+  install: false
 )

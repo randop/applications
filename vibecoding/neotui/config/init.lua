@@ -1,2 +1,1 @@
-ui.theme = "light"
-
+ui.theme = "dark"

@@ -8,30 +8,49 @@
 #include <ctime>
 #include <vector>
 #include <sstream>
+#include <filesystem>
 
 int main() {
     // Initialize Lua state like Neovim does
     lua_State *L = luaL_newstate();
     luaL_openlibs(L);
 
+    lua_newtable(L);
+    lua_setglobal(L, "ui");
+
     // Tokyo Night Moon (dark) colors
-    auto bg_color_dark = ftxui::Color(34, 36, 54);     // #222436
-    auto fg_color_dark = ftxui::Color(200, 211, 245);  // #c8d3f5
-    auto accent_color_dark = ftxui::Color(130, 170, 255); // #82aaff
-    auto border_color_dark = ftxui::Color(59, 66, 97);  // #3b4261 (fg_gutter)
-    auto status_bg_dark = ftxui::Color(47, 51, 77);     // #2f334d (bg_highlight)
+    auto bg_color_dark = ftxui::Color(34, 36, 54);
+    auto fg_color_dark = ftxui::Color(200, 211, 245);
+    auto accent_color_dark = ftxui::Color(130, 170, 255);
+    auto border_color_dark = ftxui::Color(59, 66, 97);
+    auto status_bg_dark = ftxui::Color(47, 51, 77);
 
     // Tokyo Night Day (light) colors
-    auto bg_color_light = ftxui::Color(233, 233, 237); // #e9e9ed
-    auto fg_color_light = ftxui::Color(55, 96, 191);   // #3760bf
-    auto accent_color_light = ftxui::Color(46, 125, 225); // #2e7de1
-    auto border_color_light = ftxui::Color(168, 174, 203); // #a8aecb
-    auto status_bg_light = ftxui::Color(200, 200, 210); // light status bg
+    auto bg_color_light = ftxui::Color(233, 233, 237);
+    auto fg_color_light = ftxui::Color(55, 96, 191);
+    auto accent_color_light = ftxui::Color(46, 125, 225);
+    auto border_color_light = ftxui::Color(168, 174, 203);
+    auto status_bg_light = ftxui::Color(200, 200, 210);
 
     // Load config/init.lua
     bool dark_theme = true; // Default
     bool config_loaded = false;
-    if (luaL_dofile(L, "config/init.lua") == LUA_OK) {
+    
+    std::string config_path;
+    std::filesystem::path cwd = std::filesystem::current_path();
+    if (std::filesystem::exists(cwd / "config/init.lua")) {
+        config_path = (cwd / "config/init.lua").string();
+    } else if (std::filesystem::exists(cwd / "build/config/init.lua")) {
+        config_path = (cwd / "build/config/init.lua").string();
+    } else {
+        config_path = (cwd / "config/init.lua").string();
+    }
+    
+    int load_result = luaL_loadfile(L, config_path.c_str());
+    if (load_result == LUA_OK) {
+        load_result = lua_pcall(L, 0, LUA_MULTRET, 0);
+    }
+    if (load_result == LUA_OK) {
         lua_getglobal(L, "ui");
         if (lua_istable(L, -1)) {
             lua_getfield(L, -1, "theme");
@@ -47,6 +66,10 @@ int main() {
         }
         lua_pop(L, 1); // pop ui
         config_loaded = true;
+    } else {
+        const char* err = lua_tostring(L, -1);
+        fprintf(stderr, "Config load error: %s\n", err ? err : "unknown");
+        lua_pop(L, 1);
     }
 
     // Initialize FTXUI screen
