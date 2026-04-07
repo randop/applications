@@ -1,0 +1,4 @@
+[wrap-file]
+directory = ftxui
+source_url = https://github.com/ArthurSonzogni/FTXUI/archive/refs/tags/v6.1.9.tar.gz
+source_filename = FTXUI-6.1.9.tar.gz

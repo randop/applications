@@ -1,0 +1,30 @@
+# Build directories
+build/
+.build/
+meson-private/
+meson-info/
+meson-logs/
+
+# Executables
+neotui
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+
+# Temporary files
+*.tmp
+*.swp
+*.bak
+*~
+
+# References
+neovim-src/
+
+# Subprojects
+subprojects/ftxui/
+subprojects/neovim-src/
