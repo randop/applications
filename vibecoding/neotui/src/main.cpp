@@ -2,6 +2,7 @@
 #include <ftxui/component/component.hpp>
 #include <ftxui/component/screen_interactive.hpp>
 #include <ftxui/dom/elements.hpp>
+#include <ftxui/screen/terminal.hpp>
 #include <string>
 #include <cstring>
 #include <chrono>
@@ -17,25 +18,55 @@ struct ThemeColors {
     ftxui::Color accent;
     ftxui::Color border;
     ftxui::Color statusbar;
+    ftxui::Color fg_gutter;
+    ftxui::Color bg_highlight;
+    ftxui::Color comment;
+    ftxui::Color green;
+    ftxui::Color yellow;
+    ftxui::Color red;
+    ftxui::Color magenta;
+    ftxui::Color purple;
+    ftxui::Color cyan;
+    ftxui::Color orange;
     std::string name;
 };
 
 std::map<std::string, ThemeColors> loadThemes() {
     return {
         {"dark", {
-            ftxui::Color(34, 36, 54),    // background
-            ftxui::Color(200, 211, 245), // foreground
-            ftxui::Color(130, 170, 255), // accent
-            ftxui::Color(59, 66, 97),    // border
-            ftxui::Color(47, 51, 77),    // statusbar
+            ftxui::Color::RGB(34, 36, 54),     // bg - #222436
+            ftxui::Color::RGB(200, 211, 245), // fg - #c8d3f5
+            ftxui::Color::RGB(130, 170, 255), // blue - #82aaff
+            ftxui::Color::RGB(59, 66, 97),    // border - #3b4261
+            ftxui::Color::RGB(47, 51, 77),    // statusbar - #2f334d
+            ftxui::Color::RGB(59, 66, 97),    // fg_gutter - #3b4261
+            ftxui::Color::RGB(47, 51, 77),    // bg_highlight - #2f334d
+            ftxui::Color::RGB(99, 109, 166),  // comment - #636da6
+            ftxui::Color::RGB(195, 232, 141), // green - #c3e88d
+            ftxui::Color::RGB(255, 199, 119), // yellow - #ffc777
+            ftxui::Color::RGB(255, 117, 127), // red - #ff757f
+            ftxui::Color::RGB(192, 153, 255), // magenta - #c099ff
+            ftxui::Color::RGB(252, 167, 234), // purple - #fca7ea
+            ftxui::Color::RGB(134, 225, 252), // cyan - #86e1fc
+            ftxui::Color::RGB(255, 150, 108), // orange - #ff966c
             "Moon"
         }},
         {"light", {
-            ftxui::Color(233, 233, 237), // background
-            ftxui::Color(55, 96, 191),   // foreground
-            ftxui::Color(46, 125, 225),  // accent
-            ftxui::Color(168, 174, 203), // border
-            ftxui::Color(200, 200, 210), // statusbar
+            ftxui::Color::RGB(233, 233, 237), // bg - #e9e9ed
+            ftxui::Color::RGB(55, 96, 191),   // fg - #3760bf
+            ftxui::Color::RGB(46, 125, 225),   // blue - #2e7de1
+            ftxui::Color::RGB(168, 174, 203), // border - #a8aecb
+            ftxui::Color::RGB(200, 200, 210), // statusbar
+            ftxui::Color::RGB(168, 174, 203), // fg_gutter
+            ftxui::Color::RGB(200, 200, 210), // bg_highlight
+            ftxui::Color::RGB(128, 132, 163), // comment
+            ftxui::Color::RGB(121, 192, 105), // green
+            ftxui::Color::RGB(255, 183, 78),  // yellow
+            ftxui::Color::RGB(213, 73, 75),   // red
+            ftxui::Color::RGB(175, 97, 255),  // magenta
+            ftxui::Color::RGB(197, 108, 240), // purple
+            ftxui::Color::RGB(56, 175, 183),  // cyan
+            ftxui::Color::RGB(255, 130, 90),  // orange
             "Day"
         }}
     };
@@ -52,8 +83,7 @@ int main() {
     auto themes = loadThemes();
     std::string selected_theme = "dark";
     ThemeColors theme = themes[selected_theme];
-
-    // Load config/init.lua
+    
     bool config_loaded = false;
     
     std::string config_path;
@@ -91,13 +121,32 @@ int main() {
         lua_pop(L, 1);
     }
 
-    // Initialize FTXUI screen
+    // Initialize FTXUI with TrueColor support before creating screen
+    ftxui::Terminal::SetColorSupport(ftxui::Terminal::Color::TrueColor);
     auto screen = ftxui::ScreenInteractive::Fullscreen();
     std::string code;
     std::string output;
 
+    auto input_option = ftxui::InputOption::Default();
+    input_option.transform = [&theme](ftxui::InputState state) {
+        auto bg = theme.background;
+        auto fg = theme.foreground;
+        auto focus_fg = theme.yellow;
+        
+        auto fg_color = state.focused ? focus_fg : fg;
+        auto border_fg = state.focused ? theme.yellow : theme.border;
+        
+        auto element = state.element | ftxui::bgcolor(bg) | ftxui::color(fg_color);
+        
+        if (state.focused) {
+            element = element | ftxui::borderStyled(ftxui::BorderStyle::ROUNDED, border_fg);
+        }
+        
+        return element;
+    };
+    
     // Input component for Lua code
-    auto input_component = ftxui::Input(&code, "Enter Lua code here...");
+    auto input_component = ftxui::Input(&code, "Enter Lua code here...", input_option);
 
     // Button to run the code
     auto run_button = ftxui::Button("Run Lua Code", [&L, &code, &output]() {
@@ -131,7 +180,7 @@ int main() {
     auto buffer_renderer = ftxui::Renderer([&]() {
         auto bg = theme.background;
         auto fg = theme.foreground;
-        auto gutter_fg = theme.border;
+        auto gutter_fg = theme.fg_gutter;
 
         std::vector<std::string> lines = split(code, '\n');
         if (lines.empty()) lines.push_back("");
@@ -182,11 +231,9 @@ int main() {
 
         // Status line (LazyVim style)
         std::string config_status = config_loaded ? "OK" : "Failed";
-        std::string status = " NORMAL  lua  NeoTUI  Theme: " + theme.name + "  Config: " + config_status + "  " + time_str;
+        std::string left_status = " NORMAL  lua  NeoTUI  Theme: " + theme.name + "  Config: " + config_status;
 
         return ftxui::vbox({
-            ftxui::text("NeoTUI") | ftxui::bold | ftxui::color(accent) | ftxui::center,
-            ftxui::separator() | ftxui::color(border_fg),
             buffer_renderer->Render() | ftxui::yflex,
             ftxui::separator() | ftxui::color(border_fg),
             ftxui::hbox({
@@ -196,7 +243,11 @@ int main() {
             }),
             output_renderer->Render(),
             ftxui::separator() | ftxui::color(border_fg),
-            ftxui::text(status) | ftxui::color(fg) | ftxui::bgcolor(status_bg)
+            ftxui::hbox({
+                ftxui::text(left_status) | ftxui::color(fg) | ftxui::bgcolor(status_bg),
+                ftxui::filler() | ftxui::bgcolor(status_bg),
+                ftxui::text(time_str) | ftxui::color(fg) | ftxui::bgcolor(status_bg)
+            }) | ftxui::bgcolor(status_bg)
         }) | ftxui::bgcolor(bg) | ftxui::color(fg) | ftxui::yflex;
     });
 
