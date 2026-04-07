@@ -1,102 +1,26 @@
 #include <iostream>
-#include <lua.hpp>
-#include <ftxui/component/component.hpp>
-#include <ftxui/component/screen_interactive.hpp>
-#include <ftxui/dom/elements.hpp>
-#include <ftxui/screen/terminal.hpp>
-#include <string>
-#include <cstring>
-#include <chrono>
-#include <ctime>
-#include <vector>
-#include <sstream>
 #include <filesystem>
-#include <map>
-
-struct ThemeColors {
-    ftxui::Color background;
-    ftxui::Color foreground;
-    ftxui::Color accent;
-    ftxui::Color border;
-    ftxui::Color statusbar;
-    ftxui::Color fg_gutter;
-    ftxui::Color bg_highlight;
-    ftxui::Color comment;
-    ftxui::Color green;
-    ftxui::Color yellow;
-    ftxui::Color red;
-    ftxui::Color magenta;
-    ftxui::Color purple;
-    ftxui::Color cyan;
-    ftxui::Color orange;
-    std::string name;
-};
-
-std::map<std::string, ThemeColors> loadThemes() {
-    return {
-        {"dark", {
-            ftxui::Color::RGB(34, 36, 54),     // bg - #222436
-            ftxui::Color::RGB(200, 211, 245), // fg - #c8d3f5
-            ftxui::Color::RGB(130, 170, 255), // blue - #82aaff
-            ftxui::Color::RGB(59, 66, 97),    // border - #3b4261
-            ftxui::Color::RGB(47, 51, 77),    // statusbar - #2f334d
-            ftxui::Color::RGB(59, 66, 97),    // fg_gutter - #3b4261
-            ftxui::Color::RGB(47, 51, 77),    // bg_highlight - #2f334d
-            ftxui::Color::RGB(99, 109, 166),  // comment - #636da6
-            ftxui::Color::RGB(195, 232, 141), // green - #c3e88d
-            ftxui::Color::RGB(255, 199, 119), // yellow - #ffc777
-            ftxui::Color::RGB(255, 117, 127), // red - #ff757f
-            ftxui::Color::RGB(192, 153, 255), // magenta - #c099ff
-            ftxui::Color::RGB(252, 167, 234), // purple - #fca7ea
-            ftxui::Color::RGB(134, 225, 252), // cyan - #86e1fc
-            ftxui::Color::RGB(255, 150, 108), // orange - #ff966c
-            "Moon"
-        }},
-        {"light", {
-            ftxui::Color::RGB(233, 233, 237), // bg - #e9e9ed
-            ftxui::Color::RGB(55, 96, 191),   // fg - #3760bf
-            ftxui::Color::RGB(46, 125, 225),   // blue - #2e7de1
-            ftxui::Color::RGB(168, 174, 203), // border - #a8aecb
-            ftxui::Color::RGB(200, 200, 210), // statusbar
-            ftxui::Color::RGB(168, 174, 203), // fg_gutter
-            ftxui::Color::RGB(200, 200, 210), // bg_highlight
-            ftxui::Color::RGB(128, 132, 163), // comment
-            ftxui::Color::RGB(121, 192, 105), // green
-            ftxui::Color::RGB(255, 183, 78),  // yellow
-            ftxui::Color::RGB(213, 73, 75),   // red
-            ftxui::Color::RGB(175, 97, 255),  // magenta
-            ftxui::Color::RGB(197, 108, 240), // purple
-            ftxui::Color::RGB(56, 175, 183),  // cyan
-            ftxui::Color::RGB(255, 130, 90),  // orange
-            "Day"
-        }}
-    };
-}
+#include "tui.hpp"
+#include "config.hpp"
+#include "plugins.hpp"
 
 int main() {
-    // Initialize Lua state like Neovim does
-    lua_State *L = luaL_newstate();
-    luaL_openlibs(L);
-
-    lua_newtable(L);
-    lua_setglobal(L, "ui");
-
-    lua_newtable(L);
-    lua_setglobal(L, "workspace");
-
     std::filesystem::path cwd = std::filesystem::current_path();
     
-    // Load plugins/init.lua
-    std::string plugins_path;
-    if (std::filesystem::exists(cwd / "plugins/init.lua")) {
-        plugins_path = (cwd / "plugins/init.lua").string();
-    } else if (std::filesystem::exists(cwd / "build/plugins/init.lua")) {
+    lua_State* L = luaL_newstate();
+    luaL_openlibs(L);
+    
+    lua_newtable(L);
+    lua_setglobal(L, "ui");
+    
+    lua_newtable(L);
+    lua_setglobal(L, "workspace");
+    
+    std::string plugins_path = (cwd / "plugins/init.lua").string();
+    if (!std::filesystem::exists(plugins_path)) {
         plugins_path = (cwd / "build/plugins/init.lua").string();
-    } else {
-        plugins_path = (cwd / "plugins/init.lua").string();
     }
     
-    // Define process_path after plugins_path
     std::string process_path = plugins_path;
     {
         size_t pos = process_path.rfind("init.lua");
@@ -104,227 +28,46 @@ int main() {
             process_path.replace(pos, 8, "process.lua");
         }
     }
-
-    // Load config/init.lua
-    std::string config_path;
-    if (std::filesystem::exists(cwd / "config/init.lua")) {
-        config_path = (cwd / "config/init.lua").string();
-    } else if (std::filesystem::exists(cwd / "build/config/init.lua")) {
-        config_path = (cwd / "build/config/init.lua").string();
-    } else {
-        config_path = (cwd / "config/init.lua").string();
-    }
     
-    auto themes = loadThemes();
-    std::string selected_theme = "dark";
-    ThemeColors theme = themes[selected_theme];
-    bool config_loaded = false;
+    neotui::config::Config config;
+    config.load((cwd / "config/init.lua").string(), L);
     
-    // Load plugins/init.lua
-    if (luaL_loadfile(L, plugins_path.c_str()) == LUA_OK) {
-        if (lua_pcall(L, 0, LUA_MULTRET, 0) != LUA_OK) {
-            fprintf(stderr, "Plugins load error: %s\n", lua_tostring(L, -1));
-            lua_pop(L, 1);
-        }
-    }
+    neotui::TUI tui;
+    tui.setTheme(config.getThemes()[config.getTheme()]);
+    tui.setConfigStatus(true);
     
-    int load_result = luaL_loadfile(L, config_path.c_str());
-    if (load_result == LUA_OK) {
-        load_result = lua_pcall(L, 0, LUA_MULTRET, 0);
-    }
-    if (load_result == LUA_OK) {
-        lua_getglobal(L, "ui");
-        if (lua_istable(L, -1)) {
-            lua_getfield(L, -1, "theme");
-            if (lua_isstring(L, -1)) {
-                const char* theme_str = lua_tostring(L, -1);
-                if (themes.count(theme_str)) {
-                    selected_theme = theme_str;
-                    theme = themes[selected_theme];
-                }
-            }
-            lua_pop(L, 1); // pop theme
-        }
-        lua_pop(L, 1); // pop ui
-        config_loaded = true;
-    } else {
-        const char* err = lua_tostring(L, -1);
-        fprintf(stderr, "Config load error: %s\n", err ? err : "unknown");
-        lua_pop(L, 1);
-    }
-
-    // Initialize FTXUI with TrueColor support before creating screen
-    ftxui::Terminal::SetColorSupport(ftxui::Terminal::Color::TrueColor);
-    auto screen = ftxui::ScreenInteractive::Fullscreen();
-    std::string code;
-    std::string code_output;
-    std::string workspace_output;
-    std::string firstname;
-    std::string lastname;
-
-    auto input_option = ftxui::InputOption::Default();
-    input_option.transform = [&theme](ftxui::InputState state) {
-        auto bg = theme.background;
-        auto fg = state.is_placeholder ? theme.comment : theme.foreground;
-        auto focus_fg = theme.yellow;
-        
-        auto fg_color = state.focused ? focus_fg : fg;
-        auto border_fg = state.focused ? theme.yellow : theme.border;
-        
-        auto element = state.element | ftxui::bgcolor(bg) | ftxui::color(fg_color);
-        
-        if (state.focused) {
-            element = element | ftxui::borderStyled(ftxui::BorderStyle::ROUNDED, border_fg);
-        }
-        
-        return element;
-    };
+    neotui::plugins::loadInit(L, plugins_path);
     
-    // Input components
-    auto firstname_option = ftxui::InputOption::Default();
-    firstname_option.multiline = false;
-    firstname_option.transform = input_option.transform;
-    auto firstname_input = ftxui::Input(&firstname, "Firstname", firstname_option);
-    
-    auto lastname_option = ftxui::InputOption::Default();
-    lastname_option.multiline = false;
-    lastname_option.transform = input_option.transform;
-    auto lastname_input = ftxui::Input(&lastname, "Lastname", lastname_option);
-    
-    auto code_option = ftxui::InputOption::Default();
-    code_option.transform = input_option.transform;
-    auto code_input = ftxui::Input(&code, "LUA", code_option);
-    
-    // Container to hold code input for size constraint
-    auto code_container = ftxui::Container::Vertical({});
-    code_container->Add(code_input);
-    
-    auto code_renderer = ftxui::Renderer(code_container, [&]() {
-        return code_input->Render() | ftxui::size(ftxui::HEIGHT, ftxui::EQUAL, 3);
-    });
-
-    // Run button - executes code and shows in code_output_renderer
-    auto run_button = ftxui::Button("Run", [&L, &code, &code_output]() {
+    tui.setOnRun([&L, &tui]() {
+        std::string code = tui.getCode();
         int top_before = lua_gettop(L);
         
         if (luaL_dostring(L, code.c_str()) == LUA_OK) {
             int top_after = lua_gettop(L);
             if (top_after > top_before) {
                 const char* result = lua_tostring(L, -1);
-                code_output = result ? result : "nil";
+                tui.setCodeOutput(result ? result : "nil");
                 lua_pop(L, 1);
             } else {
-                code_output = "Code executed successfully.";
+                tui.setCodeOutput("Code executed successfully.");
             }
         } else {
             const char* error = lua_tostring(L, -1);
-            code_output = error ? error : "Unknown error";
+            tui.setCodeOutput(error ? error : "Unknown error");
             lua_pop(L, 1);
         }
         
         lua_settop(L, 0);
     });
-
-    // Process button - runs plugins/process.lua and shows in workspace_renderer
-    auto process_button = ftxui::Button("Process", [&L, &workspace_output, &process_path]() {
-        workspace_output.clear();
-        
-        lua_getglobal(L, "debug");
-        lua_getfield(L, -1, "traceback");
-        lua_remove(L, -2);
-        
-        int errfunc = lua_gettop(L);
-        
-        if (luaL_loadfile(L, process_path.c_str()) == LUA_OK) {
-            if (lua_pcall(L, 0, 1, errfunc) == LUA_OK) {
-                workspace_output = lua_tostring(L, -1);
-                lua_pop(L, 1);
-            } else {
-                std::cerr << lua_tostring(L, -1) << std::endl;
-                lua_pop(L, 1);
-            }
-        } else {
-            std::cerr << lua_tostring(L, -1) << std::endl;
-            lua_pop(L, 1);
-        }
-        
-        lua_settop(L, 0);
+    
+    tui.setOnProcess([&L, &tui, &process_path]() {
+        std::string output;
+        neotui::plugins::runProcess(L, process_path, output);
+        tui.setWorkspaceOutput(output);
     });
-
-    // Workspace renderer (displays workspace_output)
-    auto workspace_renderer = ftxui::Renderer([&]() {
-        return ftxui::text(workspace_output) | ftxui::bgcolor(theme.background) | ftxui::color(theme.foreground);
-    });
-
-    // Output renderer
-    auto code_output_renderer = ftxui::Renderer([&]() {
-        auto bg = theme.background;
-        auto fg = theme.foreground;
-        auto border_fg = theme.border;
-        return ftxui::text(code_output) | ftxui::bgcolor(bg) | ftxui::color(fg) | ftxui::borderStyled(ftxui::BorderStyle::ROUNDED, border_fg);
-    });
-
-    // Layout: vertical container with input, button, code_output
-    auto container = ftxui::Container::Vertical({
-        workspace_renderer,
-        firstname_input,
-        lastname_input,
-        code_input,
-        run_button,
-        process_button,
-        code_output_renderer
-    });
-
-    // Main renderer with workspace at top
-    auto renderer = ftxui::Renderer(container, [&]() {
-        auto bg = theme.background;
-        auto fg = theme.foreground;
-        auto accent = theme.accent;
-        auto border_fg = theme.border;
-        auto status_bg = theme.statusbar;
-
-        // Get current time
-        auto now = std::chrono::system_clock::now();
-        std::time_t t = std::chrono::system_clock::to_time_t(now);
-        std::string time_str = std::ctime(&t);
-        time_str.erase(time_str.find_last_not_of(" \n\r\t") + 1);
-
-        // Status line (LazyVim style)
-        std::string config_status = config_loaded ? "OK" : "Failed";
-        std::string left_status = " NORMAL  lua  NeoTUI  Theme: " + theme.name + "  Config: " + config_status;
-
-        return ftxui::vbox({
-            workspace_renderer->Render() | ftxui::yflex,
-            ftxui::separator() | ftxui::color(border_fg),
-            ftxui::hbox({
-                ftxui::text("Firstname: ") | ftxui::color(accent),
-                firstname_input->Render() | ftxui::bgcolor(bg) | ftxui::color(fg) | ftxui::xflex
-            }),
-            ftxui::hbox({
-                ftxui::text("Lastname: ") | ftxui::color(accent),
-                lastname_input->Render() | ftxui::bgcolor(bg) | ftxui::color(fg) | ftxui::xflex
-            }),
-            ftxui::separator() | ftxui::color(border_fg),
-            ftxui::text(":") | ftxui::color(accent),
-            ftxui::hbox({
-                code_input->Render() | ftxui::bgcolor(bg) | ftxui::color(fg) | ftxui::size(ftxui::HEIGHT, ftxui::LESS_THAN, 4),
-                run_button->Render() | ftxui::bgcolor(bg) | ftxui::color(fg),
-                process_button->Render() | ftxui::bgcolor(bg) | ftxui::color(fg)
-            }),
-            code_output_renderer->Render(),
-            ftxui::separator() | ftxui::color(border_fg),
-            ftxui::hbox({
-                ftxui::text(left_status) | ftxui::color(fg) | ftxui::bgcolor(status_bg),
-                ftxui::filler() | ftxui::bgcolor(status_bg),
-                ftxui::text(time_str) | ftxui::color(fg) | ftxui::bgcolor(status_bg)
-            }) | ftxui::bgcolor(status_bg)
-        }) | ftxui::bgcolor(bg) | ftxui::color(fg) | ftxui::yflex;
-    });
-
-    // Run the loop
-    screen.Loop(renderer);
-
-    // Clean up Lua state
+    
+    tui.run();
+    
     lua_close(L);
     return 0;
 }

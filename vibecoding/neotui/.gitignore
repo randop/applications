@@ -6,9 +6,6 @@ meson-info/
 meson-logs/
 .cache/
 
-# Executables
-neotui
-
 # OS-specific files
 .DS_Store
 Thumbs.db
