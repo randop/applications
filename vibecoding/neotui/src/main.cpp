@@ -80,6 +80,28 @@ int main() {
     lua_newtable(L);
     lua_setglobal(L, "ui");
 
+    lua_newtable(L);
+    lua_setglobal(L, "workspace");
+
+    std::filesystem::path cwd = std::filesystem::current_path();
+    
+    // Load plugins/init.lua
+    std::string plugins_path;
+    if (std::filesystem::exists(cwd / "plugins/init.lua")) {
+        plugins_path = (cwd / "plugins/init.lua").string();
+    } else if (std::filesystem::exists(cwd / "build/plugins/init.lua")) {
+        plugins_path = (cwd / "build/plugins/init.lua").string();
+    } else {
+        plugins_path = (cwd / "plugins/init.lua").string();
+    }
+    
+    if (luaL_loadfile(L, plugins_path.c_str()) == LUA_OK) {
+        if (lua_pcall(L, 0, LUA_MULTRET, 0) != LUA_OK) {
+            fprintf(stderr, "Plugins load error: %s\n", lua_tostring(L, -1));
+            lua_pop(L, 1);
+        }
+    }
+
     auto themes = loadThemes();
     std::string selected_theme = "dark";
     ThemeColors theme = themes[selected_theme];
@@ -87,7 +109,6 @@ int main() {
     bool config_loaded = false;
     
     std::string config_path;
-    std::filesystem::path cwd = std::filesystem::current_path();
     if (std::filesystem::exists(cwd / "config/init.lua")) {
         config_path = (cwd / "config/init.lua").string();
     } else if (std::filesystem::exists(cwd / "build/config/init.lua")) {
@@ -125,7 +146,8 @@ int main() {
     ftxui::Terminal::SetColorSupport(ftxui::Terminal::Color::TrueColor);
     auto screen = ftxui::ScreenInteractive::Fullscreen();
     std::string code;
-    std::string output;
+    std::string code_output;
+    std::string workspace_output;
     std::string firstname;
     std::string lastname;
 
@@ -170,76 +192,79 @@ int main() {
         return code_input->Render() | ftxui::size(ftxui::HEIGHT, ftxui::EQUAL, 3);
     });
 
-    // Button to run the code
-    auto run_button = ftxui::Button("Run Lua Code", [&L, &code, &output]() {
+    // Run button - executes code and shows in code_output_renderer
+    auto run_button = ftxui::Button("Run", [&L, &code, &code_output]() {
+        int top_before = lua_gettop(L);
+        
         if (luaL_dostring(L, code.c_str()) == LUA_OK) {
-            // If successful, check for return value
-            if (lua_gettop(L) > 0) {
-                output = lua_tostring(L, -1);
+            int top_after = lua_gettop(L);
+            if (top_after > top_before) {
+                const char* result = lua_tostring(L, -1);
+                code_output = result ? result : "nil";
                 lua_pop(L, 1);
             } else {
-                output = "Code executed successfully.";
+                code_output = "Code executed successfully.";
             }
         } else {
-            // If error, get error message
-            output = lua_tostring(L, -1);
+            const char* error = lua_tostring(L, -1);
+            code_output = error ? error : "Unknown error";
             lua_pop(L, 1);
         }
+        
+        lua_settop(L, 0);
     });
 
-    // Function to split string by delimiter
-    auto split = [](const std::string& s, char delim) {
-        std::vector<std::string> result;
-        std::stringstream ss(s);
-        std::string item;
-        while (std::getline(ss, item, delim)) {
-            result.push_back(item);
+    // Process button - runs plugins/process.lua and shows in workspace_renderer
+    auto process_button = ftxui::Button("Process", [&, L]() {
+        workspace_output = "PROCESS";
+        
+        // Change path to process.lua
+        std::string process_path = plugins_path;
+        size_t pos = process_path.rfind("init.lua");
+        if (pos != std::string::npos) {
+            process_path.replace(pos, 8, "process.lua");
         }
-        return result;
-    };
+        
+        // Run the file
+        if (luaL_dofile(L, process_path.c_str()) == LUA_OK) {
+            if (lua_gettop(L) > 0 && lua_isstring(L, -1)) {
+                workspace_output = lua_tostring(L, -1);
+                lua_pop(L, 1);
+            }
+        }
+        
+        lua_settop(L, 0);
+    });
 
-    // Buffer renderer (code with line numbers)
-    auto buffer_renderer = ftxui::Renderer([&]() {
+    // Workspace renderer (displays workspace_output)
+    auto workspace_renderer = ftxui::Renderer([&]() {
         auto bg = theme.background;
         auto fg = theme.foreground;
-        auto gutter_fg = theme.fg_gutter;
 
-        std::vector<std::string> lines = split(code, '\n');
-        if (lines.empty()) lines.push_back("");
-
-        ftxui::Elements buffer_lines;
-        for (size_t i = 0; i < lines.size(); ++i) {
-            std::string line_num = std::to_string(i + 1);
-            buffer_lines.push_back(
-                ftxui::hbox({
-                    ftxui::text(line_num) | ftxui::color(gutter_fg) | ftxui::size(ftxui::WIDTH, ftxui::EQUAL, 4),
-                    ftxui::text(" "),
-                    ftxui::text(lines[i]) | ftxui::color(fg)
-                })
-            );
-        }
-
-        return ftxui::vbox(buffer_lines) | ftxui::bgcolor(bg) | ftxui::size(ftxui::HEIGHT, ftxui::GREATER_THAN, 3);
+        std::string msg = workspace_output.empty() ? "EMPTY" : workspace_output;
+        return ftxui::text(msg) | ftxui::bgcolor(bg) | ftxui::color(fg);
     });
 
     // Output renderer
-    auto output_renderer = ftxui::Renderer([&]() {
+    auto code_output_renderer = ftxui::Renderer([&]() {
         auto bg = theme.background;
         auto fg = theme.foreground;
         auto border_fg = theme.border;
-        return ftxui::text(output) | ftxui::bgcolor(bg) | ftxui::color(fg) | ftxui::borderStyled(ftxui::BorderStyle::ROUNDED, border_fg);
+        return ftxui::text(code_output) | ftxui::bgcolor(bg) | ftxui::color(fg) | ftxui::borderStyled(ftxui::BorderStyle::ROUNDED, border_fg);
     });
 
-    // Layout: vertical container with input, button, output
+    // Layout: vertical container with input, button, code_output
     auto container = ftxui::Container::Vertical({
+        workspace_renderer,
         firstname_input,
         lastname_input,
         code_input,
         run_button,
-        output_renderer
+        process_button,
+        code_output_renderer
     });
 
-    // Main renderer with LazyVim-like layout
+    // Main renderer with workspace at top
     auto renderer = ftxui::Renderer(container, [&]() {
         auto bg = theme.background;
         auto fg = theme.foreground;
@@ -258,7 +283,7 @@ int main() {
         std::string left_status = " NORMAL  lua  NeoTUI  Theme: " + theme.name + "  Config: " + config_status;
 
         return ftxui::vbox({
-            buffer_renderer->Render() | ftxui::yflex,
+            workspace_renderer->Render() | ftxui::yflex,
             ftxui::separator() | ftxui::color(border_fg),
             ftxui::hbox({
                 ftxui::text("Firstname: ") | ftxui::color(accent),
@@ -272,9 +297,10 @@ int main() {
             ftxui::text(":") | ftxui::color(accent),
             ftxui::hbox({
                 code_input->Render() | ftxui::bgcolor(bg) | ftxui::color(fg) | ftxui::size(ftxui::HEIGHT, ftxui::LESS_THAN, 4),
-                run_button->Render() | ftxui::bgcolor(bg) | ftxui::color(fg)
+                run_button->Render() | ftxui::bgcolor(bg) | ftxui::color(fg),
+                process_button->Render() | ftxui::bgcolor(bg) | ftxui::color(fg)
             }),
-            output_renderer->Render(),
+            code_output_renderer->Render(),
             ftxui::separator() | ftxui::color(border_fg),
             ftxui::hbox({
                 ftxui::text(left_status) | ftxui::color(fg) | ftxui::bgcolor(status_bg),
