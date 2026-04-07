@@ -1,5 +1,5 @@
 project('neotui', 'cpp',
-  version: '0.1',
+  version: '0.1.1',
   default_options: ['cpp_std=c++20']
 )
 
