@@ -96,6 +96,10 @@ add("Sorted descending: " .. table.concat(tbl, ", "))
 local concat_test = table.concat({ "a", "b", "c" }, "-")
 add("table.concat demo: " .. concat_test)
 
+local function round3(x)
+	return math.floor(x * 1000 + 0.5) / 1000
+end
+
 -- 6. Math library
 add("\n--- Math Library ---")
 add("math.pi ≈ " .. math.pi)
@@ -109,6 +113,23 @@ add("math.randomseed(42); math.random() ≈ " .. math.random())
 add("math.fmod(10, 3) = " .. math.fmod(10, 3))
 add("math.exp(1) ≈ " .. math.exp(1))
 add("math.log( math.exp(1) ) = " .. math.log(math.exp(1)))
+
+-- Test cases
+local tests = {
+	3.1415926535,
+	2.718281828,
+	1.234567,
+	9.87654321,
+	-5.555555,
+	0.9995,
+	123.456789,
+	-0.0004,
+}
+
+for _, val in ipairs(tests) do
+	local rounded = round3(val)
+	add(string.format("math round3 (%-15s) = %s", tostring(val), tostring(rounded)))
+end
 
 -- 7. OS library (non-file operations: time, date, clock, getenv, etc.)
 add("\n--- OS Library (non-IO) ---")
@@ -132,7 +153,42 @@ add("debug.getlocal(1, 1) exists: " .. tostring(debug.getlocal(1, 1) ~= nil))
 local tb = debug.traceback("Demo traceback", 1)
 add("debug.traceback (first 100 chars): " .. string.sub(tb, 1, 100) .. "...")
 
--- 9. Final summary
+-- 9. Debug library
+add("\n--- JSON Library ---")
+
+local function get_script_dir()
+	local str = debug.getinfo(2, "S").source:sub(2)
+	return str:match("(.*/)") or "./"
+end
+
+local script_dir = get_script_dir()
+package.path = script_dir .. "?.lua;" .. script_dir .. "?/init.lua;" .. package.path
+
+local json
+local success, err = pcall(function()
+	json = require("json")
+end)
+
+if success then
+	add("\nLoaded JSON plugin: " .. script_dir .. "json.lua")
+	add("JSON module type: " .. type(json))
+
+	local test_data = {
+		name = "Randolph Ledesma",
+		location = "Philippines",
+		active = true,
+		score = 99.87654321,
+		tags = { "lua", "json", "demo" },
+		stats = { pi = 3.1415926535, null_value = nil },
+	}
+
+	local json_str = json.encode(test_data)
+	add("\nJSON Encoded:")
+	add(json_str)
+else
+	add("\nJSON plugin load failure!")
+end
+
 add("\n=== End of Demo ===")
 add("Total results collected: " .. #results)
 
