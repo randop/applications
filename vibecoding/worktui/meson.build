@@ -20,7 +20,7 @@ ftxui_dep = [
 
 # Executable
 executable('text_editor',
-  ['src/main.cpp', 'src/text_editor.cpp'],
+  ['src/main.cpp', 'src/text_editor.cpp', 'src/app.cpp'],
   dependencies: [ftxui_dep],
   install: true
 )

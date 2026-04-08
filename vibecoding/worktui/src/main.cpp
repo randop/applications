@@ -1,10 +1,10 @@
 #include <ftxui/component/screen_interactive.hpp>
 #include <memory>
-#include "text_editor.hpp"
+#include "app.hpp"
 
 int main() {
   auto screen = ftxui::ScreenInteractive::Fullscreen();
-  auto editor = std::make_shared<TextEditor>();
-  screen.Loop(editor);
+  auto app = std::make_shared<App>();
+  screen.Loop(app);
   return 0;
 }
