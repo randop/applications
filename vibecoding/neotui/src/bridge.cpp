@@ -2,6 +2,10 @@
 #include <ftxui/component/component.hpp>
 #include <ftxui/component/component_options.hpp>
 #include <ftxui/dom/elements.hpp>
+#include <chrono>
+#include <ctime>
+#include <iomanip>
+#include <iostream>
 #include <string>
 #include <vector>
 
@@ -120,6 +124,7 @@ static int l_input(lua_State* L) {
     auto state = std::make_shared<BridgeInputState>();
     ftxui::InputOption opts;
     opts.placeholder = placeholder;
+    opts.multiline = false;
 
     auto inp = ftxui::Input(&state->value, opts);
 
@@ -235,6 +240,38 @@ static int l_set_root(lua_State* L) {
     auto* ce = bridge.get_component(h);
     if (!ce) return luaL_error(L, "set_root: handle %d is not a component", h);
     bridge.set_workspace_component(ce->component);
+    bridge.set_container(ce->component);
+    return 0;
+}
+
+static int l_log(lua_State* L) {
+    int n = lua_gettop(L);
+    std::string output;
+    for (int i = 1; i <= n; i++) {
+        if (i > 1) output += "\t";
+        output += luaL_tolstring(L, i, nullptr);
+        lua_pop(L, 1);
+    }
+    
+    auto now = std::chrono::system_clock::now();
+    auto time = std::chrono::system_clock::to_time_t(now);
+    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+        now.time_since_epoch()) % 1000;
+    
+    std::tm tm_buf;
+    gmtime_r(&time, &tm_buf);
+    char time_buf[32];
+    strftime(time_buf, sizeof(time_buf), "%Y-%m-%dT%H:%M:%S", &tm_buf);
+    
+    std::cerr << "[workspace] " << time_buf << "." << std::setfill('0') 
+              << std::setw(3) << ms.count() << " " << output << std::endl;
+    
+    auto& bridge = get_bridge(L);
+    if (output.length() > 15) {
+        output = output.substr(0, 12) + "...";
+    }
+    bridge.set_status(output);
+    
     return 0;
 }
 
@@ -254,6 +291,7 @@ static const luaL_Reg bridge_lib[] = {
     { "get_input_value",       l_get_input_value      },
     { "get_checkbox_state",    l_get_checkbox_state   },
     { "set_root",              l_set_root             },
+    { "log",                   l_log                  },
     { nullptr, nullptr }
 };
 
@@ -263,6 +301,12 @@ void Bridge::register_in_lua(lua_State* L) {
 
     luaL_newlib(L, bridge_lib);
     lua_setglobal(L, "workspace");
+    
+    lua_pushcfunction(L, l_log);
+    lua_setglobal(L, "print");
+    
+    lua_pushcfunction(L, l_log);
+    lua_setglobal(L, "log");
 }
 
 }

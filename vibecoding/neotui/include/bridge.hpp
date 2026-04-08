@@ -49,8 +49,14 @@ public:
 
     ftxui::Element get_element(BridgeHandle h) const {
         auto it = elements_.find(h);
-        if (it == elements_.end()) return ftxui::text("[invalid elem]");
-        return it->second;
+        if (it != elements_.end()) return it->second;
+        
+        auto cit = components_.find(h);
+        if (cit != components_.end()) {
+            return cit->second.component->Render();
+        }
+        
+        return ftxui::text("[invalid elem]");
     }
 
     bool is_element(BridgeHandle h) const {
@@ -76,9 +82,11 @@ public:
         workspace_component_ = std::move(comp);
     }
 
-    ftxui::Component get_workspace_component() const {
-        return workspace_component_;
-    }
+    ftxui::Component get_workspace_component() const { return workspace_component_; }
+    ftxui::Component get_container() const { return container_; }
+    void set_container(ftxui::Component c) { container_ = std::move(c); }
+    void set_status(const std::string& s) { status_msg_ = s; }
+    std::string get_status() const { return status_msg_; }
 
     void register_in_lua(lua_State* L);
 
@@ -87,6 +95,8 @@ private:
     std::unordered_map<BridgeHandle, ftxui::Element> elements_;
     std::unordered_map<BridgeHandle, BridgeComponentEntry> components_;
     ftxui::Component workspace_component_;
+    ftxui::Component container_;
+    std::string status_msg_;
 };
 
 }

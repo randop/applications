@@ -183,6 +183,13 @@ void TUI::run() {
         impl.code_output_renderer
     });
     
+    if (impl.bridge) {
+        auto ws_container = impl.bridge->get_container();
+        if (ws_container) {
+            container->Add(ws_container);
+        }
+    }
+    
     impl.panel1 = ftxui::Renderer(container, [&]() {
         return ftxui::vbox({
             impl.workspace_renderer->Render() | ftxui::yflex,
@@ -207,17 +214,18 @@ void TUI::run() {
     });
 
     impl.panel2 = ftxui::Renderer([&]() {
-        std::string labels = "Panel 2: ";
         if (impl.bridge) {
-            labels.append("bridge,");
             auto ws = impl.bridge->get_workspace_component();
             if (ws) {
-              labels.append("wscomponents,");
-                return ws->Render() | ftxui::bgcolor(theme.background) | ftxui::color(theme.foreground);
+                auto ws_container = impl.bridge->get_container();
+                if (ws_container && !ws_container->Parent()) {
+                    container->Add(ws_container);
+                }
+                return ws->Render();
             }
         }
         return ftxui::vbox({
-            ftxui::text(labels) | ftxui::color(theme.accent) | ftxui::center,
+            ftxui::text("Panel 2: Workspace") | ftxui::color(theme.accent) | ftxui::center,
             ftxui::filler(),
         }) | ftxui::bgcolor(theme.background) | ftxui::color(theme.foreground);
     });
@@ -237,7 +245,17 @@ void TUI::run() {
         
         std::string config_status = impl.config_loaded ? "OK" : "Failed";
         std::string panel_label = impl.active_panel == 0 ? "Main" : (impl.active_panel == 1 ? "Workspace" : "Settings");
-        std::string left_status = " NORMAL  lua  NeoTUI  Panel: " + panel_label + "  Theme: " + theme.name + "  Config: " + config_status;
+        
+        std::string status_msg = "";
+        if (impl.bridge) {
+            status_msg = impl.bridge->get_status();
+        }
+        
+        std::string left_status = " NORMAL  lua  NeoTUI  Panel: " + panel_label;
+        if (!status_msg.empty()) {
+            left_status += "  [" + status_msg + "]";
+        }
+        left_status += "  Theme: " + theme.name + "  Config: " + config_status;
 
         ftxui::Element current_panel;
         if (impl.active_panel == 0) {
