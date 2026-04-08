@@ -1,7 +1,7 @@
 project(
     'neotui',
     'cpp',
-    version: '0.1.9',
+    version: '0.1.10',
     meson_version: '>=0.60.0',
     default_options: ['cpp_std=c++20', 'default_library=static', 'b_staticpic=true'],
 )
