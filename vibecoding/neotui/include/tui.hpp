@@ -12,6 +12,7 @@
 #include <memory>
 
 #include "scroller.hpp"
+#include "bridge.hpp"
 
 namespace neotui {
 
@@ -48,6 +49,8 @@ public:
     void setConfigStatus(bool loaded);
     void setOnRun(std::function<void()> callback);
     void setOnProcess(std::function<void()> callback);
+    void setBridge(Bridge* bridge);
+    void setOnPanelChange(std::function<void(int)> callback);
     void run();
 
     std::string getCode() const;

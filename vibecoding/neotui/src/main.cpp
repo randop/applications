@@ -4,6 +4,7 @@
 #include "tui.hpp"
 #include "config.hpp"
 #include "plugins.hpp"
+#include "bridge.hpp"
 
 int main() {
     setenv("COLORTERM", "truecolor", 1);
@@ -14,11 +15,11 @@ int main() {
     lua_State* L = luaL_newstate();
     luaL_openlibs(L);
     
-    lua_newtable(L);
-    lua_setglobal(L, "ui");
+    neotui::Bridge bridge;
+    bridge.register_in_lua(L);
     
     lua_newtable(L);
-    lua_setglobal(L, "workspace");
+    lua_setglobal(L, "ui");
     
     std::string plugins_path = (cwd / "plugins/init.lua").string();
     if (!std::filesystem::exists(plugins_path)) {
@@ -39,8 +40,22 @@ int main() {
     neotui::TUI tui;
     tui.setTheme(config.getThemes()[config.getTheme()]);
     tui.setConfigStatus(true);
+    tui.setBridge(&bridge);
     
     neotui::plugins::loadInit(L, plugins_path);
+    
+    bool workspace_loaded = false;
+    std::string workspace_path = (cwd / "plugins/workspace.lua").string();
+    if (!std::filesystem::exists(workspace_path)) {
+        workspace_path = (cwd / "build/plugins/workspace.lua").string();
+    }
+    
+    tui.setOnPanelChange([&L, &workspace_path, &workspace_loaded](int panel) {
+        if (panel == 1 && !workspace_loaded) {
+            neotui::plugins::loadInit(L, workspace_path);
+            workspace_loaded = true;
+        }
+    });
     
     tui.setOnRun([&L, &tui]() {
         std::string code = tui.getCode();

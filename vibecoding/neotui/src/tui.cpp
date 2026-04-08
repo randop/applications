@@ -16,6 +16,7 @@ struct TUI::Impl {
     std::string lastname;
     bool config_loaded = false;
     int active_panel = 0;
+    Bridge* bridge = nullptr;
     
     ftxui::Component code_input;
     ftxui::Component run_button;
@@ -30,6 +31,7 @@ struct TUI::Impl {
     
     std::function<void()> on_run;
     std::function<void()> on_process;
+    std::function<void(int)> on_panel_change;
     
     Impl() {
         theme = {
@@ -91,6 +93,14 @@ void TUI::setOnRun(std::function<void()> callback) {
 
 void TUI::setOnProcess(std::function<void()> callback) {
     pImpl->on_process = callback;
+}
+
+void TUI::setBridge(Bridge* bridge) {
+    pImpl->bridge = bridge;
+}
+
+void TUI::setOnPanelChange(std::function<void(int)> callback) {
+    pImpl->on_panel_change = callback;
 }
 
 std::string TUI::getCode() const {
@@ -197,8 +207,17 @@ void TUI::run() {
     });
 
     impl.panel2 = ftxui::Renderer([&]() {
+        std::string labels = "Panel 2: ";
+        if (impl.bridge) {
+            labels.append("bridge,");
+            auto ws = impl.bridge->get_workspace_component();
+            if (ws) {
+              labels.append("wscomponents,");
+                return ws->Render() | ftxui::bgcolor(theme.background) | ftxui::color(theme.foreground);
+            }
+        }
         return ftxui::vbox({
-            ftxui::text("Panel 2: Workspace") | ftxui::color(theme.accent) | ftxui::center,
+            ftxui::text(labels) | ftxui::color(theme.accent) | ftxui::center,
             ftxui::filler(),
         }) | ftxui::bgcolor(theme.background) | ftxui::color(theme.foreground);
     });
@@ -252,6 +271,9 @@ void TUI::run() {
         }
         if (repr == alt2) {
             impl.active_panel = 1;
+            if (impl.on_panel_change) {
+                impl.on_panel_change(1);
+            }
             screen.PostEvent(ftxui::Event::Custom);
             return true;
         }
