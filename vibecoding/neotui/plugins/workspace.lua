@@ -4,27 +4,28 @@
 log("Workspace loaded!")
 
 local function demo_workspace_ui()
-    -- Create input components
-    local input_name = workspace.input("Enter your name")
-    local input_age = workspace.input("25")
-    
-    -- Create checkbox and button components
-    local check_enabled = workspace.checkbox("Enable feature", true)
-    
-    local btn_click = workspace.button("Click Me", function()
-        log("Button clicked!")
+    -- Button
+    local btn = workspace.button("Click Me", function()
+        log("Clicked!")
     end)
     
-    -- Create a container with all interactive components - this handles sizing properly
-    local form_container = workspace.container_vert({
-        input_name,
-        input_age,
-        check_enabled,
-        btn_click,
+    -- Spinner (element)
+    local spinner = workspace.spinner(10, 0)
+    
+    -- Container for button and spinner
+    local container = workspace.container_vert({
+        btn,
     })
     
-    -- Set the container as root - this ensures proper component handling
-    workspace.set_root(form_container)
+    -- Use renderer to include both
+    local root = workspace.renderer(container, function()
+        return workspace.vbox({
+            btn,
+            spinner,
+        })
+    end)
+    
+    workspace.set_root(root)
 end
 
 demo_workspace_ui()

@@ -201,6 +201,60 @@ static int l_get_checkbox_state(lua_State* L) {
     return 1;
 }
 
+static int l_spinner(lua_State* L) {
+    auto& bridge = get_bridge(L);
+    int speed = static_cast<int>(luaL_optinteger(L, 1, 10));
+    int c = static_cast<int>(luaL_optinteger(L, 2, 0));
+    auto spinner = ftxui::spinner(speed, c) | ftxui::center;
+    push_handle(L, bridge.add_element(std::move(spinner)));
+    return 1;
+}
+
+static int l_gauge(lua_State* L) {
+    auto& bridge = get_bridge(L);
+    float value = static_cast<float>(luaL_optnumber(L, 1, 0.5));
+    auto gauge = ftxui::gauge(value) | ftxui::border;
+    push_handle(L, bridge.add_element(std::move(gauge)));
+    return 1;
+}
+
+static int l_color(lua_State* L) {
+    auto& bridge = get_bridge(L);
+    int r = static_cast<int>(luaL_optinteger(L, 1, 255));
+    int g = static_cast<int>(luaL_optinteger(L, 2, 0));
+    int b = static_cast<int>(luaL_optinteger(L, 3, 0));
+    auto color_box = ftxui::text("Color") | ftxui::bgcolor(ftxui::Color::RGB(r, g, b)) | ftxui::color(ftxui::Color::RGB(255-r, 255-g, 255-b)) | ftxui::border;
+    push_handle(L, bridge.add_element(std::move(color_box)));
+    return 1;
+}
+
+struct BridgeMenuState {
+    int selected = 0;
+};
+
+static int l_menu(lua_State* L) {
+    luaL_checktype(L, 1, LUA_TTABLE);
+    auto& bridge = get_bridge(L);
+    
+    auto entries = std::make_shared<std::vector<std::string>>();
+    lua_len(L, 1);
+    int n = static_cast<int>(lua_tointeger(L, -1));
+    lua_pop(L, 1);
+    for (int i = 1; i <= n; ++i) {
+        lua_geti(L, 1, i);
+        entries->push_back(luaL_checkstring(L, -1));
+        lua_pop(L, 1);
+    }
+    
+    auto state = std::make_shared<BridgeMenuState>();
+    auto menu = ftxui::Menu(entries.get(), &state->selected);
+    
+    BridgeComponentEntry ce;
+    ce.component = std::move(menu);
+    push_handle(L, bridge.add_component(std::move(ce)));
+    return 1;
+}
+
 static int l_renderer(lua_State* L) {
     auto& bridge = get_bridge(L);
     BridgeHandle focus_h = check_handle(L, 1);
@@ -292,6 +346,10 @@ static const luaL_Reg bridge_lib[] = {
     { "get_checkbox_state",    l_get_checkbox_state   },
     { "set_root",              l_set_root             },
     { "log",                   l_log                  },
+    { "spinner",               l_spinner              },
+    { "gauge",                 l_gauge                },
+    { "color",                 l_color                },
+    { "menu",                  l_menu                 },
     { nullptr, nullptr }
 };
 
