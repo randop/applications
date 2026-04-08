@@ -3,9 +3,12 @@
 -- return string.format("%q", 'a string with "quotes" and \n new line')
 
 local x = string.gsub("hello world", "(%w+)", "%1 %1")
-local str = "Hello World!\n"
 
--- Repeat 100 times
-local repeated = string.rep(str, 100)
+local lines = {}
+for i = 1, 100 do
+	lines[i] = "Hello world " .. i
+end
 
-return string.format("%s \n %s \n %s", os.tmpname(), x, repeated)
+local result = table.concat(lines, "\n") .. "\n"
+
+return string.format("%s\n%s\n%s", os.tmpname(), x, result)

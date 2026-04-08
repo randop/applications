@@ -23,7 +23,10 @@ class ScrollerBase : public ComponentBase {
  private:
   Element OnRender() final {
     auto focused = Focused() ? focus : ftxui::select;
+    /** line highlight logic
     auto style = Focused() ? inverted : nothing;
+    **/
+    auto style = nothing;
 
     Element background = ComponentBase::Render();
     background->ComputeRequirement();

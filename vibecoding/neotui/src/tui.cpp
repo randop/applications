@@ -142,23 +142,12 @@ void TUI::run() {
 
     // Create the scrollable component
     auto content_renderer = ftxui::Renderer([&]() {
-        std::vector<std::string> lines = split_lines(impl.workspace_output);
-        std::vector<ftxui::Element> elements;
-        for (const auto& line : lines) {
-            elements.push_back(ftxui::text(line));
-        }
-        return ftxui::vbox(std::move(elements));
-        /*
-        return ftxui::paragraph(impl.workspace_output)
-             | ftxui::borderStyled(ftxui::ROUNDED, ftxui::Color::Blue) | ftxui::bgcolor(theme.background) 
-            | ftxui::color(theme.foreground);
-        */
+        return ftxui::paragraph(impl.workspace_output) | ftxui::bgcolor(theme.background) 
+            | ftxui::color(theme.foreground);      
     });
 
     impl.workspace_renderer = ftxui::Renderer([&]() {
-      return content_renderer->Render()
-         | ftxui::frame                    // this makes it scrollable
-         | ftxui::borderStyled(ftxui::ROUNDED, ftxui::Color::Blue);
+      return content_renderer->Render();
     });
 
     impl.workspace_renderer |= ftxui::Scroller;
