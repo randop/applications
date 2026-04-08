@@ -179,12 +179,27 @@ if success then
 		active = true,
 		score = 99.87654321,
 		tags = { "lua", "json", "demo" },
-		stats = { pi = 3.1415926535, null_value = nil },
+		stats = { pi = 3.1415926535, null_value = json.null, a_null = nil },
 	}
 
 	local json_str = json.encode(test_data)
 	add("\nJSON Encoded:")
 	add(json_str)
+
+	local jt = {
+		{ [1000] = "b" },
+		{ [function() end] = 12 },
+		{ nil, 2, 3, 4 },
+		{ x = 10, [1] = 2 },
+		{ [1] = "a", [3] = "b" },
+		{ x = 10, [4] = 5 },
+	}
+	for i, v in ipairs(jt) do
+		local jst, res = pcall(json.encode, v)
+		if jst then
+			add("json test " .. i .. ": " .. res)
+		end
+	end
 else
 	add("\nJSON plugin load failure!")
 end
