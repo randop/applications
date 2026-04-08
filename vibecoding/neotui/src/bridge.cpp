@@ -306,28 +306,30 @@ static int l_log(lua_State* L) {
         output += luaL_tolstring(L, i, nullptr);
         lua_pop(L, 1);
     }
-    
+
     auto now = std::chrono::system_clock::now();
-    auto time = std::chrono::system_clock::to_time_t(now);
     auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
         now.time_since_epoch()) % 1000;
-    
+    auto time_val = std::chrono::system_clock::to_time_t(now);
+
     std::tm tm_buf;
-    gmtime_r(&time, &tm_buf);
+    gmtime_r(&time_val, &tm_buf);
     char time_buf[32];
     strftime(time_buf, sizeof(time_buf), "%Y-%m-%dT%H:%M:%S", &tm_buf);
-    
-    std::cerr << "[workspace] " << time_buf << "." << std::setfill('0') 
+
+    std::cerr << "[workspace] " << time_buf << "." << std::setfill('0')
               << std::setw(3) << ms.count() << " " << output << std::endl;
-    
+
     auto& bridge = get_bridge(L);
     if (output.length() > 15) {
         output = output.substr(0, 12) + "...";
     }
     bridge.set_status(output);
-    
+
     return 0;
 }
+
+
 
 static const luaL_Reg bridge_lib[] = {
     { "text",                  l_text                 },

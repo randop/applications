@@ -14,7 +14,17 @@ int main() {
     
     lua_State* L = luaL_newstate();
     luaL_openlibs(L);
-    
+
+    // Set up package path to include plugins directory
+    std::string plugins_dir = (cwd / "plugins").string();
+    lua_getglobal(L, "package");
+    lua_getfield(L, -1, "path");
+    std::string current_path = lua_tostring(L, -1);
+    current_path += ";" + plugins_dir + "/?.lua";
+    lua_pushstring(L, current_path.c_str());
+    lua_setfield(L, -3, "path");
+    lua_pop(L, 2); // pop package and path
+
     neotui::Bridge bridge;
     bridge.register_in_lua(L);
     
@@ -43,19 +53,46 @@ int main() {
     tui.setBridge(&bridge);
     
     neotui::plugins::loadInit(L, plugins_path);
-    
+
+    // Load the API
+    std::string api_path = (cwd / "plugins/api.lua").string();
+    if (!std::filesystem::exists(api_path)) {
+        api_path = (cwd / "build/plugins/api.lua").string();
+    }
+    neotui::plugins::loadAPI(L, api_path);
+
+    // Panel paths
+    std::string panel_path = (cwd / "plugins/panel.lua").string();
+    if (!std::filesystem::exists(panel_path)) {
+        panel_path = (cwd / "build/plugins/panel.lua").string();
+    }
+
     bool workspace_loaded = false;
     std::string workspace_path = (cwd / "plugins/workspace.lua").string();
     if (!std::filesystem::exists(workspace_path)) {
         workspace_path = (cwd / "build/plugins/workspace.lua").string();
     }
     
-    tui.setOnPanelChange([&L, &workspace_path, &workspace_loaded](int panel) {
+    bool panel3_loaded = false;
+    std::string panel3_output;
+    auto update_panel3 = [&]() {
+        if (neotui::plugins::renderPanel(L, panel_path, panel3_output)) {
+            tui.setPanel3Content(panel3_output);
+        }
+    };
+
+    tui.setOnPanelChange([&L, &workspace_path, &workspace_loaded, &panel_path, &panel3_loaded, &update_panel3](int panel) {
         if (panel == 1 && !workspace_loaded) {
             neotui::plugins::loadInit(L, workspace_path);
             workspace_loaded = true;
         }
+        if (panel == 2 && !panel3_loaded) {
+            update_panel3();
+            panel3_loaded = true;
+        }
     });
+
+
     
     tui.setOnRun([&L, &tui]() {
         std::string code = tui.getCode();

@@ -13,6 +13,7 @@
 
 #include "scroller.hpp"
 #include "bridge.hpp"
+#include "api.hpp"
 
 namespace neotui {
 
@@ -51,6 +52,9 @@ public:
     void setOnProcess(std::function<void()> callback);
     void setBridge(Bridge* bridge);
     void setOnPanelChange(std::function<void(int)> callback);
+    void setPanel3Content(const std::string& content);
+    void setOnKeyPress(std::function<void(const std::string&)> callback);
+    void handlePanel3Key(const std::string& key);
     void run();
 
     std::string getCode() const;
