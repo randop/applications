@@ -12,7 +12,7 @@ TextEditor::TextEditor() {
 ftxui::Element TextEditor::OnRender() {
   using namespace ftxui;
   auto [term_width, term_height] = Terminal::Size();
-  max_visible_lines_ = term_height - 4; // adjust for border, separator, status
+  max_visible_lines_ = 10000; // large number for scrolling
   int text_width = term_width - 6; // approx for line num and separator
   adjust_scroll();
   Elements elements;

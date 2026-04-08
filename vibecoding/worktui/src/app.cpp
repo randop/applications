@@ -4,11 +4,45 @@
 #include <ftxui/component/event.hpp>
 #include <ftxui/dom/elements.hpp>
 
+class TextEditorPanel : public ftxui::ComponentBase {
+public:
+  TextEditorPanel();
+  ftxui::Element OnRender() override;
+  bool OnEvent(ftxui::Event event) override;
+
+private:
+  int selected_ = 0;
+  int focused_index_ = 3;  // start focus on editor
+  ftxui::Component dropdown_;
+  ftxui::Component input_;
+  ftxui::Component button_;
+  ftxui::Component editor_component_;
+  ftxui::Component container_;
+};
+
+TextEditorPanel::TextEditorPanel() {
+  dropdown_ = ftxui::Dropdown(std::vector<std::string>{"GET", "POST", "PUT", "PATCH", "DELETE"}, &selected_);
+  input_ = ftxui::Input();
+  button_ = ftxui::Button("DO", [] { /* TODO: implement action */ });
+  editor_component_ = std::make_shared<TextEditor>();
+  container_ = ftxui::Container::Vertical({dropdown_, input_, button_, editor_component_}, &focused_index_);
+}
+
+ftxui::Element TextEditorPanel::OnRender() {
+  return container_->Render() | ftxui::yflex;
+}
+
+bool TextEditorPanel::OnEvent(ftxui::Event event) {
+  return container_->OnEvent(event);
+}
+
 App::App() {
-  // Panel 0: Text Editor
+  // Panel 0: UI elements + Text Editor
+  panels_.push_back(std::make_shared<TextEditorPanel>());
+  // Panel 1: Text Editor instance 2
   panels_.push_back(std::make_shared<TextEditor>());
-  // Panels 1-3: Placeholders
-  for (int i = 1; i < 4; ++i) {
+  // Panels 2-3: Placeholders
+  for (int i = 2; i < 4; ++i) {
     panels_.push_back(ftxui::Renderer([i] {
       return ftxui::text("Placeholder for panel " + std::to_string(i + 1)) | ftxui::flex;
     }));
