@@ -15,6 +15,7 @@ struct TUI::Impl {
     std::string firstname;
     std::string lastname;
     bool config_loaded = false;
+    int active_panel = 0;
     
     ftxui::Component code_input;
     ftxui::Component run_button;
@@ -23,6 +24,9 @@ struct TUI::Impl {
     ftxui::Component code_output_renderer;
     ftxui::Component firstname_input;
     ftxui::Component lastname_input;
+    ftxui::Component panel1;
+    ftxui::Component panel2;
+    ftxui::Component panel3;
     
     std::function<void()> on_run;
     std::function<void()> on_process;
@@ -169,15 +173,7 @@ void TUI::run() {
         impl.code_output_renderer
     });
     
-    auto renderer = ftxui::Renderer(container, [&]() {
-        auto now = std::chrono::system_clock::now();
-        std::time_t t = std::chrono::system_clock::to_time_t(now);
-        std::string time_str = std::ctime(&t);
-        time_str.erase(time_str.find_last_not_of(" \n\r\t") + 1);
-        
-        std::string config_status = impl.config_loaded ? "OK" : "Failed";
-        std::string left_status = " NORMAL  lua  NeoTUI  Theme: " + theme.name + "  Config: " + config_status;
-
+    impl.panel1 = ftxui::Renderer(container, [&]() {
         return ftxui::vbox({
             impl.workspace_renderer->Render() | ftxui::yflex,
             ftxui::separator() | ftxui::color(theme.border),
@@ -197,6 +193,44 @@ void TUI::run() {
                 impl.process_button->Render() | ftxui::bgcolor(theme.background) | ftxui::color(theme.foreground)
             }),
             impl.code_output_renderer->Render(),
+        });
+    });
+
+    impl.panel2 = ftxui::Renderer([&]() {
+        return ftxui::vbox({
+            ftxui::text("Panel 2: Workspace") | ftxui::color(theme.accent) | ftxui::center,
+            ftxui::filler(),
+        }) | ftxui::bgcolor(theme.background) | ftxui::color(theme.foreground);
+    });
+
+    impl.panel3 = ftxui::Renderer([&]() {
+        return ftxui::vbox({
+            ftxui::text("Panel 3: Settings") | ftxui::color(theme.accent) | ftxui::center,
+            ftxui::filler(),
+        }) | ftxui::bgcolor(theme.background) | ftxui::color(theme.foreground);
+    });
+
+    auto renderer = ftxui::Renderer(container, [&]() {
+        auto now = std::chrono::system_clock::now();
+        std::time_t t = std::chrono::system_clock::to_time_t(now);
+        std::string time_str = std::ctime(&t);
+        time_str.erase(time_str.find_last_not_of(" \n\r\t") + 1);
+        
+        std::string config_status = impl.config_loaded ? "OK" : "Failed";
+        std::string panel_label = impl.active_panel == 0 ? "Main" : (impl.active_panel == 1 ? "Workspace" : "Settings");
+        std::string left_status = " NORMAL  lua  NeoTUI  Panel: " + panel_label + "  Theme: " + theme.name + "  Config: " + config_status;
+
+        ftxui::Element current_panel;
+        if (impl.active_panel == 0) {
+            current_panel = impl.panel1->Render() | ftxui::yflex | ftxui::xflex;
+        } else if (impl.active_panel == 1) {
+            current_panel = impl.panel2->Render() | ftxui::yflex | ftxui::xflex;
+        } else {
+            current_panel = impl.panel3->Render() | ftxui::yflex | ftxui::xflex;
+        }
+
+        return ftxui::vbox({
+            current_panel,
             ftxui::separator() | ftxui::color(theme.border),
             ftxui::hbox({
                 ftxui::text(left_status) | ftxui::color(theme.foreground) | ftxui::bgcolor(theme.statusbar),
@@ -204,6 +238,29 @@ void TUI::run() {
                 ftxui::text(time_str) | ftxui::color(theme.foreground) | ftxui::bgcolor(theme.statusbar)
             }) | ftxui::bgcolor(theme.statusbar)
         }) | ftxui::bgcolor(theme.background) | ftxui::color(theme.foreground) | ftxui::yflex;
+    });
+
+    renderer |= ftxui::CatchEvent([&](const ftxui::Event& event) {
+        std::string repr = event.input();
+        char alt1[] = {27, '1', 0};
+        char alt2[] = {27, '2', 0};
+        char alt3[] = {27, '3', 0};
+        if (repr == alt1) {
+            impl.active_panel = 0;
+            screen.PostEvent(ftxui::Event::Custom);
+            return true;
+        }
+        if (repr == alt2) {
+            impl.active_panel = 1;
+            screen.PostEvent(ftxui::Event::Custom);
+            return true;
+        }
+        if (repr == alt3) {
+            impl.active_panel = 2;
+            screen.PostEvent(ftxui::Event::Custom);
+            return true;
+        }
+        return false;
     });
 
     screen.Loop(renderer);
