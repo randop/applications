@@ -26,3 +26,5 @@ neovim-src/
 # Subprojects
 subprojects/ftxui/
 subprojects/neovim-src/
+subprojects/lua-*/
+subprojects/packagecache/

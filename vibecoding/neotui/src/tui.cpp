@@ -1,4 +1,5 @@
 #include "tui.hpp"
+#include "helpers.hpp"
 #include <iostream>
 #include <chrono>
 #include <ctime>
@@ -132,15 +133,35 @@ void TUI::run() {
         if (impl.on_run) impl.on_run();
     });
     
-    impl.process_button = ftxui::Button("Process", [&impl]() {
-        if (impl.on_process) impl.on_process();
+    impl.process_button = ftxui::Button("Process", [&impl, &screen]() {
+        if (impl.on_process) {
+          impl.on_process();
+        }
+        screen.PostEvent(ftxui::Event::Custom);
     });
-    
-    impl.workspace_renderer = ftxui::Renderer([&]() {
-        return ftxui::text(impl.workspace_output) 
-            | ftxui::bgcolor(theme.background) 
+
+    // Create the scrollable component
+    auto content_renderer = ftxui::Renderer([&]() {
+        std::vector<std::string> lines = split_lines(impl.workspace_output);
+        std::vector<ftxui::Element> elements;
+        for (const auto& line : lines) {
+            elements.push_back(ftxui::text(line));
+        }
+        return ftxui::vbox(std::move(elements));
+        /*
+        return ftxui::paragraph(impl.workspace_output)
+             | ftxui::borderStyled(ftxui::ROUNDED, ftxui::Color::Blue) | ftxui::bgcolor(theme.background) 
             | ftxui::color(theme.foreground);
+        */
     });
+
+    impl.workspace_renderer = ftxui::Renderer([&]() {
+      return content_renderer->Render()
+         | ftxui::frame                    // this makes it scrollable
+         | ftxui::borderStyled(ftxui::ROUNDED, ftxui::Color::Blue);
+    });
+
+    impl.workspace_renderer |= ftxui::Scroller;
     
     impl.code_output_renderer = ftxui::Renderer([&]() {
         return ftxui::text(impl.code_output) 
@@ -167,7 +188,7 @@ void TUI::run() {
         
         std::string config_status = impl.config_loaded ? "OK" : "Failed";
         std::string left_status = " NORMAL  lua  NeoTUI  Theme: " + theme.name + "  Config: " + config_status;
-        
+
         return ftxui::vbox({
             impl.workspace_renderer->Render() | ftxui::yflex,
             ftxui::separator() | ftxui::color(theme.border),
@@ -195,8 +216,9 @@ void TUI::run() {
             }) | ftxui::bgcolor(theme.statusbar)
         }) | ftxui::bgcolor(theme.background) | ftxui::color(theme.foreground) | ftxui::yflex;
     });
-    
+
     screen.Loop(renderer);
+
 }
 
 }

@@ -3,11 +3,15 @@
 #ifndef NEO_TUI_H
 #define NEO_TUI_H
 
+#include <ftxui/component/captured_mouse.hpp>
 #include <ftxui/component/component.hpp>
+#include <ftxui/component/component_options.hpp>
 #include <ftxui/component/screen_interactive.hpp>
 #include <ftxui/dom/elements.hpp>
 #include <string>
 #include <memory>
+
+#include "scroller.hpp"
 
 namespace neotui {
 

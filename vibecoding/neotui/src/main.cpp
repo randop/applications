@@ -1,10 +1,14 @@
 #include <iostream>
 #include <filesystem>
+#include <cstdlib>
 #include "tui.hpp"
 #include "config.hpp"
 #include "plugins.hpp"
 
 int main() {
+    setenv("COLORTERM", "truecolor", 1);
+    ftxui::Terminal::SetColorSupport(ftxui::Terminal::Color::TrueColor);
+
     std::filesystem::path cwd = std::filesystem::current_path();
     
     lua_State* L = luaL_newstate();
