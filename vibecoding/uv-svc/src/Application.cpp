@@ -12,6 +12,9 @@ namespace uvsvc {
 void Application::run() {
     LOG_THREAD("Application starting...");
 
+    // Initialize the mutex for IP request synchronization
+    uv_mutex_init(&ip_request_mutex_);
+
     workers_.emplace_back("worker1");
     workers_.emplace_back("worker2");
 
@@ -29,6 +32,9 @@ void Application::run() {
     for (auto& w : workers_) {
         w.join();
     }
+
+    // Destroy the mutex
+    uv_mutex_destroy(&ip_request_mutex_);
 
     LOG_THREAD("Application finished");
 }
@@ -50,15 +56,35 @@ void Application::runHttpClient() {
 
     uv_timer_t timer;
     uv_timer_init(loop, &timer);
-    timer.data = &client;
 
+    struct TimerData {
+        HttpClient* client;
+        uv_mutex_t* mutex;
+    };
+
+    TimerData timerData;
+    timerData.client = &client;
+    timerData.mutex = &ip_request_mutex_;
+
+    timer.data = &timerData;
+
+    /** IP REQUEST loop **/
     uv_timer_start(&timer, [](uv_timer_t* t) {
-        auto* c = static_cast<HttpClient*>(t->data);
+        LOG_INFO("IP request loop trigger");
+        auto* data = static_cast<TimerData*>(t->data);
+
+        // Lock mutex to ensure only one IP request runs
+        uv_mutex_lock(data->mutex);
+        auto* c = data->client;
         c->request(HttpClient::Endpoint::IP, [](const std::string&) {
             LOG_INFO("[HTTP] /ip request completed");
         });
-        uv_close((uv_handle_t*)t, nullptr);
-    }, 3000, 0);
+
+        // Delay for 2 seconds after running the request
+        uv_sleep(2000);
+
+        uv_mutex_unlock(data->mutex);
+    }, 1000, 30000);
 
     uv_timer_t heartbeat;
     uv_timer_init(loop, &heartbeat);

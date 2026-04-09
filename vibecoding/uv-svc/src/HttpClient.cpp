@@ -36,6 +36,20 @@ void HttpClient::request(Endpoint ep, ResponseCallback callback) {
             static_cast<HttpClient*>(ctx)->onResponse(resp);
         }, this);
 
+    // === Set custom User-Agent header ===
+    tlsuv_http_req_header(req, "User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 15_7_5) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15");
+    tlsuv_http_req_header(req, "Accept", "text/html,application/xhtml+xml,application/xml,application/json;q=0.9,*/*;q=0.8");
+    tlsuv_http_req_header(req, "Accept-Language", "en-US,en;q=0.9");
+    tlsuv_http_req_header(req, "Accept-Encoding", "gzip, deflate, br");
+    tlsuv_http_req_header(req, "Sec-Fetch-Site", "none");
+    tlsuv_http_req_header(req, "Sec-Fetch-Mode", "navigate");
+    tlsuv_http_req_header(req, "Sec-Fetch-Dest", "document");
+    tlsuv_http_req_header(req, "Sec-Fetch-User", "?1");
+    tlsuv_http_req_header(req, "Cache-Control", "max-age=0");
+    tlsuv_http_req_header(req, "Upgrade-Insecure-Requests", "1");
+    tlsuv_http_req_header(req, "Referer", "https://search.brave.com/");
+    tlsuv_http_req_header(req, "DNT", "1");
+
     if (req) {
         req->data = this;
         req->resp.body_cb = [](tlsuv_http_req_t* r, char* body, ssize_t len) {
