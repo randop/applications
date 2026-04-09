@@ -1,7 +1,7 @@
 project(
     'neotui',
     'cpp',
-    version: '0.1.17',
+    version: '0.1.18',
     meson_version: '>=0.60.0',
     default_options: ['cpp_std=c++20', 'default_library=static', 'b_staticpic=true'],
 )
@@ -25,7 +25,7 @@ lua_dep = dependency(
 
 inc = include_directories('include')
 
-sources = ['src/main.cpp', 'src/tui.cpp', 'src/config.cpp', 'src/plugins.cpp', 'src/scroller.cpp', 'src/bridge.cpp']
+sources = ['src/main.cpp', 'src/tui.cpp', 'src/config.cpp', 'src/plugins.cpp', 'src/scroller.cpp', 'src/bridge.cpp', 'src/editor.cpp']
 
 executable(
     'neotui',

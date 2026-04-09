@@ -19,6 +19,7 @@ struct TUI::Impl {
     std::string panel3_content;
     bool config_loaded = false;
     int active_panel = 0;
+    Editor editor;
     Bridge* bridge = nullptr;
     
     ftxui::Component code_input;
@@ -31,6 +32,7 @@ struct TUI::Impl {
     ftxui::Component panel1;
     ftxui::Component panel2;
     ftxui::Component panel3;
+    ftxui::Component panel4;
     
     std::function<void()> on_run;
     std::function<void()> on_process;
@@ -319,6 +321,9 @@ void TUI::run() {
         }
     });
 
+    // Panel 4: Full-screen text editor
+    impl.panel4 = impl.editor.getComponent();
+
     auto renderer = ftxui::Renderer(container, [&]() {
         auto now = std::chrono::system_clock::now();
         std::time_t t = std::chrono::system_clock::to_time_t(now);
@@ -326,7 +331,12 @@ void TUI::run() {
         time_str.erase(time_str.find_last_not_of(" \n\r\t") + 1);
         
         std::string config_status = impl.config_loaded ? "OK" : "Failed";
-        std::string panel_label = impl.active_panel == 0 ? "Main" : (impl.active_panel == 1 ? "Workspace" : "Settings");
+        std::string panel_label;
+        if (impl.active_panel == 0) panel_label = "Main";
+        else if (impl.active_panel == 1) panel_label = "Workspace";
+        else if (impl.active_panel == 2) panel_label = "Settings";
+        else if (impl.active_panel == 3) panel_label = "Editor";
+        else panel_label = "Unknown";
         
         std::string status_msg = "";
         if (impl.bridge) {
@@ -339,14 +349,45 @@ void TUI::run() {
         }
         left_status += "  Theme: " + theme.name + "  Config: " + config_status;
 
+        // HIDE ALL EXISTING UI ELEMENTS - Only show new container
         ftxui::Element current_panel;
-        if (impl.active_panel == 0) {
-            current_panel = impl.panel1->Render() | ftxui::yflex | ftxui::xflex;
-        } else if (impl.active_panel == 1) {
-            current_panel = impl.panel2->Render() | ftxui::yflex | ftxui::xflex;
-        } else {
-            current_panel = impl.panel3->Render() | ftxui::yflex | ftxui::xflex;
-        }
+
+        // Status text for button interaction
+        static std::string button_status = "Ready";
+        static std::string input_value;
+
+        // Create text input
+        auto input_component = ftxui::Input(&input_value, "Type something...");
+
+        // Create hello button that updates status
+        auto hello_button = ftxui::Button("Hello", [&]() {
+            button_status = "Hello, " + input_value;
+            std::cerr << "[DEBUG] Hello button clicked! Status: " << button_status << std::endl;
+        });
+
+        // Status display
+        auto status_display = ftxui::Renderer([&]() {
+            return ftxui::text("Status: " + button_status) | ftxui::bold;
+        });
+
+        // Create new container with input and button (status is display-only)
+        auto interactive_container = ftxui::Container::Vertical({
+            input_component,
+            hello_button
+        });
+
+        // Combine interactive components with status display
+        auto new_container = ftxui::Renderer(interactive_container, [=]() {
+            auto interactive_part = interactive_container->Render();
+            auto status_part = ftxui::text("Status: " + button_status) | ftxui::bold | ftxui::center;
+            return ftxui::vbox({
+                interactive_part,
+                ftxui::separator(),
+                status_part
+            });
+        });
+
+        current_panel = new_container->Render() | ftxui::center | ftxui::size(ftxui::WIDTH, ftxui::EQUAL, 40) | ftxui::size(ftxui::HEIGHT, ftxui::EQUAL, 10);
 
         return ftxui::vbox({
             current_panel,
@@ -364,6 +405,7 @@ void TUI::run() {
         char alt1[] = {27, '1', 0};
         char alt2[] = {27, '2', 0};
         char alt3[] = {27, '3', 0};
+        char alt4[] = {27, '4', 0};
         if (repr == alt1) {
             impl.active_panel = 0;
             screen.PostEvent(ftxui::Event::Custom);
@@ -382,6 +424,12 @@ void TUI::run() {
             if (impl.on_panel_change) {
                 impl.on_panel_change(2);
             }
+            screen.PostEvent(ftxui::Event::Custom);
+            return true;
+        }
+        if (repr == alt4) {
+            std::cerr << "[DEBUG] Switching to panel 4 (editor)" << std::endl;
+            impl.active_panel = 3;
             screen.PostEvent(ftxui::Event::Custom);
             return true;
         }

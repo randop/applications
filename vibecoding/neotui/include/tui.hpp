@@ -14,6 +14,7 @@
 #include "scroller.hpp"
 #include "bridge.hpp"
 #include "api.hpp"
+#include "editor.hpp"
 
 namespace neotui {
 
