@@ -3,7 +3,7 @@
 ## Build and Deploy
 ```bash
 docker buildx create --name multiarch --use
-docker buildx build --platform linux/amd64 -t rfledesma/nginx-waf:latest -t rfledesma/nginx-waf:1.1.9 --push .
+docker buildx build --platform linux/amd64,linux/arm64 -t rfledesma/nginx-waf:1.1.10 -t rfledesma/nginx-waf:latest --push .
 ```
 
 ## Local Testing

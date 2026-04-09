@@ -1,66 +1,69 @@
-FROM alpine:3.22
+# Builder stage: compile nginx static from source
+FROM debian:trixie-slim AS builder
 
-# Set environment variable
-ENV MODSEC_VERSION=3.0.12
-
-# Install build dependencies and required packages
-RUN apk update && \
-    apk add \
-    nginx \
-    curl \
+# Install build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
-    pcre-dev \
     make \
-    zlib-dev \
-    linux-headers \
-    libxml2-dev \
-    yajl-dev \
-    geoip-dev
+    libpcre2-dev \
+    zlib1g-dev \
+    libssl-dev \
+    ca-certificates \
+    wget \
+    pkg-config \
+    && rm -rf /var/lib/apt/lists/*
 
-RUN apk add --virtual .build-deps \
-    build-base \
-    automake \
-    autoconf
+# Download nginx mainline source
+ENV NGINX_VERSION=1.27.0
+RUN wget -qO- http://nginx.org/download/nginx-${NGINX_VERSION}.tar.gz | tar xz
 
-# Install ModSecurity for Nginx
-RUN curl -sL https://github.com/SpiderLabs/ModSecurity/releases/download/v${MODSEC_VERSION}/modsecurity-v${MODSEC_VERSION}.tar.gz -o /tmp/modsecurity.tar.gz && \
-    tar -xzvf /tmp/modsecurity.tar.gz -C /tmp
+# Build nginx with static linking
+WORKDIR /nginx-${NGINX_VERSION}
+RUN ./configure \
+    --prefix=/etc/nginx \
+    --sbin-path=/usr/sbin/nginx \
+    --conf-path=/etc/nginx/nginx.conf \
+    --pid-path=/var/run/nginx.pid \
+    --lock-path=/var/run/nginx.lock \
+    --error-log-path=/var/log/nginx/error.log \
+    --http-log-path=/var/log/nginx/access.log \
+    --with-stream \
+    --with-http_gzip_static_module \
+    --with-http_stub_status_module \
+    --with-ld-opt="-static -static-libgcc -static-libstdc++" \
+    && make -j$(nproc) \
+    && make install DESTDIR=/tmp/nginx
 
-# Install OWASP ModSecurity Core Rule Set (CRS)
-RUN curl -sL https://github.com/coreruleset/coreruleset/archive/v4.0.0-rc2.tar.gz -o /tmp/crs.tar.gz && \
-    tar -xzvf /tmp/crs.tar.gz -C /usr/local && \
-    mv /usr/local/coreruleset-4.0.0-rc2 /usr/local/crs && \
-    cp /usr/local/crs/crs-setup.conf.example /usr/local/crs/crs-setup.conf
+# Create required files and directories
+RUN mkdir -p /tmp/nginx/var/log/nginx /tmp/nginx/var/run/nginx /tmp/etc/nginx /tmp/var/www/html
+RUN touch /tmp/etc/nginx/client_body_temp
+RUN touch /tmp/nginx/var/run/nginx.pid
+RUN touch /tmp/nginx/var/run/nginx.lock
+RUN echo "<p>Hello</p>" > /tmp/var/www/html/index.html
 
-# Compile ModSecurity for Nginx
-RUN cd /tmp/modsecurity-v${MODSEC_VERSION} && \
-    ./configure --with-yajl --with-geoip && \
-    make && make install
+# Runtime stage: use distroless static
+FROM gcr.io/distroless/static-debian13:nonroot
 
-# Clean up build dependencies
-RUN rm -rf /tmp/modsecurity* && \
-    rm -rf /tmp/crs.tar.gz && \
-    apk del .build-deps && \
-    rm -rf /var/cache/apk/*
+# Copy nginx binary and configuration from builder
+COPY --from=builder --chown=nonroot:nonroot /tmp/etc/nginx /etc/nginx
+COPY --from=builder /tmp/nginx/usr/sbin/nginx /usr/sbin/nginx
+COPY --from=builder /tmp/nginx/etc/nginx/nginx.conf /etc/nginx/nginx.conf
+COPY --from=builder /tmp/nginx/etc/nginx/koi-utf /etc/nginx/koi-utf
+COPY --from=builder /tmp/nginx/etc/nginx/koi-win /etc/nginx/koi-win
+COPY --from=builder /tmp/nginx/etc/nginx/mime.types /etc/nginx/mime.types
+COPY --from=builder /tmp/nginx/etc/nginx/scgi_params /etc/nginx/scgi_params
+COPY --from=builder /tmp/nginx/etc/nginx/uwsgi_params /etc/nginx/uwsgi_params
+COPY --from=builder /tmp/nginx/etc/nginx/win-utf /etc/nginx/win-utf
+COPY --from=builder --chown=nonroot:nonroot /tmp/nginx/var/log/nginx /var/log/nginx
+COPY --from=builder --chown=nonroot:nonroot /tmp/nginx/var/run/nginx /var/run/nginx
+COPY --from=builder --chown=nonroot:nonroot /tmp/nginx/var/run/nginx.pid /var/run/nginx.pid
+COPY --from=builder --chown=nonroot:nonroot /tmp/nginx/var/run/nginx.lock /var/run/nginx.lock
+COPY --from=builder --chown=nonroot:nonroot /tmp/var/www/html /etc/nginx/html
 
-RUN apk add nginx-mod-http-modsecurity
+# Expose HTTP and HTTPS ports
+EXPOSE 80 443
 
-# Create directories for configurations and web content
-RUN mkdir -p /etc/nginx/conf.d /var/www/html /var/cache/nginx /var/run/nginx /var/log/nginx && \
-    chown -R nginx:nginx /etc/nginx /var/www/html /var/cache/nginx /var/run/nginx /var/log/nginx
+USER nonroot:nonroot
 
-# Copy custom Nginx and ModSecurity configurations
-COPY nginx.conf /etc/nginx/nginx.conf
-COPY modsecurity.conf /etc/nginx/modsecurity.conf
-
-# Copy application files
-COPY app /var/www/html
-
-# Expose port 80
-EXPOSE 80
-
-# Run as non-root user
-USER nginx
-
-# Start Nginx in foreground
-CMD ["nginx", "-g", "daemon off;"]
+# Start nginx
+CMD ["/usr/sbin/nginx", "-g", "daemon off;"]
