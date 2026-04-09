@@ -1,7 +1,7 @@
 // JsonParser.cpp - JSON parsing implementation
 #include "uvsvc/JsonParser.hpp"
 #include "uvsvc/SafeOutput.hpp"
-#include "vendor/ArduinoJson.hpp"
+#include "../vendor/ArduinoJson.hpp"
 
 namespace uvsvc {
 
@@ -9,7 +9,7 @@ void JsonParser::parseHttpBinJson(const std::string& json_str) {
     LOG_INFO("[JSON] === Parsing /json response ===");
 
     ArduinoJson::JsonDocument doc;
-    ArduinoJson::DeserializationError error = ArduinoJson::deserializeJson(doc, json_str);
+    auto error = ArduinoJson::deserializeJson(doc, json_str);
 
     if (error) {
         LOG_ERROR(std::string("[JSON] Parse error: ") + error.c_str());
@@ -41,7 +41,7 @@ void JsonParser::parseHttpBinIp(const std::string& json_str) {
     LOG_INFO("[JSON] === Parsing /ip response ===");
 
     ArduinoJson::JsonDocument doc;
-    ArduinoJson::DeserializationError error = ArduinoJson::deserializeJson(doc, json_str);
+    auto error = ArduinoJson::deserializeJson(doc, json_str);
 
     if (error) {
         LOG_ERROR(std::string("[JSON] Parse error: ") + error.c_str());

@@ -19,6 +19,7 @@ private:
     static std::mutex mutex_;
 };
 
+// Convenience macros
 #define LOG_INFO(msg) uvsvc::SafeOutput::print(std::string("[INFO] ") + (msg))
 #define LOG_ERROR(msg) uvsvc::SafeOutput::print(std::string("[ERROR] ") + (msg))
 #define LOG_THREAD(msg) uvsvc::SafeOutput::print("[" + uvsvc::SafeOutput::threadId() + "] " + (msg))

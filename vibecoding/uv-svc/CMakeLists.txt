@@ -25,7 +25,18 @@ set(CMAKE_PREFIX_PATH "${CMAKE_BINARY_DIR}" ${CMAKE_PREFIX_PATH})
 set(TLSUV_HTTP ON CACHE BOOL "Enable HTTP support in tlsuv" FORCE)
 add_subdirectory(vendor/tlsuv-0.41.1)
 
-add_executable(uv-svc src/main.cpp)
+# Source files
+set(SOURCES
+    src/SafeOutput.cpp
+    src/JsonParser.cpp
+    src/BackgroundLoop.cpp
+    src/HttpClient.cpp
+    src/Helpers.cpp
+    src/Application.cpp
+    src/main.cpp
+)
+
+add_executable(uv-svc ${SOURCES})
 
 target_link_libraries(uv-svc PRIVATE
     tlsuv
