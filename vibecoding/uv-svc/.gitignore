@@ -1,0 +1,24 @@
+# Build directories
+build/
+.build/
+meson-private/
+meson-info/
+meson-logs/
+.cache/
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+
+# Temporary files
+*.tmp
+*.swp
+*.bak
+*~
+
+# Binaries
+uv-svc
