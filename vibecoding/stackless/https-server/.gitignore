@@ -1,6 +1,8 @@
 # Build directories
 build/
+builddir/
 .build/
+.builddir/
 meson-private/
 meson-info/
 meson-logs/
