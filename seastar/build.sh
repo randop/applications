@@ -16,7 +16,10 @@ export CMAKE_PREFIX_PATH="${OPT_PREFIX}/valgrind/current:${CMAKE_PREFIX_PATH}"
 
 echo "CMAKE_PREFIX_PATH: $CMAKE_PREFIX_PATH"
 
+clang-format -i main.cc
+
 mkdir -p build
 cd build
 cmake .. -DCMAKE_BUILD_TYPE=Release
+
 make -j$(nproc)
