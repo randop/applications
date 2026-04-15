@@ -16,8 +16,11 @@
 
 #include "stop_signal.hh"
 
+static seastar::logger applog("tcp-echo");
+
 using namespace seastar;
 namespace bpo = boost::program_options;
+
 
 struct streams {
     connected_socket s;
@@ -115,7 +118,7 @@ int main(int ac, char** av) {
     app.add_options()
         ("port", bpo::value<uint16_t>()->default_value(10000), "Server port")
         ("address", bpo::value<std::string>()->default_value("0.0.0.0"), "Server address")
-        ("verbose,v", bpo::value<bool>()->default_value(false)->implicit_value(true), "Verbose output")
+        ("verbose,v", bpo::value<bool>()->default_value(true)->implicit_value(true), "Verbose output")
         ;
 
     return app.run(ac, av, [&app] {
@@ -127,7 +130,7 @@ int main(int ac, char** av) {
             std::string addr_str = config["address"].as<std::string>();
             bool verbose = config["verbose"].as<bool>();
 
-            std::cout << "Starting plain TCP echo server..." << std::endl;
+             applog.info("Starting plain TCP echo server...");
 
             net::inet_address a = net::dns::resolve_name(addr_str).get();
             ipv4_addr ia(a, port);
@@ -153,3 +156,4 @@ int main(int ac, char** av) {
         });
     });
 }
+
