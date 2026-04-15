@@ -127,6 +127,26 @@ if [ ! -f "/opt/protobuf/current/lib/libprotobuf.a" ]; then
 fi
 export CMAKE_PREFIX_PATH="/opt/protobuf/current:${CMAKE_PREFIX_PATH}"
 
+RAGEL_VERSION=v7.0.4
+COLM_SUITE_VERSION=main
+COLM_SUITE_TAG=8841e56
+if [ ! -f "/opt/colm-suite/current/lib/libragel.a" ]; then
+  echo "Compiling colm suite ..."
+  mkdir -p /opt/colm-suite/current
+  rm -rf /opt/colm-suite/current/*
+  rm -rf /opt/colm-suite/${COLM_SUITE_TAG}
+  git clone -b main https://github.com/adrian-thurston/colm-suite.git /opt/colm-suite/${COLM_SUITE_TAG}
+  cd /opt/colm-suite/${COLM_SUITE_TAG}
+  git reset --hard ${COLM_SUITE_TAG}
+  rm -rf /opt/colm-suite/${COLM_SUITE_TAG}/.git
+  rm -rf /opt/colm-suite/${COLM_SUITE_TAG}/.github
+  ./autogen.sh
+  ./configure --prefix=/opt/colm-suite/current
+  make -j$(nproc)
+  make install
+fi
+export CMAKE_PREFIX_PATH="/opt/colm-suite/current:${CMAKE_PREFIX_PATH}"
+
 SEASTAR_VERSION=v25.05.0
 SEASTAR_TAG=seastar-25.05.0
 mkdir -p /opt/seastar/current
