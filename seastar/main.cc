@@ -131,7 +131,9 @@ public:
                       std::cout << "Ending session" << std::endl;
                     }
                     idle_timer->cancel();
-                    return strms->in.close();
+                    return when_all_succeed(strms->in.close())
+                        .discard_result()
+                        .handle_exception([](std::exception_ptr) {});
                   });
             })
             .handle_exception([this](auto ep) {
@@ -181,7 +183,7 @@ int main(int ac, char **av) {
       ipv4_addr ia(a, port);
       socket_address sa(ia);
 
-      std::chrono::seconds idle_timeout{10};
+      std::chrono::seconds idle_timeout{30};
 
       seastar::sharded<echoserver> server;
       server.start(verbose, idle_timeout).get();
