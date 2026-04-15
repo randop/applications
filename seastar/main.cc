@@ -1,3 +1,23 @@
+/*****************************************************************************
+TCP Server using Seastar and C++23
+Requires: Seastar v25.05.0 or latest
+
+Copyright © 2010 — 2026 Randolph Ledesma
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+*****************************************************************************/
+
 #include <chrono>
 #include <iostream>
 #include <seastar/core/app-template.hh>
@@ -11,11 +31,23 @@
 #include <seastar/core/thread.hh>
 #include <seastar/net/api.hh>
 #include <seastar/net/dns.hh>
+#include <seastar/net/tls.hh>
 #include <seastar/util/closeable.hh>
 #include <seastar/util/log.hh>
 #include <thread>
 
 #include "stop_signal.hh"
+
+#define VERSION_MAJOR 1
+#define VERSION_MINOR 0
+#define VERSION_PATCH 0
+
+#define STRINGIFY0(s) #s
+#define STRINGIFY(s) STRINGIFY0(s)
+
+#define VERSION_STRING                                                         \
+  STRINGIFY(VERSION_MAJOR)                                                     \
+  "." STRINGIFY(VERSION_MINOR) "." STRINGIFY(VERSION_PATCH)
 
 static seastar::logger applog("tcp-echo");
 
@@ -63,7 +95,7 @@ public:
               socket_address remote = std::move(ar.remote_address);
 
               if (_verbose) {
-                std::cout << "Got connection from " << remote << std::endl;
+                applog.info("New connection from client {}", remote);
               }
 
               auto strms = make_lw_shared<streams>(std::move(s));
@@ -159,6 +191,7 @@ public:
 };
 
 int main(int ac, char **av) {
+  std::cout << "version: " << VERSION_STRING << std::endl;
   app_template app;
   app.add_options()("port", bpo::value<uint16_t>()->default_value(10000),
                     "Server port")(
@@ -166,7 +199,10 @@ int main(int ac, char **av) {
       "Server address")(
       "verbose,v",
       bpo::value<bool>()->default_value(true)->implicit_value(true),
-      "Verbose output");
+      "Verbose output")("cert", bpo::value<std::string>()->default_value(""),
+                        "Certificate file (PEM)")(
+      "key", bpo::value<std::string>()->default_value(""),
+      "Private key file (PEM)");
 
   return app.run(ac, av, [&app] {
     return async([&app] {
@@ -176,8 +212,26 @@ int main(int ac, char **av) {
       uint16_t port = config["port"].as<uint16_t>();
       std::string addr_str = config["address"].as<std::string>();
       bool verbose = config["verbose"].as<bool>();
+      sstring cert_file = config["cert"].as<std::string>();
+      sstring key_file = config["key"].as<std::string>();
 
-      applog.info("Starting plain TCP echo server...");
+      // === TLS Credentials Setup ===
+      auto certs =
+          make_shared<tls::server_credentials>(make_shared<tls::dh_params>());
+
+      // Load server certificate + key
+      bool willUsePEM = false;
+      if (willUsePEM) {
+        certs->set_x509_key_file(cert_file, key_file, tls::x509_crt_format::PEM)
+            .get();
+      }
+
+      // Use system CA certificates (for client cert validation if enabled)
+      certs->set_system_trust().get();
+
+      // Optional: Set client auth to NONE (change to REQUIRE if you want client
+      // certificates)
+      certs->set_client_auth(tls::client_auth::NONE);
 
       net::inet_address a = net::dns::resolve_name(addr_str).get();
       ipv4_addr ia(a, port);
@@ -197,9 +251,8 @@ int main(int ac, char **av) {
         return 1;
       }
 
-      std::cout << "Plain TCP echo server running at " << addr_str << ":"
-                << port << std::endl;
-      std::cout << "Press Ctrl+C to stop..." << std::endl;
+      applog.info("TCP server running at {}:{}", addr_str, port);
+      applog.info("Press Ctrl+C to halt...");
 
       stop_signal.wait().get();
       return 0;
