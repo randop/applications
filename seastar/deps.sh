@@ -105,6 +105,28 @@ if [ ! -f "/opt/hwloc/current/lib/libhwloc.la" ]; then
   make install
 fi
 
+# TODO: ln -sv /opt/protobuf/current/lib/pkgconfig/protobuf.pc /usr/lib/pkgconfig/protobuf.pc
+PROTOBUF_VERSION=v25.9
+if [ ! -f "/opt/protobuf/current/lib/libprotobuf.a" ]; then
+  echo "Compiling protobuf ${PROTOBUF_VERSION} ..."
+  mkdir -p /opt/protobuf/current
+  rm -rf /opt/protobuf/current/*
+  if [ ! -f "/opt/protobuf/$PROTOBUF_VERSION/CMakeLists.txt" ]; then
+    rm -rf /opt/protobuf/${PROTOBUF_VERSION}
+    git clone -b ${PROTOBUF_VERSION} https://github.com/protocolbuffers/protobuf.git /opt/protobuf/${PROTOBUF_VERSION}
+    cd /opt/protobuf/${PROTOBUF_VERSION}
+    git submodule update --init --recursive
+    rm -rf /opt/protobuf/${PROTOBUF_VERSION}/.git
+    rm -rf /opt/protobuf/${PROTOBUF_VERSION}/.github
+  fi
+  mkdir -p /opt/protobuf/${PROTOBUF_VERSION}/build
+  cd /opt/protobuf/${PROTOBUF_VERSION}/build
+  cmake .. -Dprotobuf_BUILD_TESTS=OFF -DCMAKE_INSTALL_PREFIX=/opt/protobuf/current -DCMAKE_BUILD_TYPE=Release
+  make -j$(nproc)
+  make install
+fi
+export CMAKE_PREFIX_PATH="/opt/protobuf/current:${CMAKE_PREFIX_PATH}"
+
 SEASTAR_VERSION=v25.05.0
 SEASTAR_TAG=seastar-25.05.0
 mkdir -p /opt/seastar/current
