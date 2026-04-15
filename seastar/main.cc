@@ -25,6 +25,7 @@ limitations under the License.
 #include <seastar/core/future-util.hh>
 #include <seastar/core/gate.hh>
 #include <seastar/core/loop.hh>
+#include <seastar/core/memory.hh>
 #include <seastar/core/reactor.hh>
 #include <seastar/core/sharded.hh>
 #include <seastar/core/sleep.hh>
@@ -72,6 +73,9 @@ class echoserver {
   bool _verbose = false;
   std::chrono::seconds _idle_timeout{300}; // default 5 minutes
 
+  // IMPORTANT: Store the listening future per shard
+  future<> _listen_future = make_ready_future<>();
+
 public:
   echoserver(bool verbose = false, std::chrono::seconds idle_timeout = 300s)
       : _verbose(verbose), _idle_timeout(idle_timeout) {}
@@ -81,9 +85,10 @@ public:
     opts.reuse_address = true;
 
     _socket = seastar::listen(seastar::make_ipv4_address(addr), opts);
+    applog.info("[shard {}] Listening on {}", this_shard_id(), addr);
 
     // Background accept loop
-    (void)repeat([this] {
+    _listen_future = repeat([this] {
       if (_stopped) {
         return make_ready_future<stop_iteration>(stop_iteration::yes);
       }
@@ -170,7 +175,7 @@ public:
             })
             .handle_exception([this](auto ep) {
               if (!_stopped) {
-                std::cerr << "Accept error: " << ep << std::endl;
+                applog.error("Accept error: {}", ep);
               }
             })
             .then([this] {
@@ -186,7 +191,9 @@ public:
   future<> stop() {
     _stopped = true;
     _socket.abort_accept();
-    return _gate.close();
+    return _gate.close().then([this] {
+      return std::move(_listen_future); // Wait for accept loop to stop
+    });
   }
 };
 
@@ -241,9 +248,12 @@ int main(int ac, char **av) {
 
       seastar::sharded<echoserver> server;
       server.start(verbose, idle_timeout).get();
-      auto stop_server = deferred_stop(server);
+
+      applog.info("shards: {}", seastar::smp::count);
 
       try {
+        // Start listen on ALL shards and keep the futures alive via the
+        // returned future
         server.invoke_on_all(&echoserver::listen, sa).get();
       } catch (...) {
         std::cerr << "Failed to start server: " << std::current_exception()
@@ -254,7 +264,27 @@ int main(int ac, char **av) {
       applog.info("TCP server running at {}:{}", addr_str, port);
       applog.info("Press Ctrl+C to halt...");
 
+      auto stats = seastar::memory::stats();
+
+      std::cout << "Seastar memory stats (shard " << seastar::this_shard_id()
+                << "):\n"
+                << "  allocated:     " << stats.allocated_memory() / 1024 / 1024
+                << " MiB\n"
+                << "  free:          " << stats.free_memory() / 1024 / 1024
+                << " MiB\n"
+                << "  total:         "
+                << (stats.allocated_memory() + stats.free_memory()) / 1024 /
+                       1024
+                << " MiB\n"
+                << "  mallocs:       " << stats.mallocs() << "\n"
+                << "  frees:         " << stats.frees() << "\n"
+                << "  live objects:  " << stats.live_objects() << "\n"
+                << std::endl;
+
       stop_signal.wait().get();
+
+      applog.warn("Shutting down service ...");
+      server.stop().get();
       return 0;
     });
   });
