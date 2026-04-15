@@ -44,6 +44,7 @@ if [ ! -f "/opt/boost/$BOOST_VERSION/$BOOST_STRING/project-config.jam" ]; then
   ./bootstrap.sh --prefix=/opt/boost/current --with-python=python3
 fi
 export BOOST_ROOT=/opt/boost/current
+export CMAKE_PREFIX_PATH="/opt/boost/current:${CMAKE_PREFIX_PATH}"
 
 # TODO: Improve complete compiled library detection
 if [ ! -f "/opt/boost/current/lib/libboost_atomic.so" ]; then
@@ -63,6 +64,43 @@ if [ ! -f "/opt/yamlcpp/current/lib/libyaml-cpp.a" ]; then
   mkdir -p /opt/yamlcpp/${YAML_CPP_VERSION}/build
   cd /opt/yamlcpp/${YAML_CPP_VERSION}/build
   cmake .. -DCMAKE_INSTALL_PREFIX=/opt/yamlcpp/current -DCMAKE_BUILD_TYPE=Release
+  make -j$(nproc)
+  make install
+fi
+
+# TODO: ln -sv /opt/fmt/current/lib/pkgconfig/fmt.pc /usr/lib/pkgconfig/fmt.pc
+FMT_VERSION=v12.1.0
+FMT_TAG=12.1.0
+if [ ! -f "/opt/fmt/current/lib/libfmt.a" ]; then
+  echo "Compiling fmt ${FMT_VERSION} ..."
+  mkdir -p /opt/fmt/current
+  rm -rf /opt/fmt/current/*
+  rm -rf /opt/fmt/${FMT_VERSION}
+  git clone -b ${FMT_TAG} https://github.com/fmtlib/fmt.git /opt/fmt/${FMT_VERSION}
+  rm -rf /opt/fmt/${CARES_VERSION}/.git
+  rm -rf /opt/fmt/${CARES_VERSION}/.github
+  mkdir -p /opt/fmt/${FMT_VERSION}/build
+  cd /opt/fmt/${FMT_VERSION}/build
+  cmake .. -DCMAKE_INSTALL_PREFIX=/opt/fmt/current -DCMAKE_BUILD_TYPE=Release
+  make -j$(nproc)
+  make install
+fi
+export CMAKE_PREFIX_PATH="/opt/fmt/current:${CMAKE_PREFIX_PATH}"
+
+# TODO: ln -sv /opt/hwloc/current/lib/pkgconfig/hwloc.pc /usr/lib/pkgconfig/hwloc.pc
+HWLOC_VERSION=v2.13.0
+HWLOC_TAG=hwloc-2.13.0
+if [ ! -f "/opt/hwloc/current/lib/libhwloc.la" ]; then
+  echo "Compiling hwloc ${HWLOC_VERSION} ..."
+  mkdir -p /opt/hwloc/current
+  rm -rf /opt/hwloc/current/*
+  rm -rf /opt/hwloc/${HWLOC_VERSION}
+  git clone -b ${HWLOC_TAG} https://github.com/open-mpi/hwloc.git /opt/hwloc/${HWLOC_VERSION}
+  rm -rf /opt/hwloc/${HWLOC_VERSION}/.git
+  rm -rf /opt/hwloc/${HWLOC_VERSION}/.github
+  cd /opt/hwloc/${HWLOC_VERSION}
+  ./autogen.sh
+  ./configure --prefix=/opt/hwloc/current
   make -j$(nproc)
   make install
 fi
