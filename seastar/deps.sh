@@ -21,6 +21,7 @@ else
   echo "c-ares: OK"
 fi
 
+# TODO: /usr/lib/pkgconfig/boost.pc
 BOOST_VERSION=v1.90.0
 BOOST_STRING=boost_1_90_0
 cd /opt/boost
@@ -42,6 +43,7 @@ if [ ! -f "/opt/boost/$BOOST_VERSION/$BOOST_STRING/project-config.jam" ]; then
   echo "Processing boost $BOOST_VERSION bootstrap..."
   ./bootstrap.sh --prefix=/opt/boost/current --with-python=python3
 fi
+export BOOST_ROOT=/opt/boost/current
 
 # TODO: Improve complete compiled library detection
 if [ ! -f "/opt/boost/current/lib/libboost_atomic.so" ]; then
@@ -64,3 +66,13 @@ if [ ! -f "/opt/yamlcpp/current/lib/libyaml-cpp.a" ]; then
   make -j$(nproc)
   make install
 fi
+
+SEASTAR_VERSION=v25.05.0
+SEASTAR_TAG=seastar-25.05.0
+mkdir -p /opt/seastar/current
+rm -rf /opt/seastar/current/*
+rm -rf /opt/seastar/${SEASTAR_VERSION}
+git clone -b ${SEASTAR_TAG} https://github.com/scylladb/seastar.git /opt/seastar/${SEASTAR_VERSION}
+rm -rf /opt/seastar/${SEASTAR_VERSION}/.git
+cd /opt/seastar/${SEASTAR_VERSION}/
+./configure.py --mode=release --without-tests --without-apps --without-demos --prefix=/opt/seastar/current
