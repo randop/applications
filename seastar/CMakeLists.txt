@@ -48,3 +48,9 @@ target_link_libraries(filewriter PRIVATE Seastar::seastar)
 target_compile_options(filewriter PRIVATE
     -Wall -Wextra -O3
 )
+
+add_executable(file_demo file_demo.cc)
+target_link_libraries(file_demo PRIVATE Seastar::seastar)
+target_compile_options(file_demo PRIVATE
+    -Wall -Wextra -O3
+)
