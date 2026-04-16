@@ -15,10 +15,17 @@ using namespace seastar;
 logger applog("app");
 
 int main(int argc, char **argv) {
-  seastar::app_template app;
+  app_template app;
   app.run(argc, argv, []() -> future<> {
-    compute_something_asynchronously().then(
-        [](sstring who) { applog.info("hello, {}", who); });
+    compute_something_asynchronously()
+        .then([](sstring who) {
+          // function callback
+          applog.info("hello, {}", who);
+        })
+        .handle_exception([](std::exception_ptr) {
+          // ignore error
+        });
+
     return make_ready_future<>();
   });
 }
