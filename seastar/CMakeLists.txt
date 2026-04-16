@@ -23,3 +23,11 @@ target_link_libraries(shard-demo PRIVATE Seastar::seastar)
 target_compile_options(shard-demo PRIVATE
     -Wall -Wextra -O3
 )
+
+add_executable(hello hello.cc)
+
+target_link_libraries(hello PRIVATE Seastar::seastar)
+
+target_compile_options(hello PRIVATE
+    -Wall -Wextra -O3
+)

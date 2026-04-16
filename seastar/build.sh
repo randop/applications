@@ -25,6 +25,7 @@ else
   export LD_LIBRARY_PATH=$LOCAL_LIBRARY_PATH
 fi
 
+clang-format -i hello.cc
 clang-format -i main.cc
 
 mkdir -p build
