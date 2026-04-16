@@ -53,23 +53,25 @@ BOOST_VERSION=v1.90.0
 BOOST_STRING=boost_1_90_0
 mkdir -p ${OPT_PREFIX}/boost/current
 cd ${OPT_PREFIX}/boost
-if [ ! -f "${OPT_PREFIX}/boost/boost_1_90_0.tar" ]; then
-  wget -c "https://archives.boost.io/release/1.90.0/source/boost_1_90_0.tar.bz2"
-  echo "Extracting boost $BOOST_VERSION ..."
-  bzip2 -d ${OPT_PREFIX}/boost/boost_1_90_0.tar.bz2
-fi
-mkdir -p ${OPT_PREFIX}/boost/current
-mkdir -vp ${OPT_PREFIX}/boost/${BOOST_VERSION}
+if [ ! -f "${OPT_PREFIX}/boost/current/lib/libboost_atomic.so" ]; then
+  if [ ! -f "${OPT_PREFIX}/boost/boost_1_90_0.tar" ]; then
+    wget -c "https://archives.boost.io/release/1.90.0/source/boost_1_90_0.tar.bz2"
+    echo "Extracting boost $BOOST_VERSION ..."
+    bzip2 -d ${OPT_PREFIX}/boost/boost_1_90_0.tar.bz2
+  fi
+  mkdir -p ${OPT_PREFIX}/boost/current
+  mkdir -vp ${OPT_PREFIX}/boost/${BOOST_VERSION}
 
-if [ ! -f "${OPT_PREFIX}/boost/$BOOST_VERSION/$BOOST_STRING/bootstrap.sh" ]; then
-  echo "Extracting boost archive..."
-  tar xf ${OPT_PREFIX}/boost/${BOOST_STRING}.tar -C ${OPT_PREFIX}/boost/${BOOST_VERSION}
-fi
-cd ${OPT_PREFIX}/boost/${BOOST_VERSION}/${BOOST_STRING}/
+  if [ ! -f "${OPT_PREFIX}/boost/$BOOST_VERSION/$BOOST_STRING/bootstrap.sh" ]; then
+    echo "Extracting boost archive..."
+    tar xf ${OPT_PREFIX}/boost/${BOOST_STRING}.tar -C ${OPT_PREFIX}/boost/${BOOST_VERSION}
+  fi
+  cd ${OPT_PREFIX}/boost/${BOOST_VERSION}/${BOOST_STRING}/
 
-if [ ! -f "${OPT_PREFIX}/boost/$BOOST_VERSION/$BOOST_STRING/project-config.jam" ]; then
-  echo "Processing boost $BOOST_VERSION bootstrap..."
-  ./bootstrap.sh --prefix=${OPT_PREFIX}/boost/current --with-python=python3
+  if [ ! -f "${OPT_PREFIX}/boost/$BOOST_VERSION/$BOOST_STRING/project-config.jam" ]; then
+    echo "Processing boost $BOOST_VERSION bootstrap..."
+    ./bootstrap.sh --prefix=${OPT_PREFIX}/boost/current --with-python=python3
+  fi
 fi
 export BOOST_ROOT=${OPT_PREFIX}/boost/current
 
