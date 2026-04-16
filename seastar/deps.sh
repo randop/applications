@@ -26,24 +26,6 @@ else
   export PKG_CONFIG_PATH=$LOCAL_PKGCONFIG
 fi
 
-CARES_VERSION=v1.34.6
-if [ ! -f "${OPT_PREFIX}/c-ares/current/lib/libcares.a" ]; then
-  echo "Compiling c-ares..."
-  mkdir -p ${OPT_PREFIX}/c-ares/current
-  rm -rf ${OPT_PREFIX}/c-ares/${CARES_VERSION}
-  git clone -b ${CARES_VERSION} https://github.com/c-ares/c-ares.git ${OPT_PREFIX}/c-ares/${CARES_VERSION}
-  rm -rf ${OPT_PREFIX}/c-ares/${CARES_VERSION}/.git
-  rm -rf ${OPT_PREFIX}/c-ares/${CARES_VERSION}/.github
-  cd ${OPT_PREFIX}/c-ares/${CARES_VERSION}
-  autoreconf -fi
-  ./configure --prefix=${OPT_PREFIX}/c-ares/current
-  make -j$(nproc)
-  make install
-  echo "Checking compiled c-ares library..." && file ${OPT_PREFIX}/c-ares/current/lib/libcares.a
-else
-  echo "c-ares: OK"
-fi
-
 if [ ! -f "${LOCAL_PKGCONFIG}/libcares.pc" ]; then
   ln -sv ${OPT_PREFIX}/c-ares/current/lib/pkgconfig/libcares.pc ${LOCAL_PKGCONFIG}/libcares.pc
 fi
@@ -90,6 +72,29 @@ else
   echo "boost: OK"
 fi
 
+CARES_VERSION=v1.34.6
+if [ ! -f "${OPT_PREFIX}/c-ares/current/lib/libcares.a" ]; then
+  echo "Compiling c-ares..."
+  mkdir -p ${OPT_PREFIX}/c-ares/current
+  rm -rf ${OPT_PREFIX}/c-ares/${CARES_VERSION}
+  git clone -b ${CARES_VERSION} https://github.com/c-ares/c-ares.git ${OPT_PREFIX}/c-ares/${CARES_VERSION}
+  rm -rf ${OPT_PREFIX}/c-ares/${CARES_VERSION}/.git
+  rm -rf ${OPT_PREFIX}/c-ares/${CARES_VERSION}/.github
+  cd ${OPT_PREFIX}/c-ares/${CARES_VERSION}
+  autoreconf -fi
+  ./configure --prefix=${OPT_PREFIX}/c-ares/current
+  make -j$(nproc)
+  make install
+  echo "Checking compiled c-ares library..." && file ${OPT_PREFIX}/c-ares/current/lib/libcares.a
+else
+  echo "c-ares: OK"
+fi
+
+if [ ! -f "${LOCAL_PKGCONFIG}/libcares.pc" ]; then
+  ln -sv ${OPT_PREFIX}/c-ares/current/lib/pkgconfig/libcares.pc ${LOCAL_PKGCONFIG}/libcares.pc
+fi
+export CMAKE_PREFIX_PATH="${OPT_PREFIX}/c-ares/current:${CMAKE_PREFIX_PATH}"
+
 YAML_CPP_VERSION=v0.9.0
 YAML_CPP_STRING=yaml-cpp-0.9.0
 if [ ! -f "${OPT_PREFIX}/yamlcpp/current/lib/libyaml-cpp.a" ]; then
@@ -110,6 +115,7 @@ fi
 if [ ! -f "${LOCAL_PKGCONFIG}/yaml-cpp.pc" ]; then
   ln -sv ${OPT_PREFIX}/yamlcpp/current/lib/pkgconfig/yaml-cpp.pc ${LOCAL_PKGCONFIG}/yaml-cpp.pc
 fi
+export CMAKE_PREFIX_PATH="${OPT_PREFIX}/yamlcpp/current:${CMAKE_PREFIX_PATH}"
 
 FMT_VERSION=v11.2.0
 FMT_TAG=11.2.0
