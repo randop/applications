@@ -15,19 +15,19 @@ else
 fi
 
 LOCAL_PKGCONFIG=${HOME}/.local/lib/pkgconfig
-
 if [ ! -d "${LOCAL_PKGCONFIG}" ]; then
   mkdir -p ${LOCAL_PKGCONFIG}
+fi
+
+LOCAL_BIN=${HOME}/.local/bin
+if [ ! -d "${LOCAL_BIN}" ]; then
+  mkdir -p ${LOCAL_BIN}
 fi
 
 if [ -n "${PKG_CONFIG_PATH+set}" ]; then
   export PKG_CONFIG_PATH="${LOCAL_PKGCONFIG}:${PKG_CONFIG_PATH}"
 else
   export PKG_CONFIG_PATH=$LOCAL_PKGCONFIG
-fi
-
-if [ ! -f "${LOCAL_PKGCONFIG}/libcares.pc" ]; then
-  ln -sv ${OPT_PREFIX}/c-ares/current/lib/pkgconfig/libcares.pc ${LOCAL_PKGCONFIG}/libcares.pc
 fi
 
 # TODO: $LOCAL_PKGCONFIG/boost.pc
@@ -86,6 +86,7 @@ if [ ! -f "${OPT_PREFIX}/c-ares/current/lib/libcares.a" ]; then
   make -j$(nproc)
   make install
   echo "Checking compiled c-ares library..." && file ${OPT_PREFIX}/c-ares/current/lib/libcares.a
+  rm -f ${LOCAL_PKGCONFIG}/libcares.pc
 else
   echo "c-ares: OK"
 fi
@@ -108,6 +109,7 @@ if [ ! -f "${OPT_PREFIX}/yamlcpp/current/lib/libyaml-cpp.a" ]; then
   cmake .. -DCMAKE_INSTALL_PREFIX=${OPT_PREFIX}/yamlcpp/current -DCMAKE_BUILD_TYPE=Release
   make -j$(nproc)
   make install
+  rm -f $LOCAL_PKGCONFIG/yaml-cpp.pc
 else
   echo "yaml-cpp: OK"
 fi
@@ -132,6 +134,7 @@ if [ ! -f "${OPT_PREFIX}/fmt/current/lib/libfmt.a" ]; then
   cmake .. -DCMAKE_INSTALL_PREFIX=${OPT_PREFIX}/fmt/current -DCMAKE_BUILD_TYPE=Release
   make -j$(nproc)
   make install
+  rm -f ${LOCAL_PKGCONFIG}/fmt.pc
 else
   echo "fmt: OK"
 fi
@@ -179,6 +182,7 @@ if [ ! -f "${OPT_PREFIX}/protobuf/current/lib/libprotobuf.a" ]; then
   cmake .. -Dprotobuf_BUILD_TESTS=OFF -DCMAKE_INSTALL_PREFIX=${OPT_PREFIX}/protobuf/current -DCMAKE_BUILD_TYPE=Release
   make -j$(nproc)
   make install
+  rm -f ${LOCAL_PKGCONFIG}/profobuf.pc
 else
   echo "protobuf: OK"
 fi
@@ -201,6 +205,7 @@ if [ ! -f "${OPT_PREFIX}/lksctp/current/lib/libsctp.a" ]; then
   ./configure --prefix=${OPT_PREFIX}/lksctp/current --disable-tests
   make -j$(nproc)
   make install
+  rm -f ${LOCAL_PKGCONFIG}/libsctp.pc
 else
   echo "lksctp: OK"
 fi
@@ -253,6 +258,7 @@ if [ ! -d "${OPT_PREFIX}/valgrind/current/lib/valgrind" ]; then
   ./configure --prefix=${OPT_PREFIX}/valgrind/current
   make -j$(nproc)
   make install
+  rm -f ${LOCAL_PKGCONFIG}/valgrind.pc
 else
   echo "valgrind: OK"
 fi
@@ -264,6 +270,9 @@ export CMAKE_PREFIX_PATH="${OPT_PREFIX}/valgrind/current:${CMAKE_PREFIX_PATH}"
 
 DOXYGEN_VERSION=v1.61.1
 DOXYGEN_TAG=Release_1_16_1
+if [ -f "$HOME/opt/doxygen/current/bin/doxygen" ]; then
+  cp -v ${OPT_PREFIX}/doxygen/current/bin/doxygen $HOME/.local/bin/doxygen
+fi
 if [ ! -f "$HOME/.local/bin/doxygen" ]; then
   mkdir -p ${OPT_PREFIX}/doxygen/current
   rm -rf ${OPT_PREFIX}/doxygen/${DOXYGEN_VERSION}
@@ -274,10 +283,11 @@ if [ ! -f "$HOME/.local/bin/doxygen" ]; then
   cmake .. -DCMAKE_INSTALL_PREFIX=${OPT_PREFIX}/doxygen/current -DCMAKE_BUILD_TYPE=Release
   make -j$(nproc)
   make install
-  mv -v ${OPT_PREFIX}/doxygen/current/bin/doxygen $HOME/.local/bin/doxygen
+  cp -v ${OPT_PREFIX}/doxygen/current/bin/doxygen $HOME/.local/bin/doxygen
 else
   echo "doxygen: OK"
 fi
+export CMAKE_PREFIX_PATH="${OPT_PREFIX}/doxygen/current:${CMAKE_PREFIX_PATH}"
 
 SEASTAR_VERSION=v25.05.0
 SEASTAR_TAG=seastar-25.05.0
