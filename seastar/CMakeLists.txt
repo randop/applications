@@ -42,3 +42,9 @@ target_link_libraries(multitask-demo PRIVATE Seastar::seastar)
 target_compile_options(multitask-demo PRIVATE
     -Wall -Wextra -O3
 )
+
+add_executable(filewriter filewriter.cc)
+target_link_libraries(filewriter PRIVATE Seastar::seastar)
+target_compile_options(filewriter PRIVATE
+    -Wall -Wextra -O3
+)
