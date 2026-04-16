@@ -36,3 +36,9 @@ target_link_libraries(timeout-demo PRIVATE Seastar::seastar)
 target_compile_options(timeout-demo PRIVATE
     -Wall -Wextra -O3
 )
+
+add_executable(multitask-demo multitask.cc)
+target_link_libraries(multitask-demo PRIVATE Seastar::seastar)
+target_compile_options(multitask-demo PRIVATE
+    -Wall -Wextra -O3
+)
