@@ -5,6 +5,7 @@
 #include <seastar/core/gate.hh>
 #include <seastar/core/reactor.hh>
 #include <seastar/core/sharded.hh>
+#include <seastar/core/timer-set.hh>
 #include <seastar/net/api.hh>
 #include <seastar/util/log.hh>
 #include <seastar/util/tmp_file.hh>
@@ -52,6 +53,7 @@ seastar::future<> handle_connection(seastar::connected_socket cs,
         }
         co_await f.close();
         co_await out.close();
+        applog.info("Client {} connection finished", remote);
       });
 }
 
@@ -63,11 +65,20 @@ seastar::future<> serve(uint16_t port,
   auto ss = seastar::listen(seastar::make_ipv4_address({port}), opts);
   applog.info("Echo server shard {} listening on 0.0.0.0:{}",
               seastar::this_shard_id(), port);
+  seastar::timer<> timer;
+  uint64_t connection_count = 0;
+  timer.set_callback([&connection_count, &timer] {
+    applog.info("Active connections on shard {}: {}", seastar::this_shard_id(),
+                connection_count);
+    timer.arm(std::chrono::seconds(10));
+  });
+  timer.arm(std::chrono::seconds(10));
   while (!stop_signal.stopping()) {
     try {
       auto ar = co_await ss.accept();
       auto addr = ar.remote_address;
       gate.enter();
+      connection_count++;
       (void)handle_connection(std::move(ar.connection), addr)
           .handle_exception([=](std::exception_ptr ep) {
             try {
@@ -76,13 +87,17 @@ seastar::future<> serve(uint16_t port,
               applog.error("Unhandled error for {}: {}", addr, ex.what());
             }
           })
-          .finally([&gate] { gate.leave(); });
+          .finally([&gate, &connection_count] {
+            connection_count--;
+            gate.leave();
+          });
     } catch (const std::exception &ex) {
       if (!stop_signal.stopping()) {
         applog.error("Accept failed: {}", ex.what());
       }
     }
   }
+  timer.cancel();
   ss.abort_accept();
   applog.info("Waiting for connections to finish on shard {}",
               seastar::this_shard_id());
