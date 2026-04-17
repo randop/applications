@@ -34,13 +34,21 @@
 static seastar::logger applog("tcp-server");
 
 seastar::future<> handle_connection(seastar::connected_socket cs,
-                                    seastar::socket_address remote) {
+                                    seastar::socket_address remote,
+                                    uint32_t timeout_seconds) {
   applog.info("+ connection from {}", remote);
   return seastar::tmp_dir::do_with(
-      [cs = std::move(cs),
-       remote](seastar::tmp_dir &t) mutable -> seastar::future<> {
+      [cs = std::move(cs), remote,
+       timeout_seconds](seastar::tmp_dir &t) mutable -> seastar::future<> {
         auto in = cs.input();
         auto out = cs.output();
+        seastar::timer<> idle_timer;
+        bool active = true;
+        idle_timer.set_callback([&, remote] {
+          active = false;
+          applog.info("Client {} idle timeout", remote);
+        });
+        idle_timer.arm(std::chrono::seconds(timeout_seconds));
         auto seed = std::chrono::system_clock::now().time_since_epoch().count();
         auto rnd = std::mt19937(seed);
         seastar::sstring client_filename =
@@ -51,11 +59,13 @@ seastar::future<> handle_connection(seastar::connected_socket cs,
         applog.info("Writing to {} for client {}", client_filename, remote);
         try {
           size_t offset = 0;
-          while (true) {
+          while (active) {
             auto buf = co_await in.read();
             if (buf.empty()) {
               break;
             }
+            idle_timer.rearm(seastar::timer<>::clock::now() +
+                             std::chrono::seconds(timeout_seconds));
             co_await f.dma_write(offset, buf.get(), buf.size());
             offset += buf.size();
           }
@@ -64,6 +74,7 @@ seastar::future<> handle_connection(seastar::connected_socket cs,
         } catch (const std::exception &ex) {
           applog.warn("! connection from {} error: {}", remote, ex.what());
         }
+        idle_timer.cancel();
         co_await f.close();
         co_await out.close();
         applog.info("Client {} connection finished", remote);
@@ -72,7 +83,7 @@ seastar::future<> handle_connection(seastar::connected_socket cs,
 
 seastar::future<> serve(uint16_t port,
                         const seastar_apps_lib::stop_signal &stop_signal,
-                        seastar::gate &gate) {
+                        seastar::gate &gate, uint32_t timeout_seconds) {
   seastar::listen_options opts;
   opts.reuse_address = true;
   auto ss = seastar::listen(seastar::make_ipv4_address({port}), opts);
@@ -99,7 +110,7 @@ seastar::future<> serve(uint16_t port,
       auto addr = ar.remote_address;
       gate.enter();
       connection_count++;
-      (void)handle_connection(std::move(ar.connection), addr)
+      (void)handle_connection(std::move(ar.connection), addr, timeout_seconds)
           .handle_exception([=](std::exception_ptr ep) {
             try {
               std::rethrow_exception(ep);
@@ -130,15 +141,19 @@ int main(int argc, char **argv) {
   seastar::app_template app;
   namespace po = boost::program_options;
   app.add_options()("port,p", po::value<uint16_t>()->default_value(8080),
-                    "TCP port to listen on");
+                    "TCP port to listen on")(
+      "timeout,t", po::value<uint32_t>()->default_value(5),
+      "Client idle timeout in seconds");
   return app.run(argc, argv, [&app]() -> seastar::future<> {
     uint16_t port = app.configuration()["port"].as<uint16_t>();
+    uint32_t timeout_seconds = app.configuration()["timeout"].as<uint32_t>();
     seastar::sharded<seastar::gate> gate;
     co_await gate.start();
     auto stop_signal = std::make_shared<seastar_apps_lib::stop_signal>();
-    auto f = seastar::smp::invoke_on_all([port, stop_signal, &gate] {
-      return serve(port, *stop_signal, gate.local());
-    });
+    auto f = seastar::smp::invoke_on_all(
+        [port, stop_signal, &gate, timeout_seconds] {
+          return serve(port, *stop_signal, gate.local(), timeout_seconds);
+        });
     co_await stop_signal->wait();
     applog.info("Signal received, stopping servers");
     co_await std::move(f);
