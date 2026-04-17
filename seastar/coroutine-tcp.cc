@@ -19,13 +19,15 @@ using namespace std::chrono_literals;
 // Background writer coroutine
 // ======================
 seastar::future<> file_writer(
-    seastar::lw_shared_ptr<seastar::output_stream<char>> file_out,
+    seastar::lw_shared_ptr<seastar::file> file_ptr,
     seastar::lw_shared_ptr<seastar::queue<seastar::temporary_buffer<char>>> q) {
+  size_t offset = 0;
   try {
     while (true) {
       auto buf = co_await q->pop_eventually();
-      std::cout << "Flushing file writer" << std::flush;
-      co_await file_out->write(std::move(buf));
+      co_await file_ptr->dma_write(offset, buf.get(), buf.size());
+      offset += buf.size();
+      std::cout << "Data written to file" << std::endl;
     }
   } catch (const std::exception &e) {
     std::cerr << "File writer error: " << e.what() << '\n';
@@ -34,11 +36,10 @@ seastar::future<> file_writer(
   }
 
   try {
-    co_await file_out->flush();
-    co_await file_out->close();
-    std::cout << "File writer: output stream flushed and closed.\n";
+    co_await file_ptr->close();
+    std::cout << "File writer: file closed.\n";
   } catch (...) {
-    std::cerr << "Error closing file output stream\n";
+    std::cerr << "Error closing file\n";
   }
   co_return;
 }
@@ -81,27 +82,16 @@ int main(int argc, char **argv) {
     std::cout << "Safe streaming with graceful shutdown using stop_signal.\n\n";
 
     auto file = co_await seastar::open_file_dma(
-        "incoming_data.bin",
-        seastar::open_flags::create | seastar::open_flags::wo |
-            seastar::open_flags::truncate);
+        "incoming_data.bin", seastar::open_flags::create |
+                                 seastar::open_flags::wo |
+                                 seastar::open_flags::truncate);
 
-    seastar::file_output_stream_options opts;
-    opts.buffer_size = 4096;
-    opts.write_behind = 1;
-    opts.preallocation_size = 4096;
-
-    auto file_out =
-        co_await seastar::make_file_output_stream(std::move(file), opts);
-
-    auto file_out_ptr = seastar::make_lw_shared<seastar::output_stream<char>>(
-        std::move(file_out));
+    auto file_ptr = seastar::make_lw_shared<seastar::file>(std::move(file));
 
     auto data_queue = seastar::make_lw_shared<
         seastar::queue<seastar::temporary_buffer<char>>>(1024);
 
     seastar_apps_lib::stop_signal stop_signal;
-
-
 
     seastar::listen_options lo;
     lo.reuse_address = true;
@@ -125,21 +115,21 @@ int main(int argc, char **argv) {
     seastar::handle_signal(SIGTERM, shutdown_handler);
 
     co_await seastar::do_with(
-        std::move(listener_ptr), std::move(file_out_ptr),
-        std::move(data_queue),
-        [&](auto &listener, auto &file_out_ptr,
+        std::move(listener_ptr), std::move(file_ptr), std::move(data_queue),
+        [&](auto &listener, auto &file_ptr,
             auto &data_queue) -> seastar::future<> {
           seastar::gate writer_gate;
 
           writer_gate.enter();
-          file_writer(file_out_ptr, data_queue).then_wrapped(
-              [&writer_gate](auto f) {
+          file_writer(file_ptr, data_queue)
+              .then_wrapped([&writer_gate](auto f) {
                 try {
                   f.get();
                 } catch (...) {
                 }
                 writer_gate.leave();
-              }).discard_result();
+              })
+              .discard_result();
 
           // Normal accept loop - will be interrupted by abort_accept()
           try {
@@ -162,9 +152,6 @@ int main(int argc, char **argv) {
           co_await writer_gate.close();
           co_return;
         });
-
-    // Wait for shutdown signal
-    co_await stop_signal.wait();
 
     std::cout << "Server shutdown complete.\n";
     co_return;
