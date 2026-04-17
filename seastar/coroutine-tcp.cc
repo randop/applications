@@ -1,3 +1,4 @@
+#include "stop_signal.hh"
 #include <seastar/core/app-template.hh>
 #include <seastar/core/coroutine.hh>
 #include <seastar/core/file.hh>
@@ -9,116 +10,101 @@
 #include <seastar/core/shared_ptr.hh>
 #include <seastar/core/sleep.hh>
 #include <seastar/net/api.hh>
+#include <seastar/util/log.hh>
 
-// Your stop_signal header
-#include "stop_signal.hh"
+using namespace seastar;
 
-using namespace std::chrono_literals;
+logger applog("app");
 
-// ======================
-// Background writer coroutine
-// ======================
-seastar::future<> file_writer(
-    seastar::lw_shared_ptr<seastar::file> file_ptr,
-    seastar::lw_shared_ptr<seastar::queue<seastar::temporary_buffer<char>>> q) {
+future<> file_writer(lw_shared_ptr<file> file_ptr,
+                     lw_shared_ptr<queue<temporary_buffer<char>>> q) {
   size_t offset = 0;
   try {
     while (true) {
       auto buf = co_await q->pop_eventually();
       co_await file_ptr->dma_write(offset, buf.get(), buf.size());
       offset += buf.size();
-      std::cout << "Data written to file" << std::endl;
+      applog.info("Data written to file");
     }
   } catch (const std::exception &e) {
-    std::cerr << "File writer error: " << e.what() << '\n';
+    applog.error("File writer error: {}", e.what());
   } catch (...) {
-    std::cerr << "Unknown error in file writer\n";
+    applog.error("Unknown error in file writer");
   }
 
   try {
     co_await file_ptr->close();
-    std::cout << "File writer: file closed.\n";
+    applog.info("File writer: file closed.");
   } catch (...) {
-    std::cerr << "Error closing file\n";
+    applog.error("Error closing file");
   }
   co_return;
 }
 
-// ======================
-// Per-connection coroutine
-// ======================
-seastar::future<> handle_connection(
-    seastar::connected_socket s, seastar::socket_address addr,
-    seastar::lw_shared_ptr<seastar::queue<seastar::temporary_buffer<char>>> q) {
+future<> handle_connection(connected_socket s, socket_address addr,
+                           lw_shared_ptr<queue<temporary_buffer<char>>> q) {
   try {
     auto in = s.input();
 
     while (true) {
-      seastar::temporary_buffer<char> buf = co_await in.read();
+      temporary_buffer<char> buf = co_await in.read();
       if (buf.empty()) {
-        std::cout << "Client from " << addr << " disconnected.\n";
+        applog.info("Client from {} disconnected.", addr);
         break;
       }
 
-      std::cout << "Received " << buf.size() << " bytes from " << addr
-                << " → queued for DMA file\n";
+      applog.info("Received {} bytes from {} → queued for DMA file", buf.size(),
+                  addr);
 
       co_await q->push_eventually(std::move(buf));
     }
 
     co_await in.close();
-    std::cout << "Connection from " << addr << " fully closed.\n";
+    applog.info("Connection from {} fully closed.", addr);
   } catch (...) {
   }
   co_return;
 }
 
 int main(int argc, char **argv) {
-  seastar::app_template app;
+  app_template app;
 
-  return app.run(argc, argv, []() -> seastar::future<> {
-    std::cout << "Seastar C++23 coroutine TCP server (v25.05.0)\n";
-    std::cout << "Listening on 0.0.0.0:1234\n";
-    std::cout << "Safe streaming with graceful shutdown using stop_signal.\n\n";
+  return app.run(argc, argv, []() -> future<> {
+    applog.info("Seastar C++23 coroutine TCP server (v25.05.0)");
+    applog.info("Listening on 0.0.0.0:1234");
+    applog.info("Safe streaming with graceful shutdown using stop_signal.");
 
-    auto file = co_await seastar::open_file_dma(
-        "incoming_data.bin", seastar::open_flags::create |
-                                 seastar::open_flags::wo |
-                                 seastar::open_flags::truncate);
+    auto file = co_await open_file_dma("incoming_data.bin",
+                                       open_flags::create | open_flags::wo |
+                                           open_flags::truncate);
 
-    auto file_ptr = seastar::make_lw_shared<seastar::file>(std::move(file));
+    auto file_ptr = make_lw_shared<seastar::file>(std::move(file));
 
-    auto data_queue = seastar::make_lw_shared<
-        seastar::queue<seastar::temporary_buffer<char>>>(1024);
+    auto data_queue = make_lw_shared<queue<temporary_buffer<char>>>(1024);
 
     seastar_apps_lib::stop_signal stop_signal;
 
-    seastar::listen_options lo;
+    listen_options lo;
     lo.reuse_address = true;
-    auto listener =
-        seastar::listen(seastar::make_ipv4_address({"0.0.0.0", 1234}), lo);
+    auto listener = listen(make_ipv4_address({"0.0.0.0", 1234}), lo);
 
-    // Keep listener in shared_ptr so we can abort it from signal handler
-    auto listener_ptr =
-        seastar::make_lw_shared<seastar::server_socket>(std::move(listener));
+    auto listener_ptr = make_lw_shared<server_socket>(std::move(listener));
 
-    // Register signal handler that aborts accept + aborts queue
     auto shutdown_handler = [listener_ptr, data_queue]() {
       if (listener_ptr) {
-        listener_ptr->abort_accept(); // This wakes up the blocked accept()
+        listener_ptr->abort_accept();
       }
       data_queue->abort(
           std::make_exception_ptr(std::runtime_error("shutdown")));
     };
 
-    seastar::handle_signal(SIGINT, shutdown_handler);
-    seastar::handle_signal(SIGTERM, shutdown_handler);
+    handle_signal(SIGINT, shutdown_handler);
+    handle_signal(SIGTERM, shutdown_handler);
 
-    co_await seastar::do_with(
+    co_await do_with(
         std::move(listener_ptr), std::move(file_ptr), std::move(data_queue),
-        [&](auto &listener, auto &file_ptr,
-            auto &data_queue) -> seastar::future<> {
-          seastar::gate writer_gate;
+        [&](auto &listener, auto &file_ptr, auto &data_queue) -> future<> {
+          gate writer_gate;
 
           writer_gate.enter();
           file_writer(file_ptr, data_queue)
@@ -131,29 +117,27 @@ int main(int argc, char **argv) {
               })
               .discard_result();
 
-          // Normal accept loop - will be interrupted by abort_accept()
           try {
             while (true) {
-              seastar::accept_result res = co_await listener->accept();
+              accept_result res = co_await listener->accept();
 
               auto [s, addr] = std::move(res);
 
-              std::cout << "Accepted connection from " << addr << "\n";
+              applog.info("Accepted connection from {}", addr);
 
               co_await handle_connection(std::move(s), std::move(addr),
                                          data_queue);
 
-              std::cout << "Handler finished – ready for next connection.\n";
+              applog.info("Handler finished – ready for next connection.");
             }
           } catch (...) {
-            // Accept aborted
           }
 
           co_await writer_gate.close();
           co_return;
         });
 
-    std::cout << "Server shutdown complete.\n";
+    applog.info("Server shutdown complete.");
     co_return;
   });
 }
