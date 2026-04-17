@@ -36,6 +36,6 @@ clang-format -i main.cc
 
 mkdir -p build
 cd build
-cmake .. -DCMAKE_BUILD_TYPE=Release
+cmake .. -DCMAKE_BUILD_TYPE=RelWithDebInfo
 
 make -j$(nproc)

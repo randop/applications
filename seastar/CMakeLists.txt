@@ -19,7 +19,7 @@ target_compile_options(tcp-echo PRIVATE
     -Wall -Wextra -O3
 )
 
-add_executable(shard-demo sharded_parameter_demo.cc)
+add_executable(shard-demo sharded-parameter-demo.cc)
 target_link_libraries(shard-demo PRIVATE Seastar::seastar)
 target_compile_options(shard-demo PRIVATE
     -Wall -Wextra -O3
@@ -49,8 +49,14 @@ target_compile_options(filewriter PRIVATE
     -Wall -Wextra -O3
 )
 
-add_executable(file_demo file_demo.cc)
-target_link_libraries(file_demo PRIVATE Seastar::seastar)
-target_compile_options(file_demo PRIVATE
+add_executable(file-demo file-demo.cc)
+target_link_libraries(file-demo PRIVATE Seastar::seastar)
+target_compile_options(file-demo PRIVATE
+    -Wall -Wextra -O3
+)
+
+add_executable(coroutine-tcp coroutine-tcp.cc)
+target_link_libraries(coroutine-tcp PRIVATE Seastar::seastar)
+target_compile_options(coroutine-tcp PRIVATE
     -Wall -Wextra -O3
 )
