@@ -60,3 +60,9 @@ target_link_libraries(coroutine-tcp PRIVATE Seastar::seastar)
 target_compile_options(coroutine-tcp PRIVATE
     -Wall -Wextra -O3
 )
+
+add_executable(concurrent-demo concurrent-demo.cc)
+target_link_libraries(concurrent-demo PRIVATE Seastar::seastar)
+target_compile_options(concurrent-demo PRIVATE
+    -Wall -Wextra -O3
+)
