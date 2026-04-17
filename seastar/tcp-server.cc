@@ -1,6 +1,7 @@
 #include <seastar/core/app-template.hh>
 #include <seastar/core/coroutine.hh>
 #include <seastar/core/file.hh>
+#include <seastar/core/future-util.hh>
 #include <seastar/core/future.hh>
 #include <seastar/core/gate.hh>
 #include <seastar/core/reactor.hh>
@@ -73,6 +74,13 @@ seastar::future<> serve(uint16_t port,
     timer.arm(std::chrono::seconds(10));
   });
   timer.arm(std::chrono::seconds(10));
+  seastar::timer<> abort_timer;
+  abort_timer.set_callback([&ss, &stop_signal] {
+    if (stop_signal.stopping()) {
+      ss.abort_accept();
+    }
+  });
+  abort_timer.arm_periodic(std::chrono::milliseconds(100));
   while (!stop_signal.stopping()) {
     try {
       auto ar = co_await ss.accept();
@@ -97,7 +105,7 @@ seastar::future<> serve(uint16_t port,
       }
     }
   }
-  timer.cancel();
+  abort_timer.cancel();
   ss.abort_accept();
   applog.info("Waiting for connections to finish on shard {}",
               seastar::this_shard_id());
