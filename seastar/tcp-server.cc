@@ -37,48 +37,57 @@ seastar::future<> handle_connection(seastar::connected_socket cs,
                                     seastar::socket_address remote,
                                     uint32_t timeout_seconds) {
   applog.info("+ connection from {}", remote);
-  return seastar::tmp_dir::do_with(
-      [cs = std::move(cs), remote,
-       timeout_seconds](seastar::tmp_dir &t) mutable -> seastar::future<> {
-        auto in = cs.input();
-        auto out = cs.output();
-        seastar::timer<> idle_timer;
-        bool active = true;
-        idle_timer.set_callback([&, remote] {
-          active = false;
-          applog.info("Client {} idle timeout", remote);
-        });
-        idle_timer.arm(std::chrono::seconds(timeout_seconds));
-        auto seed = std::chrono::system_clock::now().time_since_epoch().count();
-        auto rnd = std::mt19937(seed);
-        seastar::sstring client_filename =
-            (t.get_path() / std::to_string(rnd())).native();
-        auto f = co_await seastar::open_file_dma(
-            client_filename,
-            seastar::open_flags::rw | seastar::open_flags::create);
-        applog.info("Writing to {} for client {}", client_filename, remote);
-        try {
-          size_t offset = 0;
-          while (active) {
-            auto buf = co_await in.read();
-            if (buf.empty()) {
-              break;
-            }
-            idle_timer.rearm(seastar::timer<>::clock::now() +
-                             std::chrono::seconds(timeout_seconds));
-            co_await f.dma_write(offset, buf.get(), buf.size());
-            offset += buf.size();
-          }
-          applog.info("Finished writing {} bytes to {} for client {}", offset,
-                      client_filename, remote);
-        } catch (const std::exception &ex) {
-          applog.warn("! connection from {} error: {}", remote, ex.what());
-        }
-        idle_timer.cancel();
-        co_await f.close();
-        co_await out.close();
-        applog.info("Client {} connection finished", remote);
-      });
+  auto seed = std::chrono::system_clock::now().time_since_epoch().count();
+  auto rnd = std::mt19937(seed);
+  seastar::sstring client_filename =
+      "/tmp/" + std::to_string(rnd()) + ".data.log";
+  auto tmp_file = co_await seastar::open_file_dma(
+      client_filename, seastar::open_flags::rw | seastar::open_flags::create);
+  applog.info("Writing to {} for client {}", client_filename, remote);
+  auto in = cs.input();
+  auto out = cs.output();
+
+  seastar::timer<> idle_timer;
+  bool active = true;
+  idle_timer.set_callback([&, remote] {
+    active = false;
+    applog.info("Client {} idle timeout", remote);
+    try {
+      applog.info("Client {} cleaning up idle client", remote);
+      in.close();
+      out.close();
+    } catch (const std::exception &ex) {
+      applog.warn("Error closing connection for {}: {}", remote, ex.what());
+    }
+  });
+  idle_timer.arm(std::chrono::seconds(timeout_seconds));
+
+  try {
+    size_t offset = 0;
+    while (active) {
+      auto buf = co_await in.read();
+      if (buf.empty()) {
+        break;
+      }
+      idle_timer.rearm(seastar::timer<>::clock::now() +
+                       std::chrono::seconds(timeout_seconds));
+
+      co_await tmp_file.dma_write(offset, buf.get(), buf.size());
+      offset += buf.size();
+    }
+    applog.info("Finished writing {} bytes to {} for client {}", offset,
+                client_filename, remote);
+  } catch (const seastar::timed_out_error &e) {
+    applog.info("Client {} idle timeout", remote);
+  } catch (const std::exception &ex) {
+    applog.warn("! connection from {} error: {}", remote, ex.what());
+  }
+  try {
+    co_await tmp_file.close();
+  } catch (const std::exception &ex) {
+    applog.warn("Error closing file for {}: {}", remote, ex.what());
+  }
+  applog.info("Client {} connection finished", remote);
 }
 
 seastar::future<> serve(uint16_t port,
@@ -112,11 +121,12 @@ seastar::future<> serve(uint16_t port,
       connection_count++;
       (void)handle_connection(std::move(ar.connection), addr, timeout_seconds)
           .handle_exception([=](std::exception_ptr ep) {
-            try {
-              std::rethrow_exception(ep);
-            } catch (const std::exception &ex) {
-              applog.error("Unhandled error for {}: {}", addr, ex.what());
-            }
+            // try {
+            //   co_await out.close();
+            // } catch (const std::exception &ex) {
+            //   applog.warn("Error closing connection for {}: {}", remote,
+            //   ex.what());
+            // }
           })
           .finally([&gate, &connection_count] {
             connection_count--;
