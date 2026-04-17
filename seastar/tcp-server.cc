@@ -121,12 +121,7 @@ seastar::future<> serve(uint16_t port,
       connection_count++;
       (void)handle_connection(std::move(ar.connection), addr, timeout_seconds)
           .handle_exception([=](std::exception_ptr ep) {
-            // try {
-            //   co_await out.close();
-            // } catch (const std::exception &ex) {
-            //   applog.warn("Error closing connection for {}: {}", remote,
-            //   ex.what());
-            // }
+            applog.warn("Error closing connections");
           })
           .finally([&gate, &connection_count] {
             connection_count--;
