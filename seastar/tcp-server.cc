@@ -15,11 +15,23 @@
 
 #include <chrono>
 #include <exception>
+#include <iostream>
 #include <memory>
 #include <random>
 #include <utility>
 
-static seastar::logger applog("concurrent-demo");
+#define VERSION_MAJOR 1
+#define VERSION_MINOR 0
+#define VERSION_PATCH 0
+
+#define STRINGIFY0(s) #s
+#define STRINGIFY(s) STRINGIFY0(s)
+
+#define VERSION_STRING                                                         \
+  STRINGIFY(VERSION_MAJOR)                                                     \
+  "." STRINGIFY(VERSION_MINOR) "." STRINGIFY(VERSION_PATCH)
+
+static seastar::logger applog("tcp-server");
 
 seastar::future<> handle_connection(seastar::connected_socket cs,
                                     seastar::socket_address remote) {
@@ -114,6 +126,7 @@ seastar::future<> serve(uint16_t port,
 }
 
 int main(int argc, char **argv) {
+  std::cout << VERSION_STRING << std::endl;
   seastar::app_template app;
   namespace po = boost::program_options;
   app.add_options()("port,p", po::value<uint16_t>()->default_value(8080),
