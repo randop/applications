@@ -66,3 +66,11 @@ target_link_libraries(concurrent-demo PRIVATE Seastar::seastar)
 target_compile_options(concurrent-demo PRIVATE
     -Wall -Wextra -O3
 )
+
+add_executable(tcp-server tcp-server.cc)
+target_link_libraries(tcp-server PRIVATE Seastar::seastar)
+target_compile_options(tcp-server PRIVATE
+    -Wall -Wextra -O0 -g -ggdb -fno-omit-frame-pointer -fno-inline
+)
+target_link_options(tcp-server PRIVATE -g)
+

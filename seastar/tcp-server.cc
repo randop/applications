@@ -82,6 +82,9 @@ seastar::future<> handle_connection(seastar::connected_socket cs,
   } catch (const std::exception &ex) {
     applog.warn("! connection from {} error: {}", remote, ex.what());
   }
+
+  idle_timer.cancel();
+
   try {
     co_await tmp_file.close();
   } catch (const std::exception &ex) {
@@ -147,7 +150,7 @@ int main(int argc, char **argv) {
   namespace po = boost::program_options;
   app.add_options()("port,p", po::value<uint16_t>()->default_value(8080),
                     "TCP port to listen on")(
-      "timeout,t", po::value<uint32_t>()->default_value(5),
+      "timeout,t", po::value<uint32_t>()->default_value(30),
       "Client idle timeout in seconds");
   return app.run(argc, argv, [&app]() -> seastar::future<> {
     uint16_t port = app.configuration()["port"].as<uint16_t>();
