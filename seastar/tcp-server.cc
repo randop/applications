@@ -1,3 +1,28 @@
+//=======================================================================================
+// Copyright (c) 2010 - 2026 Randolph Ledesma. All rights reserved.
+//
+// Use of this software is governed by the Business Source License 1.1
+// included in the LICENSE file (or at https://mariadb.com/bsl11/). 
+//
+// *** AI / MACHINE LEARNING TRAINING PROHIBITION ***
+// 
+// This source code is intended for human use only. Any use of this code
+// (or any portion, derivative, or output generated from it) for training,
+// fine-tuning, or improving any artificial intelligence, machine learning,
+// large language model, or generative system is strictly prohibited.
+//
+// This prohibition applies regardless of whether the training is commercial,
+// non-commercial, public, or private. Violation of this term may result in
+// copyright infringement and other legal claims.
+//
+// Change Date:    2100-01-01
+// Change License: Apache License 2.0
+//
+// On the Change Date (or the fourth anniversary of the first public distribution
+// of this version of the software under this license, whichever comes first),
+// this software will be made available under the specified Change License.
+//---------------------------------------------------------------------------------------
+
 #include <seastar/core/app-template.hh>
 #include <seastar/core/coroutine.hh>
 #include <seastar/core/file.hh>
@@ -6,11 +31,12 @@
 #include <seastar/core/gate.hh>
 #include <seastar/core/reactor.hh>
 #include <seastar/core/sharded.hh>
+#include <seastar/core/shared_ptr.hh>
 #include <seastar/core/timer-set.hh>
 #include <seastar/net/api.hh>
+#include <seastar/util/closeable.hh>
 #include <seastar/util/log.hh>
 #include <seastar/util/tmp_file.hh>
-#include <seastar/util/closeable.hh>
 
 #include "stop_signal.hh"
 
@@ -22,8 +48,8 @@
 #include <utility>
 
 #define VERSION_MAJOR 1
-#define VERSION_MINOR 1
-#define VERSION_PATCH 1
+#define VERSION_MINOR 2
+#define VERSION_PATCH 0
 
 #define STRINGIFY0(s) #s
 #define STRINGIFY(s) STRINGIFY0(s)
@@ -36,8 +62,10 @@ static seastar::logger applog("tcp-server");
 
 seastar::future<> handle_connection(seastar::connected_socket cs,
                                     seastar::socket_address remote,
-                                    uint32_t timeout_seconds) {
-  applog.info("+ connection from {}", remote);
+                                    uint32_t timeout_seconds,
+                                    seastar::gate &gate,
+                                    seastar::abort_source &as) {
+  applog.info("New connection from {}", remote);
   auto seed = std::chrono::system_clock::now().time_since_epoch().count();
   auto rnd = std::mt19937(seed);
   seastar::sstring client_filename =
@@ -50,18 +78,23 @@ seastar::future<> handle_connection(seastar::connected_socket cs,
 
   seastar::timer<> idle_timer;
   bool active = true;
+
+  auto sub = as.subscribe([&]() noexcept {
+    active = false;
+    idle_timer.cancel();
+    applog.warn("aborting client {} ...", remote);
+    (void)in.close();
+    (void)out.close();
+  });
+
   idle_timer.set_callback([&, remote] {
     active = false;
-    applog.info("Client {} idle timeout", remote);
-    try {
-      applog.info("Client {} cleaning up idle client", remote);
-      in.close();
-      out.close();
-    } catch (const std::exception &ex) {
-      applog.warn("Error closing connection for {}: {}", remote, ex.what());
-    }
+    (void)in.close();
+    (void)out.close();
   });
   idle_timer.arm(std::chrono::seconds(timeout_seconds));
+
+  gate.enter();
 
   try {
     size_t offset = 0;
@@ -81,10 +114,19 @@ seastar::future<> handle_connection(seastar::connected_socket cs,
   } catch (const seastar::timed_out_error &e) {
     applog.info("Client {} idle timeout", remote);
   } catch (const std::exception &ex) {
-    applog.warn("! connection from {} error: {}", remote, ex.what());
+    applog.warn("Connection {} error: {}", remote, ex.what());
   }
 
   idle_timer.cancel();
+
+  try {
+    co_await in.close();
+  } catch (...) {
+  }
+  try {
+    co_await out.close();
+  } catch (...) {
+  }
 
   try {
     co_await tmp_file.close();
@@ -92,17 +134,22 @@ seastar::future<> handle_connection(seastar::connected_socket cs,
     applog.warn("Error closing file for {}: {}", remote, ex.what());
   }
   applog.info("Client {} connection finished", remote);
+
+  gate.leave();
+
+  co_return;
 }
 
-seastar::future<> serve(uint16_t port,
-                        const seastar_apps_lib::stop_signal &stop_signal,
+seastar::future<> serve(uint16_t port, seastar::abort_source &as,
                         seastar::gate &gate, uint32_t timeout_seconds) {
   seastar::listen_options opts;
   opts.reuse_address = true;
-  opts.lba = seastar::server_socket::load_balancing_algorithm::connection_distribution;
+  opts.lba =
+      seastar::server_socket::load_balancing_algorithm::connection_distribution;
 
   auto ss = seastar::listen(seastar::make_ipv4_address({port}), opts);
-  applog.info("Echo server shard {} listening on 0.0.0.0:{}",
+
+  applog.info("TCP server shard {} listening on 0.0.0.0:{}",
               seastar::this_shard_id(), port);
   seastar::timer<> timer;
   uint64_t connection_count = 0;
@@ -112,42 +159,38 @@ seastar::future<> serve(uint16_t port,
     timer.arm(std::chrono::seconds(30));
   });
   timer.arm(std::chrono::seconds(30));
-  seastar::timer<> abort_timer;
-  abort_timer.set_callback([&ss, &stop_signal] {
-    if (stop_signal.stopping()) {
-      applog.info("stop abort accept..");
-      ss.abort_accept();
-    }
+
+  auto sub_opt = as.subscribe([&]() noexcept {
+    timer.cancel();
+    ss.abort_accept();
   });
-  abort_timer.arm_periodic(std::chrono::milliseconds(100));
-  while (!stop_signal.stopping()) {
+
+  while (!as.abort_requested()) {
     try {
       auto ar = co_await ss.accept();
       auto addr = ar.remote_address;
-      gate.enter();
       connection_count++;
-      (void)handle_connection(std::move(ar.connection), addr, timeout_seconds)
+      (void)handle_connection(std::move(ar.connection), addr, timeout_seconds,
+                              gate, as)
           .handle_exception([=](std::exception_ptr ep) {
             applog.warn("Error closing connections");
           })
           .finally([&gate, &connection_count] {
             connection_count--;
-            gate.leave();
             applog.info("Finally closing connections...");
           });
+    } catch (const seastar::abort_requested_exception &) {
+      break;
     } catch (const std::exception &ex) {
-      if (!stop_signal.stopping()) {
+      if (!as.abort_requested()) {
         applog.error("Accept failed: {}", ex.what());
       }
     }
   }
-  gate.check();
   timer.cancel();
-  abort_timer.cancel();
   ss.abort_accept();
   applog.info("Waiting for connections to finish on shard {}",
               seastar::this_shard_id());
-  co_await gate.close();
   applog.info("Server shard {} stopped", seastar::this_shard_id());
 }
 
@@ -162,15 +205,40 @@ int main(int argc, char **argv) {
   return app.run(argc, argv, [&app]() -> seastar::future<> {
     uint16_t port = app.configuration()["port"].as<uint16_t>();
     uint32_t timeout_seconds = app.configuration()["timeout"].as<uint32_t>();
+
+    auto stop_signal = std::make_shared<seastar_apps_lib::stop_signal>();
+
     seastar::sharded<seastar::gate> gate;
     co_await gate.start();
-    auto stop_signal = std::make_shared<seastar_apps_lib::stop_signal>();
-    auto shards = seastar::smp::invoke_on_all(
-        [port, stop_signal, &gate, timeout_seconds] {
-          return serve(port, *stop_signal, gate.local(), timeout_seconds);
-        });
+
+    seastar::sharded<seastar::abort_source> abort_sources;
+    co_await abort_sources.start();
+
+    auto shards_future = seastar::smp::invoke_on_all([port, &abort_sources,
+                                                      &gate, timeout_seconds] {
+      return serve(port, abort_sources.local(), gate.local(), timeout_seconds);
+    });
+
+    applog.info("server listening on 0.0.0.0 on port {}", port);
     co_await stop_signal->wait();
+
     applog.info("Signal received, stopping servers");
+
+    applog.info("aborting shards...");
+    co_await abort_sources.invoke_on_all(
+        [](seastar::abort_source &as) { as.request_abort(); });
+
+    applog.info("stopping smp shards...");
+    co_await std::move(shards_future);
+
+    applog.info("stopping gates shards ...");
+    co_await gate.invoke_on_all([](seastar::gate &g) { return g.close(); });
+
+    applog.info("stopping abort sources...");
+    co_await abort_sources.stop();
     co_await gate.stop();
+
+    applog.info("app.run: DONE");
+    co_return;
   });
 }

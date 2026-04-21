@@ -33,6 +33,7 @@ clang-format -i timeout.cc
 clang-format -i coroutine-tcp.cc
 clang-format -i filewriter.cc
 clang-format -i main.cc
+clang-format -i tcp-server.cc
 
 mkdir -p build
 cd build
