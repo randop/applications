@@ -10,6 +10,7 @@
 #include <seastar/net/api.hh>
 #include <seastar/util/log.hh>
 #include <seastar/util/tmp_file.hh>
+#include <seastar/util/closeable.hh>
 
 #include "stop_signal.hh"
 
@@ -22,7 +23,7 @@
 
 #define VERSION_MAJOR 1
 #define VERSION_MINOR 1
-#define VERSION_PATCH 0
+#define VERSION_PATCH 1
 
 #define STRINGIFY0(s) #s
 #define STRINGIFY(s) STRINGIFY0(s)
@@ -97,7 +98,10 @@ seastar::future<> serve(uint16_t port,
                         const seastar_apps_lib::stop_signal &stop_signal,
                         seastar::gate &gate, uint32_t timeout_seconds) {
   seastar::listen_options opts;
-  opts.reuse_address = true;
+  // round-robin connection when reuse_address is false.
+  opts.reuse_address = false;
+  opts.lba = seastar::server_socket::load_balancing_algorithm::connection_distribution;
+
   auto ss = seastar::listen(seastar::make_ipv4_address({port}), opts);
   applog.info("Echo server shard {} listening on 0.0.0.0:{}",
               seastar::this_shard_id(), port);
@@ -106,12 +110,13 @@ seastar::future<> serve(uint16_t port,
   timer.set_callback([&connection_count, &timer] {
     applog.info("Active connections on shard {}: {}", seastar::this_shard_id(),
                 connection_count);
-    timer.arm(std::chrono::seconds(10));
+    timer.arm(std::chrono::seconds(30));
   });
-  timer.arm(std::chrono::seconds(10));
+  timer.arm(std::chrono::seconds(30));
   seastar::timer<> abort_timer;
   abort_timer.set_callback([&ss, &stop_signal] {
     if (stop_signal.stopping()) {
+      applog.info("stop abort accept..");
       ss.abort_accept();
     }
   });
@@ -129,6 +134,8 @@ seastar::future<> serve(uint16_t port,
           .finally([&gate, &connection_count] {
             connection_count--;
             gate.leave();
+            gate.check();
+            applog.info("Finally closing connections...");
           });
     } catch (const std::exception &ex) {
       if (!stop_signal.stopping()) {
@@ -136,6 +143,7 @@ seastar::future<> serve(uint16_t port,
       }
     }
   }
+  timer.cancel();
   abort_timer.cancel();
   ss.abort_accept();
   applog.info("Waiting for connections to finish on shard {}",
@@ -158,13 +166,12 @@ int main(int argc, char **argv) {
     seastar::sharded<seastar::gate> gate;
     co_await gate.start();
     auto stop_signal = std::make_shared<seastar_apps_lib::stop_signal>();
-    auto f = seastar::smp::invoke_on_all(
+    auto shards = seastar::smp::invoke_on_all(
         [port, stop_signal, &gate, timeout_seconds] {
           return serve(port, *stop_signal, gate.local(), timeout_seconds);
         });
     co_await stop_signal->wait();
     applog.info("Signal received, stopping servers");
-    co_await std::move(f);
     co_await gate.stop();
   });
 }
