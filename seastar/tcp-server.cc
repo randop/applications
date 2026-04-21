@@ -98,8 +98,7 @@ seastar::future<> serve(uint16_t port,
                         const seastar_apps_lib::stop_signal &stop_signal,
                         seastar::gate &gate, uint32_t timeout_seconds) {
   seastar::listen_options opts;
-  // round-robin connection when reuse_address is false.
-  opts.reuse_address = false;
+  opts.reuse_address = true;
   opts.lba = seastar::server_socket::load_balancing_algorithm::connection_distribution;
 
   auto ss = seastar::listen(seastar::make_ipv4_address({port}), opts);
@@ -134,7 +133,6 @@ seastar::future<> serve(uint16_t port,
           .finally([&gate, &connection_count] {
             connection_count--;
             gate.leave();
-            gate.check();
             applog.info("Finally closing connections...");
           });
     } catch (const std::exception &ex) {
@@ -143,6 +141,7 @@ seastar::future<> serve(uint16_t port,
       }
     }
   }
+  gate.check();
   timer.cancel();
   abort_timer.cancel();
   ss.abort_accept();
