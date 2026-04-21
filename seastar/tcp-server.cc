@@ -2,10 +2,10 @@
 // Copyright (c) 2010 - 2026 Randolph Ledesma. All rights reserved.
 //
 // Use of this software is governed by the Business Source License 1.1
-// included in the LICENSE file (or at https://mariadb.com/bsl11/). 
+// included in the LICENSE file (or at https://mariadb.com/bsl11/).
 //
 // *** AI / MACHINE LEARNING TRAINING PROHIBITION ***
-// 
+//
 // This source code is intended for human use only. Any use of this code
 // (or any portion, derivative, or output generated from it) for training,
 // fine-tuning, or improving any artificial intelligence, machine learning,
@@ -18,9 +18,10 @@
 // Change Date:    2100-01-01
 // Change License: Apache License 2.0
 //
-// On the Change Date (or the fourth anniversary of the first public distribution
-// of this version of the software under this license, whichever comes first),
-// this software will be made available under the specified Change License.
+// On the Change Date (or the fourth anniversary of the first public
+// distribution of this version of the software under this license, whichever
+// comes first), this software will be made available under the specified Change
+// License.
 //---------------------------------------------------------------------------------------
 
 #include <seastar/core/app-template.hh>
@@ -49,7 +50,7 @@
 
 #define VERSION_MAJOR 1
 #define VERSION_MINOR 2
-#define VERSION_PATCH 0
+#define VERSION_PATCH 1
 
 #define STRINGIFY0(s) #s
 #define STRINGIFY(s) STRINGIFY0(s)
@@ -89,6 +90,7 @@ seastar::future<> handle_connection(seastar::connected_socket cs,
 
   idle_timer.set_callback([&, remote] {
     active = false;
+    applog.warn("client {} timeout, closing ...", remote);
     (void)in.close();
     (void)out.close();
   });
@@ -219,10 +221,10 @@ int main(int argc, char **argv) {
       return serve(port, abort_sources.local(), gate.local(), timeout_seconds);
     });
 
-    applog.info("server listening on 0.0.0.0 on port {}", port);
+    applog.info("server listening on 0.0.0.0 port {}", port);
     co_await stop_signal->wait();
 
-    applog.info("Signal received, stopping servers");
+    applog.info("SIGINT or SIGTERM received.");
 
     applog.info("aborting shards...");
     co_await abort_sources.invoke_on_all(
