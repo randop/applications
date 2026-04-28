@@ -311,6 +311,29 @@ if [ ! -f "${LOCAL_PKGCONFIG}/liburing.pc" ]; then
 fi
 export CMAKE_PREFIX_PATH="${OPT_PREFIX}/liburing/current:${CMAKE_PREFIX_PATH}"
 
+detect_ubuntu_jammy() {
+  if [ -f /etc/os-release ]; then
+    . /etc/os-release
+    [ "$ID" = "ubuntu" ] && [ "$VERSION_ID" = "22.04" ]
+    return $?
+  fi
+
+  if [ -f /etc/lsb-release ]; then
+    . /etc/lsb-release
+    [ "$DISTRIB_ID" = "Ubuntu" ] && [ "$DISTRIB_RELEASE" = "22.04" ]
+    return $?
+  fi
+
+  if [ -f /etc/issue ]; then
+    case $(cat /etc/issue) in
+    *"Ubuntu 22.04"*) return 0 ;;
+    esac
+    return 1
+  fi
+
+  return 2
+}
+
 SEASTAR_VERSION=v25.05.0
 SEASTAR_TAG=seastar-25.05.0
 SEASTAR_PKG_VERSION=
@@ -329,14 +352,30 @@ if [ -z "$SEASTAR_PKG_VERSION" ]; then
   git clone -b ${SEASTAR_TAG} https://github.com/scylladb/seastar.git ${OPT_PREFIX}/seastar/${SEASTAR_VERSION}
   rm -rf ${OPT_PREFIX}/seastar/${SEASTAR_VERSION}/.git
   cd ${OPT_PREFIX}/seastar/${SEASTAR_VERSION}
-  ./configure.py \
-    --mode=release \
-    --without-tests \
-    --without-apps \
-    --without-demos \
-    --enable-io_uring \
-    --cflags="-I${OPT_PREFIX}/hwloc/current/include" \
-    --prefix=${OPT_PREFIX}/seastar/current
+  if detect_ubuntu_jammy; then
+    echo "Ubuntu 22.04 LTS (Jammy Jellyfish) detected."
+    export CC=gcc-13
+    export CXX=g++-13
+
+    ./configure.py \
+      --mode=release \
+      --without-tests \
+      --without-apps \
+      --without-demos \
+      --enable-io_uring \
+      --cflags="-I${OPT_PREFIX}/howloc/current/include" \
+      --compiler=g++13 \
+      --prefix=${OPT_PREFIX}/seastar/current
+  else
+    ./configure.py \
+      --mode=release \
+      --without-tests \
+      --without-apps \
+      --without-demos \
+      --enable-io_uring \
+      --cflags="-I${OPT_PREFIX}/hwloc/current/include" \
+      --prefix=${OPT_PREFIX}/seastar/current
+  fi
   ninja -C build/release install
   rm -fv ${LOCAL_PKGCONFIG}/seastar.pc
   ln -sv ${OPT_PREFIX}/seastar/current/lib/pkgconfig/seastar.pc ${LOCAL_PKGCONFIG}/seastar.pc
