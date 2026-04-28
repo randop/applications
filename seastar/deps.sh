@@ -289,6 +289,28 @@ else
 fi
 export CMAKE_PREFIX_PATH="${OPT_PREFIX}/doxygen/current:${CMAKE_PREFIX_PATH}"
 
+LIBURING_VERSION=2.14
+LIBURING_TAG=liburing-2.14
+if [ ! -f "${OPT_PREFIX}/liburing/current/lib/liburing.a" ]; then
+  echo "Compiling liburing ${LIBURING_VERSION}"
+  mkdir -p ${OPT_PREFIX}/liburing/current
+  rm -rf ${OPT_PREFIX}/liburing/current/*
+  rm -rf ${OPT_PREFIX}/liburing/${LIBURING_VERSION}
+  git clone -b ${LIBURING_TAG} https://github.com/axboe/liburing.git ${OPT_PREFIX}/liburing/${LIBURING_VERSION}
+  rm -rf ${OPT_PREFIX}/liburing/${LIBURING_VERSION}/.git
+  rm -rf ${OPT_PREFIX}/liburing/${LIBURING_VERSION}/.github
+  cd ${OPT_PREFIX}/liburing/${LIBURING_VERSION}
+  ./configure --prefix=${OPT_PREFIX}/liburing/current
+  make -j$(nproc)
+  make install
+else
+  echo "liburing: OK"
+fi
+if [ ! -f "${LOCAL_PKGCONFIG}/liburing.pc" ]; then
+  ln -sv ${OPT_PREFIX}/liburing/current/lib/pkgconfig/liburing.pc ${LOCAL_PKGCONFIG}/liburing.pc
+fi
+export CMAKE_PREFIX_PATH="${OPT_PREFIX}/liburing/current:${CMAKE_PREFIX_PATH}"
+
 SEASTAR_VERSION=v25.05.0
 SEASTAR_TAG=seastar-25.05.0
 SEASTAR_PKG_VERSION=
@@ -312,6 +334,7 @@ if [ -z "$SEASTAR_PKG_VERSION" ]; then
     --without-tests \
     --without-apps \
     --without-demos \
+    --enable-io_uring \
     --cflags="-I${OPT_PREFIX}/hwloc/current/include" \
     --prefix=${OPT_PREFIX}/seastar/current
   ninja -C build/release install
