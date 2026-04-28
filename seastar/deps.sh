@@ -162,6 +162,9 @@ if [ ! -f "${OPT_PREFIX}/hwloc/current/lib/libhwloc.la" ]; then
 else
   echo "hwloc: OK"
 fi
+if [ ! -f "${LOCAL_PKGCONFIG}/hwloc.pc" ]; then
+  ln -sv ${OPT_PREFIX}/hwloc/current/lib/pkgconfig/hwloc.pc ${LOCAL_PKGCONFIG}/hwloc.pc
+fi
 export CMAKE_PREFIX_PATH="${OPT_PREFIX}/hwloc/current:${CMAKE_PREFIX_PATH}"
 
 PROTOBUF_VERSION=v25.9
@@ -363,7 +366,7 @@ if [ -z "$SEASTAR_PKG_VERSION" ]; then
       --without-apps \
       --without-demos \
       --enable-io_uring \
-      --cflags="-I${OPT_PREFIX}/howloc/current/include" \
+      --cflags="-I${OPT_PREFIX}/hwloc/current/include" \
       --compiler=g++-13 \
       --prefix=${OPT_PREFIX}/seastar/current
   else
