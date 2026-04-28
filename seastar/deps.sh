@@ -364,7 +364,7 @@ if [ -z "$SEASTAR_PKG_VERSION" ]; then
       --without-demos \
       --enable-io_uring \
       --cflags="-I${OPT_PREFIX}/howloc/current/include" \
-      --compiler=g++13 \
+      --compiler=g++-13 \
       --prefix=${OPT_PREFIX}/seastar/current
   else
     ./configure.py \
