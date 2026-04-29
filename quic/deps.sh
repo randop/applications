@@ -44,9 +44,34 @@ else
   echo "boringssl: OK"
 fi
 
+export BORINGSSL_INSTALL_DIR="${OPT_PREFIX}/boringssl/current"
+export BORINGSSL_DIR="${OPT_PREFIX}/boringssl/${BORINGSSL_VERSION}"
+
 if [ -n "${CMAKE_PREFIX_PATH+set}" ]; then
   CMAKE_PREFIX_PATH="${OPT_PREFIX}/boringssl/current:${CMAKE_PREFIX_PATH}"
 else
   CMAKE_PREFIX_PATH="${OPT_PREFIX}/boringssl/current"
 fi
 export CMAKE_PREFIX_PATH
+echo $CMAKE_PREFIX_PATH
+
+LSQUIC_VERSION=v4.6.3
+if [ ! -f "${OPT_PREFIX}/lsquic/current/lib/liblsquic.a" ]; then
+  echo "Compiling lsquic..."
+  mkdir -p ${OPT_PREFIX}/lsquic/current
+  rm -rf ${OPT_PREFIX}/lsquic/${LSQUIC_VERSION}
+  git clone -b ${LSQUIC_VERSION} https://github.com/litespeedtech/lsquic.git ${OPT_PREFIX}/lsquic/${LSQUIC_VERSION}
+  cd ${OPT_PREFIX}/lsquic/${LSQUIC_VERSION}
+  git submodule update --init
+  rm -rf ${OPT_PREFIX}/lsquic/${LSQUIC_VERSION}/.git
+  rm -rf ${OPT_PREFIX}/lsquic/${LSQUIC_VERSION}/.github
+  mkdir -p ${OPT_PREFIX}/lsquic/${LSQUIC_VERSION}/build
+  cd ${OPT_PREFIX}/lsquic/${LSQUIC_VERSION}/build
+  cmake .. -DLIBSSL_DIR=$BORINGSSL -DCRYPTO_LIB=$BORINGSSL -DBUILD_SHARED_LIBS=1 -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=${OPT_PREFIX}/lsquic/current
+  make -j$(nproc) install
+  echo "Checking compiled lsquic library..." && file ${OPT_PREFIX}/lsquic/current/lib/liblsquic.a
+else
+  echo "lsquic: OK"
+fi
+
+export CMAKE_PREFIX_PATH="${OPT_PREFIX}/lsquic/current:${CMAKE_PREFIX_PATH}"
