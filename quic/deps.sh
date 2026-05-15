@@ -67,7 +67,7 @@ if [ ! -f "${OPT_PREFIX}/lsquic/current/lib/liblsquic.a" ]; then
   rm -rf ${OPT_PREFIX}/lsquic/${LSQUIC_VERSION}/.github
   mkdir -p ${OPT_PREFIX}/lsquic/${LSQUIC_VERSION}/build
   cd ${OPT_PREFIX}/lsquic/${LSQUIC_VERSION}/build
-  cmake .. -DLIBSSL_DIR=$BORINGSSL -DCRYPTO_LIB=$BORINGSSL -DBUILD_SHARED_LIBS=1 -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=${OPT_PREFIX}/lsquic/current
+  cmake .. -DLIBSSL_DIR=$BORINGSSL_INSTALL_DIR -DCRYPTO_LIB=$BORINGSSL_INSTALL_DIR -DBUILD_SHARED_LIBS=1 -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=${OPT_PREFIX}/lsquic/current
   make -j$(nproc) install
   echo "Checking compiled lsquic library..." && file ${OPT_PREFIX}/lsquic/current/lib/liblsquic.a
 else
@@ -75,3 +75,11 @@ else
 fi
 
 export CMAKE_PREFIX_PATH="${OPT_PREFIX}/lsquic/current:${CMAKE_PREFIX_PATH}"
+
+rm -rf ${OPT_PREFIX}/lsquic/${LSQUIC_VERSION}/build
+mkdir -p ${OPT_PREFIX}/lsquic/${LSQUIC_VERSION}/build
+
+cd ${OPT_PREFIX}/lsquic/${LSQUIC_VERSION}/build
+cmake .. -DLSQUIC_BIN=ON -DLIBSSL_DIR=$BORINGSSL_INSTALL_DIR -DCRYPTO_LIB=$BORINGSSL_INSTALL_DIR -DBUILD_SHARED_LIBS=1 -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=${OPT_PREFIX}/lsquic/current
+make -j$(nproc) install
+echo "lsquic: done"
