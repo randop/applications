@@ -65,8 +65,10 @@ sed -i 's/assert(std.crypto.core.aes.has_hardware_support);/\/\/ assert(std.cryp
     src/vsr/checksum.zig
 
 # Build
-echo "Building TigerBeetle..."
+echo "Building TigerBeetle binary ..."
 "${ZIG}" build -Dtarget=x86_64-linux -Drelease -p "${TB_INSTALL}"
+#echo "Building TigerBeetle client libraries ..."
+#"${ZIG}" build clients:c install -Dtarget=x86_64-linux -p "${TB_INSTALL}"
 
 echo "TigerBeetle build: DONE"
 
