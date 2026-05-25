@@ -1,42 +1,47 @@
 #pragma once
 
-#include <cstdio>
-#include <cstdlib>
-#include <cstring>
-#include <ctime>
-#include <pthread.h>
-#include <semaphore>
-#include <thread>
+#include <seastar/core/alien.hh>
+#include <seastar/core/coroutine.hh>
+#include <seastar/core/future.hh>
 
-#include "tb_client.h"
+#include <cstdint>
+#include <stdexcept>
+#include <string>
+#include <vector>
 
-// config.message_size_max - @sizeOf(vsr.Header):
-#define MAX_MESSAGE_SIZE ((1024 * 1024) - 256)
+extern "C" {
+#include <tb_client.h>
+}
 
-// Synchronization context between the callback and the main thread.
-typedef struct completion_context {
-  uint8_t reply[MAX_MESSAGE_SIZE];
-  int size;
-  bool completed;
+// ---------------------------------------------------------------------------
+// Per-request completion context.
+//
+// Replaces the original pthread mutex + condvar approach.  TigerBeetle's
+// internal thread fires on_tb_client_completion(), which uses
+// seastar::alien::submit_to() to marshal the result back to the Seastar
+// reactor (shard 0) and fulfill the promise.  The calling coroutine simply
+// co_awaits the associated future.
+//
+// Lifetime: one context per in-flight request; must remain valid until the
+// co_await in send_request() returns.
+// ---------------------------------------------------------------------------
+struct completion_context_t {
+  seastar::promise<std::vector<uint8_t>> promise;
 
-  pthread_mutex_t lock;
-  pthread_cond_t cv;
-} completion_context_t;
-
-struct Request {
-  std::binary_semaphore done{0}; // caller blocks on this
-  const uint8_t *result = nullptr;
-  uint32_t result_size = 0;
-  TB_PACKET_STATUS status = TB_PACKET_OK;
+  // Set to &seastar::engine().alien() from the Seastar thread *before*
+  // calling send_request().  Used by the TB callback thread to re-enter
+  // the reactor.
+  seastar::alien::instance *alien_instance{nullptr};
 };
 
-void on_tb_client_completion(uintptr_t userdata, tb_packet_t *packet,
-                             uint64_t timestamp, const uint8_t *result,
-                             uint32_t result_size);
+// Declared here so main.cpp can pass it to tb_client_init().
+void on_tb_client_completion(uintptr_t context, tb_packet_t *packet,
+                             uint64_t timestamp, const uint8_t *data,
+                             uint32_t size);
 
-TB_CLIENT_STATUS send_request(tb_client_t *client, tb_packet_t *packet,
-                              completion_context_t *ctx);
-
-void completion_context_init(completion_context_t *ctx);
-void completion_context_destroy(completion_context_t *ctx);
-long long get_time_ms(void);
+// Submits *packet* asynchronously and suspends the calling coroutine until
+// the completion callback fires.  Returns the raw reply bytes on success;
+// throws on TB_CLIENT_* or TB_PACKET_* errors.
+seastar::future<std::vector<uint8_t>> send_request(tb_client_t *client,
+                                                   tb_packet_t *packet,
+                                                   completion_context_t *ctx);

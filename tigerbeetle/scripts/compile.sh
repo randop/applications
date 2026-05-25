@@ -2,12 +2,37 @@
 
 set -eu
 
-rm -f .build/service
+export OPT_PREFIX="$HOME/opt"
+export PKG_CONFIG_PATH="$HOME/.local/lib/pkgconfig"
+export BOOST_ROOT="$HOME/opt/boost/current"
+export CMAKE_PREFIX_PATH="$HOME/opt/seastar/current"
+export CMAKE_PREFIX_PATH="${OPT_PREFIX}/c-ares/current:$CMAKE_PREFIX_PATH"
+export CMAKE_PREFIX_PATH="${OPT_PREFIX}/boost/current:$CMAKE_PREFIX_PATH"
+export CMAKE_PREFIX_PATH="${OPT_PREFIX}/fmt/current:${CMAKE_PREFIX_PATH}"
+export CMAKE_PREFIX_PATH="${OPT_PREFIX}/hwloc/current:${CMAKE_PREFIX_PATH}"
+export CMAKE_PREFIX_PATH="${OPT_PREFIX}/protobuf/current:${CMAKE_PREFIX_PATH}"
+export CMAKE_PREFIX_PATH="${OPT_PREFIX}/lksctp/current:${CMAKE_PREFIX_PATH}"
+export CMAKE_PREFIX_PATH="${OPT_PREFIX}/colm-suite/current:${CMAKE_PREFIX_PATH}"
+export CMAKE_PREFIX_PATH="${OPT_PREFIX}/valgrind/current:${CMAKE_PREFIX_PATH}"
+export CMAKE_PREFIX_PATH="${OPT_PREFIX}/yamlcpp/current:${CMAKE_PREFIX_PATH}"
+export CMAKE_PREFIX_PATH="${OPT_PREFIX}/liburing/current:${CMAKE_PREFIX_PATH}"
 
-g++ -std=c++23 -Wall -Wextra -g3 -O0 -fno-omit-frame-pointer -o .build/service src/main.cpp src/client.cpp \
-  -I include \
-  -I $HOME/opt/tigerbeetle/0.17.4/src/clients/c \
-  -L $HOME/opt/tigerbeetle/0.17.4/src/clients/c/lib/x86_64-linux-gnu.2.27 \
-  -l:libtb_client.a \
-  -Wl,--whole-archive -lpthread -Wl,--no-whole-archive \
-  -ldl -lm -lrt
+### ***verbose***
+# echo "CMAKE_PREFIX_PATH: $CMAKE_PREFIX_PATH"
+###
+
+LOCAL_LIBRARY_PATH=${HOME}/opt/boost/current/lib
+
+if [ -n "${LD_LIBRARY_PATH+set}" ]; then
+  export LD_LIBRARY_PATH="${LOCAL_LIBRARY_PATH}:${LD_LIBRARY_PATH}"
+else
+  export LD_LIBRARY_PATH=$LOCAL_LIBRARY_PATH
+fi
+
+mkdir -p .build
+cd .build
+
+cmake .. -DCMAKE_BUILD_TYPE=RelWithDebInfo
+
+make -j$(nproc)
+

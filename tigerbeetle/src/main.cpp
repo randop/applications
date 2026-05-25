@@ -1,67 +1,79 @@
 #include "client.hpp"
 
-using namespace std;
+#include <seastar/core/app-template.hh>
+#include <seastar/core/reactor.hh>
+#include <seastar/util/log.hh>
 
-int main() {
+#include <cstring>
+#include <memory>
+#include <string_view>
+
+static seastar::logger logger("app");
+
+struct tb_client_guard {
   tb_client_t client{};
 
-  const uint8_t cluster_id[16] = {}; // cluster 0
-  const char *address = "127.0.0.1:3000";
-  uint32_t address_len = static_cast<uint32_t>(std::strlen(address));
+  tb_client_guard() = default;
+  tb_client_guard(const tb_client_guard &) = delete;
+  tb_client_guard &operator=(const tb_client_guard &) = delete;
 
-  TB_INIT_STATUS status =
-      tb_client_init(&client, cluster_id, address, address_len,
+  ~tb_client_guard() { tb_client_deinit(&client); }
+};
+
+seastar::future<> run() {
+  constexpr std::string_view address = "127.0.0.1:3000";
+  constexpr uint8_t cluster_id[16] = {};
+
+  auto guard = std::make_unique<tb_client_guard>();
+
+  const TB_INIT_STATUS init_status =
+      tb_client_init(&guard->client, cluster_id, address.data(),
+                     static_cast<uint32_t>(address.size()),
                      /*completion_ctx=*/0, on_tb_client_completion);
 
-  if (status != TB_INIT_SUCCESS) {
-    printf("tb_client_init failed: %d\n", static_cast<int>(status));
-    return 1;
+  if (init_status != TB_INIT_SUCCESS) {
+    throw std::runtime_error("tb_client_init failed: " +
+                             std::to_string(static_cast<int>(init_status)));
   }
-
-  printf("connected on %s\n", address);
+  logger.info("connected on {}", address);
 
   constexpr size_t ACCOUNTS_LEN = 2;
-  constexpr size_t ACCOUNTS_SIZE = sizeof(tb_account_t) * ACCOUNTS_LEN;
+  tb_uint128_t ids[ACCOUNTS_LEN] = {1, 2};
 
-  tb_account_t accounts[ACCOUNTS_LEN];
-  memset(&accounts, 0, ACCOUNTS_SIZE);
-
-  accounts[0].id = 1;
-  accounts[0].code = 10;
-  accounts[0].ledger = 100;
-
-  accounts[1].id = 2;
-  accounts[1].code = 10;
-  accounts[1].ledger = 100;
-
-  printf("Looking up accounts ...\n");
-  tb_uint128_t ids[ACCOUNTS_LEN] = {accounts[0].id, accounts[1].id};
-
+  // Capture the alien handle now of the Seastar thread.
   completion_context_t ctx;
-  completion_context_init(&ctx);
+  ctx.alien_instance = &seastar::engine().alien();
 
-  tb_packet_t packet;
+  tb_packet_t packet{};
   packet.operation = TB_OPERATION_LOOKUP_ACCOUNTS;
   packet.data = ids;
-  packet.data_size = sizeof(tb_uint128_t) * ACCOUNTS_LEN;
+  packet.data_size = static_cast<uint32_t>(sizeof(tb_uint128_t) * ACCOUNTS_LEN);
   packet.user_data = &ctx;
   packet.status = TB_PACKET_OK;
 
-  TB_CLIENT_STATUS client_status = send_request(&client, &packet, &ctx);
-  if (client_status != TB_CLIENT_OK) {
-    printf("Failed to send the request\n");
-    exit(-1);
-  }
-  if (packet.status != TB_PACKET_OK) {
-    // Checking if the request failed:
-    printf("Error calling lookup_accounts (ret=%d)\n", packet.status);
-    exit(-1);
+  auto reply = co_await send_request(&guard->client, &packet, &ctx);
+
+  if (reply.empty()) {
+    logger.info("no accounts found");
+    co_return;
   }
 
-  if (ctx.size == 0) {
-    printf("No accounts found\n");
+  const size_t n = reply.size() / sizeof(tb_account_t);
+  const auto *accounts = reinterpret_cast<const tb_account_t *>(reply.data());
+
+  logger.info("found {} account(s)", n);
+  for (size_t i = 0; i < n; ++i) {
+    // tb_uint128_t: print the low 64-bit word for logging purposes.
+    const uint64_t id_lo =
+        static_cast<uint64_t>(accounts[i].id); // truncates to low word
+    logger.info("  account[{}]: id={} ledger={} code={} "
+                "credits_posted={} debits_posted={}",
+                i, id_lo, accounts[i].ledger, accounts[i].code,
+                accounts[i].credits_posted, accounts[i].debits_posted);
   }
-  completion_context_destroy(&ctx);
-  tb_client_deinit(&client);
-  return 0;
+}
+
+int main(int argc, char **argv) {
+  seastar::app_template app;
+  return app.run(argc, argv, [] { return run(); });
 }
