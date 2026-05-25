@@ -2,11 +2,13 @@
 
 #include <seastar/core/app-template.hh>
 #include <seastar/core/reactor.hh>
+#include <seastar/core/smp.hh>
+#include <seastar/core/when_all.hh>
 #include <seastar/util/log.hh>
 
-#include <cstring>
 #include <memory>
 #include <string_view>
+#include <tuple>
 
 static seastar::logger logger("app");
 
@@ -19,6 +21,23 @@ struct tb_client_guard {
 
   ~tb_client_guard() { tb_client_deinit(&client); }
 };
+
+// Issues a single-account lookup on whichever shard this coroutine runs on.
+static seastar::future<std::vector<uint8_t>> lookup_account(tb_client_t *client,
+                                                            tb_uint128_t id) {
+  completion_context_t ctx;
+  ctx.alien_instance = &seastar::engine().alien();
+  ctx.shard_id = seastar::this_shard_id();
+
+  tb_packet_t packet{};
+  packet.operation = TB_OPERATION_LOOKUP_ACCOUNTS;
+  packet.data = &id;
+  packet.data_size = static_cast<uint32_t>(sizeof(tb_uint128_t));
+  packet.user_data = &ctx;
+  packet.status = TB_PACKET_OK;
+
+  co_return co_await send_request(client, &packet, &ctx);
+}
 
 seastar::future<> run() {
   constexpr std::string_view address = "127.0.0.1:3000";
@@ -37,39 +56,29 @@ seastar::future<> run() {
   }
   logger.info("connected on {}", address);
 
-  constexpr size_t ACCOUNTS_LEN = 2;
-  tb_uint128_t ids[ACCOUNTS_LEN] = {1, 2};
+  tb_client_t *client = &guard->client;
 
-  // Capture the alien handle now of the Seastar thread.
-  completion_context_t ctx;
-  ctx.alien_instance = &seastar::engine().alien();
+  // Dispatch each lookup to a separate shard.  shard % smp::count keeps
+  // this correct even when started with -c 1.
+  const unsigned shard0 = 0 % seastar::smp::count;
+  const unsigned shard1 = 1 % seastar::smp::count;
 
-  tb_packet_t packet{};
-  packet.operation = TB_OPERATION_LOOKUP_ACCOUNTS;
-  packet.data = ids;
-  packet.data_size = static_cast<uint32_t>(sizeof(tb_uint128_t) * ACCOUNTS_LEN);
-  packet.user_data = &ctx;
-  packet.status = TB_PACKET_OK;
+  auto [reply1, reply2] = co_await seastar::when_all_succeed(
+      seastar::smp::submit_to(shard0,
+                              [client] { return lookup_account(client, 1); }),
+      seastar::smp::submit_to(shard1,
+                              [client] { return lookup_account(client, 2); }));
 
-  auto reply = co_await send_request(&guard->client, &packet, &ctx);
-
-  if (reply.empty()) {
-    logger.info("no accounts found");
-    co_return;
-  }
-
-  const size_t n = reply.size() / sizeof(tb_account_t);
-  const auto *accounts = reinterpret_cast<const tb_account_t *>(reply.data());
-
-  logger.info("found {} account(s)", n);
-  for (size_t i = 0; i < n; ++i) {
-    // tb_uint128_t: print the low 64-bit word for logging purposes.
-    const uint64_t id_lo =
-        static_cast<uint64_t>(accounts[i].id); // truncates to low word
-    logger.info("  account[{}]: id={} ledger={} code={} "
-                "credits_posted={} debits_posted={}",
-                i, id_lo, accounts[i].ledger, accounts[i].code,
-                accounts[i].credits_posted, accounts[i].debits_posted);
+  for (const auto &[label, reply] :
+       {std::pair{"id=1", reply1}, std::pair{"id=2", reply2}}) {
+    if (reply.empty()) {
+      logger.info("{}: not found", label);
+      continue;
+    }
+    const auto *acc = reinterpret_cast<const tb_account_t *>(reply.data());
+    logger.info("{}: ledger={} code={} credits_posted={} debits_posted={}",
+                label, acc->ledger, acc->code, acc->credits_posted,
+                acc->debits_posted);
   }
 }
 
