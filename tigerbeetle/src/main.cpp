@@ -1,88 +1,96 @@
-#include "client.hpp"
-
 #include <seastar/core/app-template.hh>
+#include <seastar/core/coroutine.hh>
 #include <seastar/core/reactor.hh>
-#include <seastar/core/smp.hh>
-#include <seastar/core/when_all.hh>
+#include <seastar/core/sharded.hh>
+#include <seastar/core/sleep.hh>
+#include <seastar/coroutine/maybe_yield.hh>
+#include <seastar/http/handlers.hh>
+#include <seastar/http/httpd.hh>
+#include <seastar/http/reply.hh>
+#include <seastar/http/routes.hh>
+#include <seastar/util/closeable.hh>
 #include <seastar/util/log.hh>
 
 #include <memory>
-#include <string_view>
-#include <tuple>
+
+namespace http = seastar::http;
+namespace httpd = seastar::httpd;
 
 static seastar::logger logger("app");
 
-struct tb_client_guard {
-  tb_client_t client{};
-
-  tb_client_guard() = default;
-  tb_client_guard(const tb_client_guard &) = delete;
-  tb_client_guard &operator=(const tb_client_guard &) = delete;
-
-  ~tb_client_guard() { tb_client_deinit(&client); }
+class hello_handler : public seastar::httpd::handler_base {
+public:
+  seastar::future<std::unique_ptr<seastar::http::reply>>
+  handle(const seastar::sstring &path,
+         std::unique_ptr<seastar::http::request> req,
+         std::unique_ptr<seastar::http::reply> rep) override {
+    (void)req;
+    logger.info("handle: {}", path);
+    rep->set_status(seastar::http::reply::status_type::ok);
+    rep->add_header("Content-Type", "text/plain");
+    rep->write_body("txt", "Hello");
+    return seastar::make_ready_future<std::unique_ptr<seastar::http::reply>>(
+        std::move(rep));
+  }
 };
 
-// Issues a single-account lookup on whichever shard this coroutine runs on.
-static seastar::future<std::vector<uint8_t>> lookup_account(tb_client_t *client,
-                                                            tb_uint128_t id) {
-  completion_context_t ctx;
-  ctx.alien_instance = &seastar::engine().alien();
-  ctx.shard_id = seastar::this_shard_id();
-
-  tb_packet_t packet{};
-  packet.operation = TB_OPERATION_LOOKUP_ACCOUNTS;
-  packet.data = &id;
-  packet.data_size = static_cast<uint32_t>(sizeof(tb_uint128_t));
-  packet.user_data = &ctx;
-  packet.status = TB_PACKET_OK;
-
-  co_return co_await send_request(client, &packet, &ctx);
-}
-
-seastar::future<> run() {
-  constexpr std::string_view address = "127.0.0.1:3000";
-  constexpr uint8_t cluster_id[16] = {};
-
-  auto guard = std::make_unique<tb_client_guard>();
-
-  const TB_INIT_STATUS init_status =
-      tb_client_init(&guard->client, cluster_id, address.data(),
-                     static_cast<uint32_t>(address.size()),
-                     /*completion_ctx=*/0, on_tb_client_completion);
-
-  if (init_status != TB_INIT_SUCCESS) {
-    throw std::runtime_error("tb_client_init failed: " +
-                             std::to_string(static_cast<int>(init_status)));
+class lookup_handler : public seastar::httpd::handler_base {
+public:
+  seastar::future<std::unique_ptr<seastar::http::reply>>
+  handle(const seastar::sstring &path,
+         std::unique_ptr<seastar::http::request> req,
+         std::unique_ptr<seastar::http::reply> rep) override {
+    (void)req;
+    logger.info("lookup: {}", path);
+    auto id = req->param.at("id");
+    rep->set_status(seastar::http::reply::status_type::ok);
+    rep->add_header("Content-Type", "text/plain");
+    rep->write_body("txt", seastar::format("lookup id={}\n", id));
+    return seastar::make_ready_future<std::unique_ptr<seastar::http::reply>>(
+        std::move(rep));
   }
-  logger.info("connected on {}", address);
+};
 
-  tb_client_t *client = &guard->client;
+class http_service {
+  seastar::httpd::http_server _server;
 
-  // Dispatch each lookup to a separate shard.  shard % smp::count keeps
-  // this correct even when started with -c 1.
-  const unsigned shard0 = 0 % seastar::smp::count;
-  const unsigned shard1 = 1 % seastar::smp::count;
+public:
+  http_service() : _server("api") {}
 
-  auto [reply1, reply2] = co_await seastar::when_all_succeed(
-      seastar::smp::submit_to(shard0,
-                              [client] { return lookup_account(client, 1); }),
-      seastar::smp::submit_to(shard1,
-                              [client] { return lookup_account(client, 2); }));
+  seastar::future<> start(uint16_t port) {
+    _server._routes.add(httpd::operation_type::GET, seastar::httpd::url("/"),
+                        new hello_handler());
+    _server._routes.add(httpd::operation_type::GET,
+                        seastar::httpd::url("/lookup").remainder("id"),
+                        new lookup_handler());
+    _server._routes.add(seastar::httpd::GET, seastar::httpd::url(".*"),
+                        new hello_handler());
+    _server._routes.add_default_handler(new hello_handler());
 
-  for (const auto &[label, reply] :
-       {std::pair{"id=1", reply1}, std::pair{"id=2", reply2}}) {
-    if (reply.empty()) {
-      logger.info("{}: not found", label);
-      continue;
-    }
-    const auto *acc = reinterpret_cast<const tb_account_t *>(reply.data());
-    logger.info("{}: ledger={} code={} credits_posted={} debits_posted={}",
-                label, acc->ledger, acc->code, acc->credits_posted,
-                acc->debits_posted);
+    seastar::listen_options opts;
+    opts.reuse_address = true;
+    opts.lba = seastar::server_socket::load_balancing_algorithm::port;
+
+    co_await _server.listen(seastar::make_ipv4_address(port), opts);
+    logger.info("shard {}: listening on :{}", seastar::this_shard_id(), port);
   }
-}
+
+  seastar::future<> stop() { co_await _server.stop(); }
+};
 
 int main(int argc, char **argv) {
   seastar::app_template app;
-  return app.run(argc, argv, [] { return run(); });
+  return app.run(argc, argv, [] -> seastar::future<> {
+    auto svc = std::make_shared<seastar::sharded<http_service>>();
+    co_await svc->start();
+    co_await svc->invoke_on_all(&http_service::start, uint16_t(8080));
+
+    logger.info("HTTP server up on {} shards", seastar::smp::count);
+    while (true) {
+      co_await seastar::coroutine::maybe_yield();
+      co_await seastar::sleep(std::chrono::seconds(1));
+    }
+
+    co_await svc->stop();
+  });
 }

@@ -3,6 +3,8 @@
 #include <seastar/core/alien.hh>
 #include <seastar/core/coroutine.hh>
 #include <seastar/core/future.hh>
+#include <seastar/core/gate.hh>
+#include <seastar/core/reactor.hh>
 
 #include <cstdint>
 #include <stdexcept>
@@ -26,3 +28,18 @@ void on_tb_client_completion(uintptr_t context, tb_packet_t *packet,
 seastar::future<std::vector<uint8_t>> send_request(tb_client_t *client,
                                                    tb_packet_t *packet,
                                                    completion_context_t *ctx);
+
+class tb_client_service {
+  tb_client_t _client{};
+  seastar::gate _gate;
+
+public:
+  tb_client_service() = default;
+  ~tb_client_service() { tb_client_deinit(&_client); }
+
+  seastar::future<> start(const uint8_t cluster_id[16],
+                          std::string_view address);
+  seastar::future<> stop();
+
+  seastar::future<std::vector<uint8_t>> lookup_account(tb_uint128_t id);
+};
