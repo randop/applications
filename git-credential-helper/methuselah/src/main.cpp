@@ -132,55 +132,31 @@ int main(void) {
   bool exitRequested = false;
   char passwordBuf[256] = {};
   bool passwordConfirmed = false;
+  bool secretViewActive = false;
 
   while (!WindowShouldClose() && !exitRequested && !g_signal_received) {
-    if (IsKeyPressed(KEY_ESCAPE)) {
-      exitRequested = true;
-    }
-    if (IsKeyPressed(KEY_ENTER) && !passwordConfirmed) {
-      passwordConfirmed = true;
-      exitRequested = true;
-    }
-
     BeginDrawing();
     ClearBackground(GetColor(GuiGetStyle(DEFAULT, BACKGROUND_COLOR)));
 
     DrawTextEx(hackFont, PROJECT_DESCRIPTION, {40.0f, 40.0f}, 40.0f, 1.0f,
                DARKBLUE);
 
-    GuiPanel(
-        (Rectangle){screenWidth / 2 - 300, screenHeight / 2 - 180, 600, 360},
-        "GPG");
+    DrawFPS(screenWidth - 120, 20);
 
-    GuiLabel(
-        (Rectangle){screenWidth / 2 - 200, screenHeight / 2 - 120, 400, 30},
-        "Enter passphrase:");
+    int result = GuiTextInputBox(
+        (Rectangle){screenWidth / 2 - 300, screenHeight / 2 - 125, 600, 250},
+        "GPG: <email@me.com>",
+        "Enter the passphrase to     \nunlock your credentials.     ",
+        "Continue;Cancel", passwordBuf, static_cast<int>(sizeof(passwordBuf)),
+        &secretViewActive);
 
-    GuiSetStyle(TEXTBOX, TEXT_PADDING, 8);
-    {
-      static bool tbEditMode = true;
-      if (GuiTextBox((Rectangle){screenWidth / 2 - 200, screenHeight / 2 - 70,
-                                 400, 40},
-                     passwordBuf, static_cast<int>(sizeof(passwordBuf)),
-                     tbEditMode)) {
-        tbEditMode = !tbEditMode;
-      }
-    }
-
-    if (GuiButton(
-            (Rectangle){screenWidth / 2 - 210, screenHeight / 2 + 20, 190, 44},
-            "Continue")) {
+    // result: 1 = Continue, 2 = Cancel, 0 = window X closed
+    if (result == 1) {
       passwordConfirmed = true;
       exitRequested = true;
-    }
-
-    if (GuiButton(
-            (Rectangle){screenWidth / 2 + 20, screenHeight / 2 + 20, 190, 44},
-            "Cancel")) {
+    } else if (result == 0 || result == 2) {
       exitRequested = true;
     }
-
-    DrawFPS(screenWidth - 120, 20);
 
     EndDrawing();
   }
