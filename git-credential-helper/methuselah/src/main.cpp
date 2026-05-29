@@ -1,4 +1,5 @@
 #include "config.h"
+#include "hack_font.h"
 #include "raylib.h"
 
 #define RAYGUI_IMPLEMENTATION
@@ -50,14 +51,12 @@ int main(void) {
   sigaction(SIGTERM, &sa, nullptr);
 
   std::atexit(Cleanup);
-  std::cout << "running0..." << std::endl;
 
   if (CheckSingleInstance()) {
     return 0;
   }
-  std::cout << "running1..." << std::endl;
 
-  SetConfigFlags(FLAG_WINDOW_UNDECORATED | FLAG_VSYNC_HINT);
+  SetConfigFlags(FLAG_WINDOW_UNDECORATED | FLAG_VSYNC_HINT | FLAG_MSAA_4X_HINT);
   InitWindow(800, 600, PROJECT_NAME);
 
   if (!IsWindowReady()) {
@@ -75,13 +74,20 @@ int main(void) {
   SetTargetFPS(60);
   SetWindowTitle(PROJECT_NAME);
 
+  constexpr int FONT_BASE_SIZE = 48;
+  Font hackFont = LoadFontFromMemory(".ttf", HACK_REGULAR_TTF,
+                                     static_cast<int>(HACK_REGULAR_TTF_SIZE),
+                                     FONT_BASE_SIZE, nullptr, 0);
+  SetTextureFilter(hackFont.texture, TEXTURE_FILTER_BILINEAR);
+  GenTextureMipmaps(&hackFont.texture);
+  SetTextureFilter(hackFont.texture, TEXTURE_FILTER_TRILINEAR);
+
+  GuiSetFont(hackFont);
   GuiSetStyle(DEFAULT, TEXT_SIZE, 24);
   GuiSetStyle(DEFAULT, TEXT_PADDING, 12);
 
   bool showMessageBox = false;
   bool exitRequested = false;
-
-  std::cout << "running..." << std::endl;
 
   while (!WindowShouldClose() && !exitRequested && !g_signal_received) {
     if (IsKeyPressed(KEY_ESCAPE)) {
@@ -91,7 +97,7 @@ int main(void) {
     BeginDrawing();
     ClearBackground(GetColor(GuiGetStyle(DEFAULT, BACKGROUND_COLOR)));
 
-    DrawText(PROJECT_NAME, 40, 40, 40, DARKBLUE);
+    DrawTextEx(hackFont, PROJECT_NAME, {40.0f, 40.0f}, 40.0f, 1.0f, DARKBLUE);
 
     GuiPanel(
         (Rectangle){screenWidth / 2 - 300, screenHeight / 2 - 180, 600, 360},
@@ -136,5 +142,6 @@ int main(void) {
               << std::endl;
   }
 
+  UnloadFont(hackFont);
   return 0;
 }
