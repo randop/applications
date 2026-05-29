@@ -6,11 +6,51 @@
 #include "raygui.h"
 
 #include <csignal>
+#include <cstdarg>
+#include <cstdio>
 #include <cstdlib>
+#include <ctime>
 #include <fcntl.h>
 #include <iostream>
 #include <sys/file.h>
 #include <unistd.h>
+
+static void RaylibLogCallback(int logLevel, const char *text, va_list args) {
+  const char *prefix = nullptr;
+  switch (logLevel) {
+  case LOG_TRACE:
+    prefix = "TRACE";
+    break;
+  case LOG_DEBUG:
+    prefix = "DEBUG";
+    break;
+  case LOG_INFO:
+    prefix = "INFO";
+    break;
+  case LOG_WARNING:
+    prefix = "WARN";
+    break;
+  case LOG_ERROR:
+    prefix = "ERROR";
+    break;
+  case LOG_FATAL:
+    prefix = "FATAL";
+    break;
+  default:
+    prefix = "?";
+    break;
+  }
+  struct timespec ts;
+  clock_gettime(CLOCK_REALTIME, &ts);
+  struct tm tm_buf;
+  gmtime_r(&ts.tv_sec, &tm_buf);
+  char timebuf[32];
+  std::strftime(timebuf, sizeof(timebuf), "%Y-%m-%dT%H:%M:%S", &tm_buf);
+  std::fprintf(stderr, "%s.%03ldZ [%s] ", timebuf, ts.tv_nsec / 1'000'000L,
+               prefix);
+  std::vfprintf(stderr, text, args);
+  std::fputc('\n', stderr);
+}
 
 const char *LOCK_FILE = "/tmp/" PROJECT_NAME ".lock";
 
@@ -19,6 +59,7 @@ static volatile sig_atomic_t g_signal_received = 0;
 void SignalHandler(int signum) { g_signal_received = signum; }
 
 void Cleanup() {
+  std::cerr << "executing cleanup() ..." << std::endl;
   unlink(LOCK_FILE);
   if (IsWindowReady()) {
     CloseWindow();
@@ -56,6 +97,8 @@ int main(void) {
     return 0;
   }
 
+  SetTraceLogCallback(RaylibLogCallback);
+
   SetConfigFlags(FLAG_WINDOW_UNDECORATED | FLAG_VSYNC_HINT | FLAG_MSAA_4X_HINT);
   InitWindow(800, 600, PROJECT_NAME);
 
@@ -86,55 +129,60 @@ int main(void) {
   GuiSetStyle(DEFAULT, TEXT_SIZE, 24);
   GuiSetStyle(DEFAULT, TEXT_PADDING, 12);
 
-  bool showMessageBox = false;
   bool exitRequested = false;
+  char passwordBuf[256] = {};
+  bool passwordConfirmed = false;
 
   while (!WindowShouldClose() && !exitRequested && !g_signal_received) {
     if (IsKeyPressed(KEY_ESCAPE)) {
-      showMessageBox = true;
+      exitRequested = true;
+    }
+    if (IsKeyPressed(KEY_ENTER) && !passwordConfirmed) {
+      passwordConfirmed = true;
+      exitRequested = true;
     }
 
     BeginDrawing();
     ClearBackground(GetColor(GuiGetStyle(DEFAULT, BACKGROUND_COLOR)));
 
-    DrawTextEx(hackFont, PROJECT_NAME, {40.0f, 40.0f}, 40.0f, 1.0f, DARKBLUE);
+    DrawTextEx(hackFont, PROJECT_DESCRIPTION, {40.0f, 40.0f}, 40.0f, 1.0f,
+               DARKBLUE);
 
     GuiPanel(
         (Rectangle){screenWidth / 2 - 300, screenHeight / 2 - 180, 600, 360},
-        "Raygui Demo");
+        "GPG");
 
     GuiLabel(
-        (Rectangle){screenWidth / 2 - 260, screenHeight / 2 - 120, 200, 30},
-        "This is a fullscreen application");
+        (Rectangle){screenWidth / 2 - 200, screenHeight / 2 - 120, 400, 30},
+        "Enter passphrase:");
 
-    if (GuiButton(
-            (Rectangle){screenWidth / 2 - 100, screenHeight / 2 - 50, 200, 50},
-            "Show Message")) {
-      showMessageBox = true;
+    GuiSetStyle(TEXTBOX, TEXT_PADDING, 8);
+    {
+      static bool tbEditMode = true;
+      if (GuiTextBox((Rectangle){screenWidth / 2 - 200, screenHeight / 2 - 70,
+                                 400, 40},
+                     passwordBuf, static_cast<int>(sizeof(passwordBuf)),
+                     tbEditMode)) {
+        tbEditMode = !tbEditMode;
+      }
     }
 
     if (GuiButton(
-            (Rectangle){screenWidth / 2 - 100, screenHeight / 2 + 30, 200, 50},
-            "Exit Application")) {
+            (Rectangle){screenWidth / 2 - 210, screenHeight / 2 + 20, 190, 44},
+            "Continue")) {
+      passwordConfirmed = true;
+      exitRequested = true;
+    }
+
+    if (GuiButton(
+            (Rectangle){screenWidth / 2 + 20, screenHeight / 2 + 20, 190, 44},
+            "Cancel")) {
       exitRequested = true;
     }
 
     DrawFPS(screenWidth - 120, 20);
 
     EndDrawing();
-
-    if (showMessageBox) {
-      int result = GuiMessageBox(
-          (Rectangle){screenWidth / 2 - 200, screenHeight / 2 - 100, 400, 200},
-          "#191#Exit Application", "Are you sure you want to exit?", "Yes;No");
-
-      if (result == 1) {
-        exitRequested = true;
-      }
-      if (result != 0) {
-        showMessageBox = false;
-      }
-    }
   }
 
   if (g_signal_received) {

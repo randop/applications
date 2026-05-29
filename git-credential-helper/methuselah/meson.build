@@ -33,7 +33,7 @@ xcursor_dep = dependency('xcursor')
 conf = configuration_data()
 conf.set('PROJECT_NAME', meson.project_name())
 conf.set('PROJECT_VERSION', meson.project_version())
-conf.set('PROJECT_DESCRIPTION', 'git credential helper')
+conf.set('PROJECT_DESCRIPTION', 'Git Credential Helper')
 
 config_h = configure_file(
     input: 'config.h.in',
