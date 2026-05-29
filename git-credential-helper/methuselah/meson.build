@@ -1,9 +1,9 @@
 project('methuselah',
         'cpp',
-        version: '0.1.2',
+        version: '0.1.3',
         default_options: [
             'warning_level=0',
-            'cpp_std=c++23',
+            'cpp_std=c++20',
             'buildtype=release'
         ])
 

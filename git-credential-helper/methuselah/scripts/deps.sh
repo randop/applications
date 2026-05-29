@@ -36,8 +36,8 @@ else
 fi
 export CMAKE_PREFIX_PATH
 
-GPGME_VERSION=2.1.0
-GPGME_TAG=gpgme-2.1.0
+GPGME_VERSION=1.23.2
+GPGME_TAG=gpgme-1.23.2
 if [ ! -f "${OPT_PREFIX}/gpgme/current/lib/gpgme.a" ]; then
   mkdir -p ${OPT_PREFIX}/gpgme/current
   rm -rf ${OPT_PREFIX}/gpgme/current/*
@@ -46,7 +46,7 @@ if [ ! -f "${OPT_PREFIX}/gpgme/current/lib/gpgme.a" ]; then
   rm -rf ${OPT_PREFIX}/gpgme/${GPGME_VERSION}/.git
   cd ${OPT_PREFIX}/gpgme/${GPGME_VERSION}
   ./autogen.sh
-  ./configure --prefix=${OPT_PREFIX}/gpgme/current
+  ./configure --prefix=${OPT_PREFIX}/gpgme/current MAKEINFO=true
   make -j$(nproc)
   make install
   rm -f $LOCAL_PKGCONFIG/gpgme.pc
