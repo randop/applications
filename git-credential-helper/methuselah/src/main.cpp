@@ -251,7 +251,6 @@ int main(void) {
 
   bool exitRequested = false;
   char passwordBuf[256] = {};
-  bool passwordConfirmed = false;
   bool secretViewActive = false;
 
   while (!WindowShouldClose() && !exitRequested && !g_signal_received) {
@@ -272,8 +271,21 @@ int main(void) {
 
     // result: 1 = Continue, 2 = Cancel, 0 = window X closed
     if (result == 1) {
-      passwordConfirmed = true;
-      exitRequested = true;
+      const std::string passphrase(passwordBuf);
+      explicit_bzero(passwordBuf, sizeof(passwordBuf));
+
+      std::string input = "$HOME/.password-store/webapp/secret.gpg";
+
+      const std::filesystem::path gpg_path = resolve_path(input);
+      auto r = DecryptFile(gpg_path, passphrase);
+      if (r.error.empty()) {
+        std::cerr << "OK  " << gpg_path << std::endl
+                  << "plain: " << r.plaintext << std::endl;
+        exitRequested = true;
+      } else {
+        std::cerr << "ERR " << gpg_path << ": " << r.error << std::endl;
+      }
+
     } else if (result == 0 || result == 2) {
       exitRequested = true;
     }
@@ -281,23 +293,7 @@ int main(void) {
     EndDrawing();
   }
 
-  if (passwordConfirmed) {
-    const std::string passphrase(passwordBuf);
-    explicit_bzero(passwordBuf, sizeof(passwordBuf));
-
-    std::string input = "$HOME/.password-store/gitlab/token.gpg";
-
-    const std::filesystem::path gpg_path = resolve_path(input);
-    auto r = DecryptFile(gpg_path, "test");
-    if (r.error.empty()) {
-      std::cerr << "OK  " << gpg_path << std::endl
-                << "plain: " << r.plaintext << std::endl;
-    } else {
-      std::cerr << "ERR " << gpg_path << ": " << r.error << std::endl;
-    }
-  } else {
-    explicit_bzero(passwordBuf, sizeof(passwordBuf));
-  }
+  explicit_bzero(passwordBuf, sizeof(passwordBuf));
 
   if (g_signal_received) {
     std::cerr << "\nReceived signal " << g_signal_received << ", cleaning up..."
