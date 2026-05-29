@@ -1,6 +1,6 @@
 project('methuselah',
         'cpp',
-        version: '0.1.1',
+        version: '0.1.2',
         default_options: [
             'warning_level=0',
             'cpp_std=c++23',
@@ -29,6 +29,8 @@ xi_dep   = dependency('xi')
 xrandr_dep = dependency('xrandr')
 xcursor_dep = dependency('xcursor')
 
+gpgme_dep = dependency('gpgme', required: true)
+
 # Configuration
 conf = configuration_data()
 conf.set('PROJECT_NAME', meson.project_name())
@@ -49,9 +51,20 @@ sources = files(
 # Executable
 executable('methuselah',
     sources,
-    dependencies: [raylib_dep, x11_dep, gl_dep, xi_dep, xrandr_dep, xcursor_dep],
+    dependencies: [
+      raylib_dep,
+      x11_dep,
+      gl_dep,
+      xi_dep,
+      xrandr_dep,
+      xcursor_dep,
+      gpgme_dep,
+    ],
     install: true,
-    include_directories: [include_directories('include'), raygui_inc],
+    include_directories: [
+      include_directories('include'),
+      raygui_inc,
+    ],
     cpp_args: [
       '-Wall',
       '-Wextra',
