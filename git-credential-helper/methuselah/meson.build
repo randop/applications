@@ -34,7 +34,7 @@ gpgme_dep = dependency('gpgme', required: true)
 boost_dep = dependency('boost',
   required: true,
   version: '>=1.90.0',
-  modules: ['system', 'filesystem'])
+  modules: ['filesystem'])
 
 # Configuration
 conf = configuration_data()
