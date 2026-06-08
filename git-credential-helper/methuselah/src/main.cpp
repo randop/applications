@@ -5,6 +5,11 @@
 #define RAYGUI_IMPLEMENTATION
 #include "raygui.h"
 
+#include <algorithm>
+#include <boost/algorithm/string.hpp>
+#include <boost/property_tree/info_parser.hpp>
+#include <boost/property_tree/ini_parser.hpp>
+#include <boost/property_tree/ptree.hpp>
 #include <csignal>
 #include <cstdarg>
 #include <cstdio>
@@ -14,10 +19,13 @@
 #include <filesystem>
 #include <gpgme.h>
 #include <iostream>
+#include <map>
 #include <pwd.h>
+#include <sstream>
 #include <string>
 #include <sys/file.h>
 #include <unistd.h>
+#include <vector>
 
 namespace fs = std::filesystem;
 
@@ -203,7 +211,96 @@ static DecryptResult DecryptFile(const std::filesystem::path &gpg_path,
   return result;
 }
 
-int main(void) {
+void print_args(int argc, char **argv) {
+  std::cerr << "args = [";
+  for (int i = 0; i < argc; ++i) {
+    std::cerr << argv[i];
+    if (i < argc - 1) {
+      std::cerr << ", ";
+    }
+  }
+  std::cerr << "]\n";
+}
+
+struct git_predicate {
+  std::vector<std::string> capabilities;
+  std::vector<std::string> wwwauth;
+
+  std::string protocol;
+  std::string host;
+  std::string username;
+  std::string password;
+
+  bool hasCapability(const std::string &cap) const {
+    return std::find(capabilities.begin(), capabilities.end(), cap) !=
+           capabilities.end();
+  }
+
+  bool hasWwwAuth(const std::string &auth) const {
+    return std::find(wwwauth.begin(), wwwauth.end(), auth) != wwwauth.end();
+  }
+};
+
+git_predicate parse_git_predicate(const std::string &input) {
+  git_predicate predicate;
+
+  namespace pt = boost::property_tree;
+  pt::ptree tree;
+
+  std::istringstream iss(input);
+  std::string line;
+
+  while (std::getline(iss, line)) {
+    if (line.empty() || line[0] == '#') {
+      continue;
+    }
+
+    size_t eq_pos = line.find('=');
+    if (eq_pos == std::string::npos) {
+      continue;
+    }
+
+    std::string key = line.substr(0, eq_pos);
+    std::string value = line.substr(eq_pos + 1);
+
+    if (key.size() >= 2 && key.substr(key.size() - 2) == "[]") {
+      key = key.substr(0, key.size() - 2);
+      pt::ptree child;
+      child.put("", value);
+      tree.add_child(key, child);
+    } else {
+      tree.put(key, value);
+    }
+  }
+
+  if (tree.count("capability") > 0) {
+    for (const auto &item : tree.get_child("capability")) {
+      predicate.capabilities.push_back(item.second.data());
+    }
+  }
+
+  if (tree.count("wwwauth") > 0) {
+    for (const auto &item : tree.get_child("wwwauth")) {
+      predicate.wwwauth.push_back(item.second.data());
+    }
+  }
+
+  predicate.protocol = tree.get("protocol", "");
+  predicate.host = tree.get("host", "");
+  predicate.username = tree.get("username", "");
+  predicate.password = tree.get("password", "");
+
+  return predicate;
+}
+
+void handoff_git_credentials(const git_predicate &predicate,
+                             const DecryptResult &result) noexcept {
+  std::cout << "protocol=" << predicate.protocol << "\nhost=" << predicate.host
+            << "\nusername=" << predicate.username
+            << "\npassword=" << result.plaintext << std::endl;
+}
+
+int main(int argc, char **argv) {
   struct sigaction sa{};
   sa.sa_handler = SignalHandler;
   sa.sa_flags = 0;
@@ -215,6 +312,76 @@ int main(void) {
 
   if (CheckSingleInstance()) {
     return 0;
+  }
+
+  print_args(argc, argv);
+
+  std::string line{};
+  std::string inputs{};
+
+  while (std::getline(std::cin, line)) {
+    if (line.empty()) {
+      break;
+    }
+    if (!inputs.empty()) {
+      inputs.append("\n");
+    }
+    inputs.append(line);
+  }
+
+  git_predicate predicate = parse_git_predicate(inputs);
+  std::string config_file = "$HOME/.config/.gitcredential";
+  const std::filesystem::path config_path = resolve_path(config_file);
+
+  if (std::filesystem::exists(config_path)) {
+    std::cerr << "config path good: " << config_path.string() << std::endl;
+  } else {
+    std::cerr << "ERROR(configuration): config path is missing on "
+              << config_path.string() << std::endl;
+    exit(1);
+  }
+
+  boost::property_tree::ptree pt;
+
+  try {
+    boost::property_tree::ini_parser::read_ini(config_path.string(), pt);
+  } catch (const std::exception &ex) {
+    std::cerr << "Failed to parse config file: " << ex.what() << '\n';
+    exit(1);
+  }
+
+  std::string gpg_file{};
+
+  for (const auto &[host, subtree] : pt) {
+    if (boost::algorithm::iequals(host, predicate.host)) {
+      gpg_file = subtree.get<std::string>("gpgfile", "");
+      break;
+    }
+  }
+
+  if (gpg_file.empty()) {
+    std::cerr << "ERROR(configuration): Missing gpg file on "
+              << config_path.string() << std::endl;
+    exit(1);
+  }
+
+  const std::filesystem::path gpg_path = resolve_path(gpg_file);
+  gpg_file = gpg_path.string();
+
+  std::cerr << "git username: " << predicate.username << std::endl;
+  std::cerr << "git gpgfile: " << gpg_file << std::endl;
+
+  if (std::filesystem::exists(gpg_path)) {
+    std::cerr << "gpg: OK" << std::endl;
+  } else {
+    exit(1);
+  }
+
+  // try stored gpg agent
+  auto remember_result = DecryptFile(gpg_path, "");
+  if (remember_result.error.empty()) {
+    handoff_git_credentials(predicate, remember_result);
+    exit(0);
   }
 
   SetTraceLogCallback(RaylibLogCallback);
@@ -264,7 +431,7 @@ int main(void) {
 
     int result = GuiTextInputBox(
         (Rectangle){screenWidth / 2 - 300, screenHeight / 2 - 125, 600, 250},
-        "GPG: <email@me.com>",
+        "GPG: <email@maildomain.ngo>",
         "Enter the passphrase to     \nunlock your credentials.     ",
         "Continue;Cancel", passwordBuf, static_cast<int>(sizeof(passwordBuf)),
         &secretViewActive);
@@ -273,19 +440,14 @@ int main(void) {
     if (result == 1) {
       const std::string passphrase(passwordBuf);
       explicit_bzero(passwordBuf, sizeof(passwordBuf));
-
-      std::string input = "$HOME/.password-store/webapp/secret.gpg";
-
-      const std::filesystem::path gpg_path = resolve_path(input);
-      auto r = DecryptFile(gpg_path, passphrase);
-      if (r.error.empty()) {
-        std::cerr << "OK  " << gpg_path << std::endl
-                  << "plain: " << r.plaintext << std::endl;
+      auto decrypt_result = DecryptFile(gpg_path, passphrase);
+      if (decrypt_result.error.empty()) {
+        handoff_git_credentials(predicate, decrypt_result);
         exitRequested = true;
       } else {
-        std::cerr << "ERR " << gpg_path << ": " << r.error << std::endl;
+        std::cerr << "ERROR: credential decryption issue on " << gpg_path
+                  << ": " << decrypt_result.error << std::endl;
       }
-
     } else if (result == 0 || result == 2) {
       exitRequested = true;
     }

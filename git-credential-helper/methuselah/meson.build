@@ -31,6 +31,11 @@ xcursor_dep = dependency('xcursor')
 
 gpgme_dep = dependency('gpgme', required: true)
 
+boost_dep = dependency('boost',
+  required: true,
+  version: '>=1.90.0',
+  modules: ['system', 'filesystem'])
+
 # Configuration
 conf = configuration_data()
 conf.set('PROJECT_NAME', meson.project_name())
@@ -59,6 +64,7 @@ executable('methuselah',
       xrandr_dep,
       xcursor_dep,
       gpgme_dep,
+      boost_dep,
     ],
     install: true,
     include_directories: [
