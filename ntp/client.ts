@@ -6,6 +6,7 @@ const log = console;
 
 const DEFAULT_NTP_PORT: number = 123;
 const NTP_PACKET_SIZE: number = 48;
+const TIMEOUT_MS: number = 10_000;
  
 interface NtpHost {
   host: string;
@@ -27,28 +28,43 @@ class NtpClient {
   }
 
   async send(message: Buffer): Promise<Buffer> {
-    let ntpData = Buffer.alloc(NTP_PACKET_SIZE);
-    const client = dgram.createSocket("udp4");
-    const sendAsync = promisify(client.send.bind(client));
-    try {
-      await sendAsync(message, this.ntpHost.port, this.ntpHost.address);
-      log.debug(`Sent: ${message.toString('hex')}`);
- 
-      ntpData = await new Promise<Buffer>((resolve, reject) => {
-        client.on("message", (message, info) => {
-          log.debug(`Received from ${info.address}:${info.port}`);
-          resolve(message);
-        });
- 
-        client.on("error", reject);
-      });
-    } catch (err) {
-      log.error(`{ntp.send} [ERROR] ${err.message}`);
-    } finally {
-      client.close();
-    }
+     return new Promise((resolve, reject) => {
+      const client = dgram.createSocket("udp4");
 
-    return ntpData;
+      const timeout = setTimeout(() => {
+        client.close();
+        reject(new Error(`{ntp} [ERROR] operation timeout`));
+      }, TIMEOUT_MS);
+ 
+      const cleanup = () => clearTimeout(timeout);
+
+      client.on("message", (message, info) => {
+        log.debug(`{ntp} received from ${info.address}:${info.port}`);
+        client.close();
+        resolve(message);
+      });
+ 
+      client.on("error", (err) => {
+        cleanup();
+        log.error(`{ntp} [ERROR] request: ${err.message}`);
+        client.close();
+        reject(err);
+      });
+ 
+      client.on("close", () => {
+        log.debug(`{ntp} client closed`);
+      });
+ 
+      client.send(message, this.ntpHost.port, this.ntpHost.address, (err) => {
+        if (err) {
+          cleanup();
+          client.close();
+          reject(err);
+        } else {
+          log.debug(`{ntp} request sent`);
+        }
+      });
+    });
   }
 }
 
