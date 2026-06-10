@@ -1,0 +1,7 @@
+{
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "start": "bun client.js",
+    "dev": "DEBUG=* bun --watch client.ts"
+  }
+}
