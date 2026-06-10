@@ -3,3 +3,20 @@
 Sent: 1b0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 
 Received from 112.210.51.208:123: 1c0100e6000000010000000150484330edd37ca00a5fa4a20000000000000000edd37ca11f79db61edd37ca11f7d57e2
+
+Decoded NTP packet (server response):
+Flags: 0x1c → Leap Indicator: 0 (no warning), Version: 3, Mode: 4 (Server)
+Stratum: 1 (primary reference clock)
+Poll Interval: 0
+Precision: 230 (very high precision, ~2^-230 seconds)
+Root Delay: ~0.000015 s
+Root Dispersion: ~0.000015 s
+Reference ID: 50484330 ("PHC0") — typically indicates a Primary Hardware Clock (e.g., GPS, atomic clock, or PTP hardware reference) 
+
+Timestamps (UTC):
+Reference Timestamp: 2026-06-10 06:23:32.150495
+Originate Timestamp: 1900-01-01 00:00:00 
+Receive Timestamp: 2026-06-10 06:23:32.893811
+Transmit Timestamp: 2026-06-10 06:23:32.893930
+
+
