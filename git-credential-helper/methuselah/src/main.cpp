@@ -5,6 +5,8 @@
 #define RAYGUI_IMPLEMENTATION
 #include "raygui.h"
 
+#include "debug.hpp"
+
 #include <algorithm>
 #include <boost/algorithm/string.hpp>
 #include <boost/property_tree/info_parser.hpp>
@@ -14,6 +16,7 @@
 #include <cstdarg>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <ctime>
 #include <fcntl.h>
 #include <filesystem>
@@ -314,7 +317,9 @@ int main(int argc, char **argv) {
     return 0;
   }
 
-  print_args(argc, argv);
+  if (argc >= 2 && strcmp(argv[1], "store") == 0) {
+    exit(0);
+  }
 
   std::string line{};
   std::string inputs{};
