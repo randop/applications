@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  mongo-local:
+    image: mongo:latest
+    container_name: kanban-mongo-local
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_DATABASE: kanban_local
+    volumes:
+      - mongo-local-data:/data/db
+
+  mongo-remote:
+    image: mongo:latest
+    container_name: kanban-mongo-remote
+    ports:
+      - "27018:27017"
+    environment:
+      MONGO_INITDB_DATABASE: kanban_remote
+    volumes:
+      - mongo-remote-data:/data/db
+
+volumes:
+  mongo-local-data:
+  mongo-remote-data:

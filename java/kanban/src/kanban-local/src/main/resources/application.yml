@@ -1,0 +1,20 @@
+spring:
+  application:
+    name: kanban-local
+  data:
+    mongodb:
+      uri: mongodb://localhost:27017/kanban_local
+      auto-index-creation: true
+
+server:
+  port: 8080
+
+logging:
+  level:
+    root: INFO
+    com.kanban: DEBUG
+
+sync:
+  remote-base-url: http://localhost:8081
+  fixed-delay-ms: 30000
+  enabled: true

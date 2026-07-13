@@ -1,0 +1,15 @@
+spring:
+  application:
+    name: kanban-remote
+  data:
+    mongodb:
+      uri: mongodb://localhost:27017/kanban_remote
+      auto-index-creation: true
+
+server:
+  port: 8081
+
+logging:
+  level:
+    root: INFO
+    com.kanban: DEBUG
