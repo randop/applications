@@ -369,7 +369,7 @@ if [ -z "$SEASTAR_PKG_VERSION" ]; then
       --without-apps \
       --without-demos \
       --enable-io_uring \
-      --cflags="-I${OPT_PREFIX}/hwloc/current/include" \
+      --cflags="-Wno-unused-but-set-variable -I${OPT_PREFIX}/hwloc/current/include" \
       --prefix=${OPT_PREFIX}/seastar/current
   fi
   ninja -C build/release install
