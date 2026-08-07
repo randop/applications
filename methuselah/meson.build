@@ -1,6 +1,6 @@
 project('methuselah',
         'cpp',
-        version: '0.1.3',
+        version: '0.2.0',
         default_options: [
             'warning_level=0',
             'cpp_std=c++20',
@@ -40,7 +40,7 @@ boost_dep = dependency('boost',
 conf = configuration_data()
 conf.set('PROJECT_NAME', meson.project_name())
 conf.set('PROJECT_VERSION', meson.project_version())
-conf.set('PROJECT_DESCRIPTION', 'Git Credential Helper')
+conf.set('PROJECT_DESCRIPTION', 'pinentry helper')
 
 config_h = configure_file(
     input: 'config.h.in',
