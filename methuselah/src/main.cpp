@@ -32,6 +32,12 @@
 
 namespace fs = std::filesystem;
 
+enum PinEntryMacro { UNKNOWN, GPG, GIT };
+
+struct Application {
+  PinEntryMacro macro = UNKNOWN;
+};
+
 fs::path get_home_path() {
   if (struct passwd *pw = getpwuid(getuid()); pw && pw->pw_dir) {
     return fs::path(pw->pw_dir);
@@ -317,25 +323,48 @@ int main(int argc, char **argv) {
     return 0;
   }
 
-  if (argc >= 2 && strcmp(argv[1], "store") == 0) {
+  Application app;
+
+  if (argc >= 2) {
+    if (strcmp(argv[1], "--macro=git") == 0) {
+      app.macro = GIT;
+      std::cerr << "info: git macro" << std::endl;
+    } else if (strcmp(argv[1], "--macro=gpg") == 0) {
+      app.macro = GPG;
+      std::cerr << "info: gpg macro" << std::endl;
+    }
+  }
+
+  if (app.macro == UNKNOWN) {
+    std::cerr << "Error: unknown macro" << std::endl;
     exit(0);
   }
 
-  std::string line{};
-  std::string inputs{};
-
-  while (std::getline(std::cin, line)) {
-    if (line.empty()) {
-      break;
-    }
-    if (!inputs.empty()) {
-      inputs.append("\n");
-    }
-    inputs.append(line);
+  if (argc >= 3 && app.macro == GIT && strcmp(argv[2], "store") == 0) {
+    exit(0);
   }
 
-  git_predicate predicate = parse_git_predicate(inputs);
-  std::string config_file = "$HOME/.config/.gitcredential";
+  std::string gpg_file{};
+  git_predicate predicate;
+
+  if (app.macro == GIT) {
+    std::string line{};
+    std::string inputs{};
+
+    while (std::getline(std::cin, line)) {
+      if (line.empty()) {
+        break;
+      }
+      if (!inputs.empty()) {
+        inputs.append("\n");
+      }
+      inputs.append(line);
+    }
+
+    predicate = parse_git_predicate(inputs);
+  }
+
+  std::string config_file = "$HOME/.config/pinentry.methuselah";
   const std::filesystem::path config_path = resolve_path(config_file);
 
   if (std::filesystem::exists(config_path)) {
@@ -355,10 +384,11 @@ int main(int argc, char **argv) {
     exit(1);
   }
 
-  std::string gpg_file{};
-
   for (const auto &[host, subtree] : pt) {
-    if (boost::algorithm::iequals(host, predicate.host)) {
+    if (app.macro == GIT && boost::algorithm::iequals(host, predicate.host)) {
+      gpg_file = subtree.get<std::string>("gpgfile", "");
+      break;
+    } else if (app.macro == GPG && boost::algorithm::iequals(host, "gpg")) {
       gpg_file = subtree.get<std::string>("gpgfile", "");
       break;
     }
@@ -373,8 +403,10 @@ int main(int argc, char **argv) {
   const std::filesystem::path gpg_path = resolve_path(gpg_file);
   gpg_file = gpg_path.string();
 
-  std::cerr << "git username: " << predicate.username << std::endl;
-  std::cerr << "git gpgfile: " << gpg_file << std::endl;
+  if (app.macro == GIT) {
+    std::cerr << "git username: " << predicate.username << std::endl;
+    std::cerr << "git gpgfile: " << gpg_file << std::endl;
+  }
 
   if (std::filesystem::exists(gpg_path)) {
     std::cerr << "gpg: OK" << std::endl;
@@ -385,7 +417,9 @@ int main(int argc, char **argv) {
   // try stored gpg agent
   auto remember_result = DecryptFile(gpg_path, "");
   if (remember_result.error.empty()) {
-    handoff_git_credentials(predicate, remember_result);
+    if (app.macro == GIT) {
+      handoff_git_credentials(predicate, remember_result);
+    }
     exit(0);
   }
 
@@ -447,7 +481,12 @@ int main(int argc, char **argv) {
       explicit_bzero(passwordBuf, sizeof(passwordBuf));
       auto decrypt_result = DecryptFile(gpg_path, passphrase);
       if (decrypt_result.error.empty()) {
-        handoff_git_credentials(predicate, decrypt_result);
+        if (app.macro == GIT) {
+          handoff_git_credentials(predicate, decrypt_result);
+        } else if (app.macro == GPG) {
+          std::cerr << "gpg successfully processed file: "
+                    << config_path.string() << std::endl;
+        }
         exitRequested = true;
       } else {
         std::cerr << "ERROR: credential decryption issue on " << gpg_path
