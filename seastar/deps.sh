@@ -138,8 +138,8 @@ if [ ! -f "${LOCAL_PKGCONFIG}/fmt.pc" ]; then
 fi
 export CMAKE_PREFIX_PATH="${OPT_PREFIX}/fmt/current:${CMAKE_PREFIX_PATH}"
 
-HWLOC_VERSION=v2.13.0
-HWLOC_TAG=hwloc-2.13.0
+HWLOC_VERSION=v2.14.0
+HWLOC_TAG=hwloc-2.14.0
 if [ ! -f "${OPT_PREFIX}/hwloc/current/lib/libhwloc.la" ]; then
   echo "Compiling hwloc ${HWLOC_VERSION} ..."
   mkdir -p ${OPT_PREFIX}/hwloc/current
@@ -344,6 +344,8 @@ echo "CMAKE_PREFIX_PATH: $CMAKE_PREFIX_PATH"
 ###########################################################
 # NOTE: workaround for latest gcc (GCC) 16.1.1 20260728
 # causing c-ares library to fail during compilation
+# ERROR:
+#   cc1plus: all warnings being treated as errors
 ###########################################################
 SEASTAR_COMPILER_FLAGS="-Wno-unused-but-set-variable"
 SEASTAR_COMPILER_NCPU=$(($(nproc) - 1))
