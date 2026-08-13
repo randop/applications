@@ -286,8 +286,8 @@ else
 fi
 export CMAKE_PREFIX_PATH="${OPT_PREFIX}/doxygen/current:${CMAKE_PREFIX_PATH}"
 
-LIBURING_VERSION=2.14
-LIBURING_TAG=liburing-2.14
+LIBURING_VERSION=2.15
+LIBURING_TAG=liburing-2.15
 if [ ! -f "${OPT_PREFIX}/liburing/current/lib/liburing.a" ]; then
   echo "Compiling liburing ${LIBURING_VERSION}"
   mkdir -p ${OPT_PREFIX}/liburing/current
