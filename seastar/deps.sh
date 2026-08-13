@@ -233,7 +233,7 @@ else
 fi
 export CMAKE_PREFIX_PATH="${OPT_PREFIX}/colm-suite/current:${CMAKE_PREFIX_PATH}"
 
-VALGRIND_VERSION=3.26.0
+VALGRIND_VERSION=3.27.1
 mkdir -p ${OPT_PREFIX}/valgrind/current
 cd ${OPT_PREFIX}/valgrind
 mkdir -p ${OPT_PREFIX}/valgrind/${VALGRIND_VERSION}
