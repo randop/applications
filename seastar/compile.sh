@@ -34,9 +34,10 @@ clang-format -i coroutine-tcp.cc
 clang-format -i filewriter.cc
 clang-format -i main.cc
 clang-format -i tcp-server.cc
+clang-format -i prometheus.cc
 
-mkdir -p build
-cd build
+mkdir -p .build
+cd .build
 cmake .. -DCMAKE_BUILD_TYPE=RelWithDebInfo
 
 make -j$(nproc)

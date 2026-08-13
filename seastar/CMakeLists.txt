@@ -74,3 +74,10 @@ target_compile_options(tcp-server PRIVATE
 )
 target_link_options(tcp-server PRIVATE -g)
 
+add_executable(prometheus prometheus.cc)
+target_link_libraries(prometheus PRIVATE Seastar::seastar)
+target_compile_options(prometheus PRIVATE
+    -Wall -Wextra
+)
+target_link_options(prometheus PRIVATE -g)
+
