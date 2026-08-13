@@ -31,16 +31,17 @@ else
 fi
 
 # TODO: $LOCAL_PKGCONFIG/boost.pc
-BOOST_VERSION=v1.91.0
-BOOST_STRING=boost-1.91.0-1
+BOOST_VERSION=v1.92.0
+BOOST_STRING=boost-1.92.0
+BOOST_DOWNLOAD_FILENAME=boost-1.92.0-b2-nodocs.tar.gz
 mkdir -p ${OPT_PREFIX}/boost/current
 cd ${OPT_PREFIX}/boost
 if [ ! -f "${OPT_PREFIX}/boost/current/lib/libboost_atomic.so" ]; then
   echo "Downloading boost $BOOST_VERSION ..."
-  wget -c "https://github.com/boostorg/boost/releases/download/boost-1.91.0-1/boost-1.91.0-1-b2-nodocs.tar.gz"
+  wget -c "https://github.com/boostorg/boost/releases/download/${BOOST_STRING}/${BOOST_DOWNLOAD_FILENAME}"
   mkdir -p ${OPT_PREFIX}/boost/current
   mkdir -vp ${OPT_PREFIX}/boost/${BOOST_VERSION}
-  tar xzf ${OPT_PREFIX}/boost/boost-1.91.0-1-b2-nodocs.tar.gz -C ${OPT_PREFIX}/boost/${BOOST_VERSION}
+  tar xzf ${OPT_PREFIX}/boost/${BOOST_DOWNLOAD_FILENAME} -C ${OPT_PREFIX}/boost/${BOOST_VERSION}
   cd ${OPT_PREFIX}/boost/${BOOST_VERSION}/${BOOST_STRING}/
 
   if [ ! -f "${OPT_PREFIX}/boost/$BOOST_VERSION/$BOOST_STRING/project-config.jam" ]; then
@@ -65,7 +66,7 @@ else
   echo "boost: OK"
 fi
 
-CARES_VERSION=v1.34.6
+CARES_VERSION=v1.34.8
 if [ ! -f "${OPT_PREFIX}/c-ares/current/lib/libcares.a" ]; then
   echo "Compiling c-ares..."
   mkdir -p ${OPT_PREFIX}/c-ares/current
@@ -340,6 +341,13 @@ fi
 echo "PKG_CONFIG_PATH: $PKG_CONFIG_PATH"
 echo "CMAKE_PREFIX_PATH: $CMAKE_PREFIX_PATH"
 
+###########################################################
+# NOTE: workaround for latest gcc (GCC) 16.1.1 20260728
+# causing c-ares library to fail during compilation
+###########################################################
+SEASTAR_COMPILER_FLAGS="-Wno-unused-but-set-variable"
+SEASTAR_COMPILER_NCPU=$(($(nproc) - 1))
+
 if [ -z "$SEASTAR_PKG_VERSION" ]; then
   echo "Compiling seastar ${SEASTAR_VERSION} ..."
   mkdir -p ${OPT_PREFIX}/seastar/current
@@ -369,10 +377,10 @@ if [ -z "$SEASTAR_PKG_VERSION" ]; then
       --without-apps \
       --without-demos \
       --enable-io_uring \
-      --cflags="-Wno-unused-but-set-variable -I${OPT_PREFIX}/hwloc/current/include" \
+      --cflags="${SEASTAR_COMPILER_FLAGS} -I${OPT_PREFIX}/hwloc/current/include" \
       --prefix=${OPT_PREFIX}/seastar/current
   fi
-  ninja -C build/release install
+  ninja -C build/release install -j $SEASTAR_COMPILER_NCPU
   rm -fv ${LOCAL_PKGCONFIG}/seastar.pc
   ln -sv ${OPT_PREFIX}/seastar/current/lib/pkgconfig/seastar.pc ${LOCAL_PKGCONFIG}/seastar.pc
 else
