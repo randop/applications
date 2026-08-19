@@ -343,11 +343,11 @@ int main(int argc, char **argv) {
 
   if (app.macro == UNKNOWN) {
     std::cerr << "Error: unknown macro" << std::endl;
-    exit(0);
+    exit(EXIT_SUCCESS);
   }
 
   if (argc >= 3 && app.macro == GIT && strcmp(argv[2], "store") == 0) {
-    exit(0);
+    exit(EXIT_SUCCESS);
   }
 
   std::string gpg_file{};
@@ -378,7 +378,7 @@ int main(int argc, char **argv) {
   } else {
     std::cerr << "ERROR(configuration): config path is missing on "
               << config_path.string() << std::endl;
-    exit(1);
+    exit(EXIT_FAILURE);
   }
 
   boost::property_tree::ptree pt;
@@ -387,7 +387,7 @@ int main(int argc, char **argv) {
     boost::property_tree::ini_parser::read_ini(config_path.string(), pt);
   } catch (const std::exception &ex) {
     std::cerr << "Failed to parse config file: " << ex.what() << '\n';
-    exit(1);
+    exit(EXIT_FAILURE);
   }
 
   for (const auto &[host, subtree] : pt) {
