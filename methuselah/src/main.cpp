@@ -24,6 +24,8 @@
 #include <iostream>
 #include <map>
 #include <pwd.h>
+#include <spdlog/sinks/stdout_sinks.h>
+#include <spdlog/spdlog.h>
 #include <sstream>
 #include <string>
 #include <sys/file.h>
@@ -37,6 +39,14 @@ enum PinEntryMacro { UNKNOWN, GPG, GIT };
 struct Application {
   PinEntryMacro macro = UNKNOWN;
 };
+
+void init_logging() {
+  auto console = spdlog::stderr_logger_mt("console");
+  spdlog::set_default_logger(console);
+
+  spdlog::set_level(SPDLOG_DEFAULT_LEVEL);
+  spdlog::set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%^%l%$] [%n] %v");
+}
 
 fs::path get_home_path() {
   if (struct passwd *pw = getpwuid(getuid()); pw && pw->pw_dir) {
@@ -100,16 +110,10 @@ static void RaylibLogCallback(int logLevel, const char *text, va_list args) {
     prefix = "?";
     break;
   }
-  struct timespec ts;
-  clock_gettime(CLOCK_REALTIME, &ts);
-  struct tm tm_buf;
-  gmtime_r(&ts.tv_sec, &tm_buf);
-  char timebuf[32];
-  std::strftime(timebuf, sizeof(timebuf), "%Y-%m-%dT%H:%M:%S", &tm_buf);
-  std::fprintf(stderr, "%s.%03ldZ [%s] ", timebuf, ts.tv_nsec / 1'000'000L,
-               prefix);
-  std::vfprintf(stderr, text, args);
-  std::fputc('\n', stderr);
+  SPDLOG_TRACE("<{}> {}", prefix, text);
+  (void)text;
+  (void)args;
+  (void)prefix;
 }
 
 const char *LOCK_FILE = "/tmp/" PROJECT_NAME ".lock";
@@ -119,11 +123,12 @@ static volatile sig_atomic_t g_signal_received = 0;
 void SignalHandler(int signum) { g_signal_received = signum; }
 
 void Cleanup() {
-  std::cerr << "executing cleanup() ..." << std::endl;
+  SPDLOG_TRACE("executing cleanup() ...");
   unlink(LOCK_FILE);
   if (IsWindowReady()) {
     CloseWindow();
   }
+  spdlog::shutdown();
 }
 
 bool CheckSingleInstance() {
@@ -310,6 +315,7 @@ void handoff_git_credentials(const git_predicate &predicate,
 }
 
 int main(int argc, char **argv) {
+  init_logging();
   struct sigaction sa{};
   sa.sa_handler = SignalHandler;
   sa.sa_flags = 0;
@@ -328,10 +334,10 @@ int main(int argc, char **argv) {
   if (argc >= 2) {
     if (strcmp(argv[1], "--macro=git") == 0) {
       app.macro = GIT;
-      std::cerr << "info: git macro" << std::endl;
+      SPDLOG_TRACE("macro: git");
     } else if (strcmp(argv[1], "--macro=gpg") == 0) {
       app.macro = GPG;
-      std::cerr << "info: gpg macro" << std::endl;
+      SPDLOG_TRACE("macro: gpg");
     }
   }
 
@@ -368,7 +374,7 @@ int main(int argc, char **argv) {
   const std::filesystem::path config_path = resolve_path(config_file);
 
   if (std::filesystem::exists(config_path)) {
-    std::cerr << "config path good: " << config_path.string() << std::endl;
+    SPDLOG_TRACE("config path OK: {}", config_path.string());
   } else {
     std::cerr << "ERROR(configuration): config path is missing on "
               << config_path.string() << std::endl;
@@ -404,12 +410,12 @@ int main(int argc, char **argv) {
   gpg_file = gpg_path.string();
 
   if (app.macro == GIT) {
-    std::cerr << "git username: " << predicate.username << std::endl;
-    std::cerr << "git gpgfile: " << gpg_file << std::endl;
+    SPDLOG_TRACE("git username: {}", predicate.username);
+    SPDLOG_TRACE("git gpgfile: {}", gpg_file);
   }
 
   if (std::filesystem::exists(gpg_path)) {
-    std::cerr << "gpg: OK" << std::endl;
+    SPDLOG_TRACE("gpg: OK");
   } else {
     exit(1);
   }
@@ -484,8 +490,8 @@ int main(int argc, char **argv) {
         if (app.macro == GIT) {
           handoff_git_credentials(predicate, decrypt_result);
         } else if (app.macro == GPG) {
-          std::cerr << "gpg successfully processed file: "
-                    << config_path.string() << std::endl;
+          SPDLOG_TRACE("gpg successfully processed file: {}",
+                       config_path.string());
         }
         exitRequested = true;
       } else {
@@ -502,8 +508,8 @@ int main(int argc, char **argv) {
   explicit_bzero(passwordBuf, sizeof(passwordBuf));
 
   if (g_signal_received) {
-    std::cerr << "\nReceived signal " << g_signal_received << ", cleaning up..."
-              << std::endl;
+    SPDLOG_TRACE("application received signal {}, cleaning up...",
+                 g_signal_received);
   }
 
   UnloadFont(hackFont);

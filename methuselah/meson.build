@@ -1,6 +1,6 @@
 project('methuselah',
         'cpp',
-        version: '0.2.0',
+        version: '0.2.1',
         default_options: [
             'warning_level=0',
             'cpp_std=c++20',
@@ -20,7 +20,12 @@ raylib_opts.add_cmake_defines({
 raylib_proj = cmake.subproject('raylib', options: raylib_opts)
 raylib_dep = raylib_proj.dependency('raylib')
 
-raygui_proj = subproject('raygui')
+raygui_proj = subproject('raygui',
+  default_options: [
+    'warning_level=0',
+    'werror=false',
+  ]
+)
 raygui_inc = raygui_proj.get_variable('raygui_inc')
 
 x11_dep  = dependency('x11')
@@ -36,11 +41,25 @@ boost_dep = dependency('boost',
   version: '>=1.90.0',
   modules: ['filesystem'])
 
+spdlog_dep = dependency(
+  'spdlog',
+  version: '>=1.17',
+  default_options: [
+    'compile_library=false',
+    'std_format=enabled',
+  ],
+)
+
 # Configuration
 conf = configuration_data()
 conf.set('PROJECT_NAME', meson.project_name())
 conf.set('PROJECT_VERSION', meson.project_version())
 conf.set('PROJECT_DESCRIPTION', 'pinentry helper')
+if get_option('buildtype').startswith('release')
+  conf.set('SPDLOG_DEFAULT_LEVEL', 'spdlog::level::info')
+else
+  conf.set('SPDLOG_DEFAULT_LEVEL', 'spdlog::level::trace')
+endif
 
 config_h = configure_file(
     input: 'config.h.in',
@@ -65,6 +84,7 @@ executable('methuselah',
       xcursor_dep,
       gpgme_dep,
       boost_dep,
+      spdlog_dep
     ],
     install: true,
     include_directories: [
