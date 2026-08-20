@@ -1,22 +1,17 @@
 /**
- * Same behavior as src/index.ts, but uses scriptc's built-in `fetch`
- * instead of the `undici` package. scriptc's static runtime ships its own
- * from-scratch fetch implementation (scr_fetch.c) deliberately built to
- * match undici's wire behavior (header order, redirect handling, error
- * shapes) byte-for-byte — so this compiles fully statically, with no
- * --dynamic flag and no embedded engine at all.
+ * Fetches live exchange rates and converts a base currency to a target
+ * currency (defaults to USD -> PHP).
  *
- * Use this if `--dynamic` + `undici` hits a compiler-immaturity bug (worth
- * filing at https://github.com/vercel-labs/scriptc/issues) and you just
- * need the exchange-rate fetch working right now.
+ * Uses scriptc's built-in `fetch` — its static runtime ships its own
+ * from-scratch fetch implementation (scr_fetch.c), so this compiles fully
+ * statically with no --dynamic flag and no embedded engine needed.
+ *
+ * Every fallible step returns an AppResult<T> (AppSuccess<T> | AppError)
+ * instead of throwing, so callers narrow with `if (result.ok)` rather than
+ * try/catch.
  */
-
-interface ExchangeRateResponse {
-  result: string;
-  base_code: string;
-  time_last_update_utc: string;
-  rates: Record<string, number>;
-}
+import { ok, err } from "./types";
+import type { AppResult, ExchangeRate, ExchangeRateApiResponse } from "./types";
 
 const API_BASE = "https://open.er-api.com/v6/latest";
 const DEFAULT_BASE_CURRENCY = "USD";
@@ -25,30 +20,48 @@ const DEFAULT_TARGET_CURRENCY = "PHP";
 async function getExchangeRate(
   baseCurrency: string,
   targetCurrency: string,
-): Promise<number> {
+  amount: number,
+): Promise<AppResult<ExchangeRate>> {
   const url = `${API_BASE}/${baseCurrency}`;
 
-  const response = await fetch(url, {
-    method: "GET",
-    headers: { accept: "application/json" },
-  });
-
-  if (!response.ok) {
-    throw new Error(`Exchange rate request failed with HTTP ${response.status}`);
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: "GET",
+      headers: { accept: "application/json" },
+    });
+  } catch (cause) {
+    return err(`Network request to ${url} failed`, cause);
   }
 
-  const data = (await response.json()) as ExchangeRateResponse;
+  if (!response.ok) {
+    return err(`Exchange rate request failed with HTTP ${response.status}`);
+  }
+
+  let data: ExchangeRateApiResponse;
+  try {
+    data = (await response.json()) as ExchangeRateApiResponse;
+  } catch (cause) {
+    return err("Could not parse exchange rate response as JSON", cause);
+  }
 
   if (data.result !== "success") {
-    throw new Error(`Exchange rate API returned result="${data.result}"`);
+    return err(`Exchange rate API returned result="${data.result}"`);
   }
 
   const rate = data.rates[targetCurrency];
   if (rate === undefined) {
-    throw new Error(`No rate found for currency code "${targetCurrency}"`);
+    return err(`No rate found for currency code "${targetCurrency}"`);
   }
 
-  return rate;
+  return ok({
+    base: baseCurrency,
+    target: targetCurrency,
+    rate,
+    amount,
+    converted: amount * rate,
+    lastUpdated: data.time_last_update_utc,
+  });
 }
 
 // scriptc compiles arrays as dense buffers: an out-of-bounds index is a
@@ -71,14 +84,20 @@ async function main(): Promise<void> {
 
   console.log(`Fetching ${baseCurrency} -> ${targetCurrency} exchange rate...`);
 
-  const rate = await getExchangeRate(baseCurrency, targetCurrency);
-  const converted = amount * rate;
+  const result = await getExchangeRate(baseCurrency, targetCurrency, amount);
 
+  if (!result.ok) {
+    console.error("Error:", result.message);
+    if (result.cause !== undefined) {
+      console.error("Cause:", result.cause);
+    }
+    process.exit(1);
+    return;
+  }
+
+  const { rate, converted } = result.data;
   console.log(`1 ${baseCurrency} = ${rate} ${targetCurrency}`);
   console.log(`${amount} ${baseCurrency} = ${converted.toFixed(2)} ${targetCurrency}`);
 }
 
-main().catch((err: unknown) => {
-  console.error("Error:", err instanceof Error ? err.message : String(err));
-  process.exit(1);
-});
+main();
