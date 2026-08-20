@@ -1,0 +1,24 @@
+{
+  "name": "exchange-rate-app",
+  "version": "1.0.0",
+  "description": "Fetches live exchange rates via undici and converts USD to PHP by default. Compiles to a native binary with scriptc.",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "coverage": "scriptc coverage src/index.ts --dynamic",
+    "build": "mkdir -p .build && scriptc build src/index.ts --dynamic -o .build/exchange-rate",
+    "start": "scriptc run src/index.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "scriptc": "^0.0.33",
+    "typescript": "^5.7.0"
+  },
+  "devEngines": {
+    "packageManager": {
+      "name": "pnpm",
+      "version": "^11.20.0",
+      "onFail": "download"
+    }
+  }
+}
