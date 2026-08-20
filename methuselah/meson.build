@@ -1,6 +1,6 @@
 project('methuselah',
         'cpp',
-        version: '0.2.1',
+        version: '0.3.0',
         default_options: [
             'warning_level=0',
             'cpp_std=c++20',
@@ -35,6 +35,7 @@ xrandr_dep = dependency('xrandr')
 xcursor_dep = dependency('xcursor')
 
 gpgme_dep = dependency('gpgme', required: true)
+gpgerror_dep = dependency('gpg-error', required: true)
 
 boost_dep = dependency('boost',
   required: true,
@@ -49,6 +50,8 @@ spdlog_dep = dependency(
     'std_format=enabled',
   ],
 )
+
+assuan_dep = dependency('libassuan', required: true)
 
 # Configuration
 conf = configuration_data()
@@ -83,8 +86,10 @@ executable('methuselah',
       xrandr_dep,
       xcursor_dep,
       gpgme_dep,
+      gpgerror_dep,
       boost_dep,
-      spdlog_dep
+      spdlog_dep,
+      assuan_dep
     ],
     install: true,
     include_directories: [
