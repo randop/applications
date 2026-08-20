@@ -8,6 +8,8 @@
     "build": "mkdir -p .build && scriptc build hello.ts -o .build/hello",
     "start:server": "scriptc run server.ts",
     "build:server": "mkdir -p .build && scriptc build server.ts -o .build/server",
+    "start:colors": ".build/colors",
+    "build:colors": "mkdir -p .build && scriptc build colors.ts --dynamic -o .build/colors",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
@@ -23,5 +25,8 @@
   "type": "module",
   "devDependencies": {
     "scriptc": "^0.0.33"
+  },
+  "dependencies": {
+    "picocolors": "^1.1.1"
   }
 }

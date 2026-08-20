@@ -206,6 +206,10 @@ settings:
 importers:
 
   .:
+    dependencies:
+      picocolors:
+        specifier: ^1.1.1
+        version: 1.1.1
     devDependencies:
       scriptc:
         specifier: ^0.0.33
@@ -339,6 +343,9 @@ packages:
     cpu: [x64]
     os: [win32]
 
+  picocolors@1.1.1:
+    resolution: {integrity: sha512-xceH2snhtb5M9liqDsmEw56le376mTZkEX/jEb/RxNFyegNul7eNslCXP9FDj/Lcu0X8KEyMceP2ntpaHrDEVA==}
+
   scriptc@0.0.33:
     resolution: {integrity: sha512-GzNvPRl41xzPA+E9hifmhACoIWPHxx2gU0BT++2T1CatrkQLvt5QKrjPw+OZzRLQBtOD/xGr3Tt4lT5gV/ganA==}
     engines: {node: '>=24'}
@@ -423,6 +430,8 @@ snapshots:
 
   '@typescript/typescript-win32-x64@7.0.2':
     optional: true
+
+  picocolors@1.1.1: {}
 
   scriptc@0.0.33:
     dependencies:
