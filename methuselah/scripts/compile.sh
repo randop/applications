@@ -56,7 +56,7 @@ EOF
 fi
 
 if [ ! -d ".build" ]; then
-  meson setup .build --buildtype=debug
+  meson setup .build --buildtype=release
 fi
 
 export BOOST_ROOT=${OPT_PREFIX}/boost/current
