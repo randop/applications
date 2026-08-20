@@ -8,6 +8,7 @@
 #include "debug.hpp"
 
 #include <algorithm>
+#include <assuan.h>
 #include <boost/algorithm/string.hpp>
 #include <boost/property_tree/info_parser.hpp>
 #include <boost/property_tree/ini_parser.hpp>
@@ -20,6 +21,7 @@
 #include <ctime>
 #include <fcntl.h>
 #include <filesystem>
+#include <gpg-error.h>
 #include <gpgme.h>
 #include <iostream>
 #include <map>
@@ -39,6 +41,18 @@ enum PinEntryMacro { UNKNOWN, GPG, GIT };
 struct Application {
   PinEntryMacro macro = UNKNOWN;
 };
+
+struct PinentryState {
+  std::string desc;
+  std::string prompt;
+  std::string title;
+  std::string error_msg;
+  int timeout = 0;
+  bool do_repeat = false;
+};
+
+/*** global variables ***/
+static PinentryState g_pinentry;
 
 void init_logging() {
   auto console = spdlog::stderr_logger_mt("console");
@@ -146,6 +160,203 @@ bool CheckSingleInstance() {
               << std::endl;
     return true;
   }
+}
+
+static gpg_error_t cmd_setdesc(assuan_context_t /*ctx*/, char *line) {
+  g_pinentry.desc = (line && *line) ? line : "";
+  return 0;
+}
+
+static gpg_error_t cmd_setprompt(assuan_context_t /*ctx*/, char *line) {
+  g_pinentry.prompt = (line && *line) ? line : "";
+  return 0;
+}
+
+static gpg_error_t cmd_settitle(assuan_context_t /*ctx*/, char *line) {
+  g_pinentry.title = (line && *line) ? line : "";
+  return 0;
+}
+
+static gpg_error_t cmd_seterror(assuan_context_t /*ctx*/, char *line) {
+  g_pinentry.error_msg = (line && *line) ? line : "";
+  return 0;
+}
+
+static gpg_error_t cmd_settimeout(assuan_context_t /*ctx*/, char *line) {
+  g_pinentry.timeout = line ? std::atoi(line) : 0;
+  return 0;
+}
+
+static gpg_error_t cmd_setrepeat(assuan_context_t /*ctx*/, char * /*line*/) {
+  g_pinentry.do_repeat = true;
+  return 0;
+}
+
+static bool ShowPinentryDialog(std::string &password) {
+  SetConfigFlags(FLAG_WINDOW_UNDECORATED | FLAG_VSYNC_HINT | FLAG_MSAA_4X_HINT);
+  InitWindow(800, 600, PROJECT_NAME);
+
+  if (!IsWindowReady()) {
+    std::cerr << "ERROR: Failed to initialize window" << std::endl;
+    return EXIT_FAILURE;
+  }
+
+  int mon = GetCurrentMonitor();
+  float screenWidth = static_cast<float>(GetMonitorWidth(mon));
+  float screenHeight = static_cast<float>(GetMonitorHeight(mon));
+
+  SetWindowPosition(0, 0);
+  SetWindowSize(static_cast<int>(screenWidth), static_cast<int>(screenHeight));
+
+  SetTargetFPS(60);
+  SetWindowTitle(PROJECT_NAME);
+
+  constexpr int FONT_BASE_SIZE = 48;
+  Font hackFont = LoadFontFromMemory(".ttf", HACK_REGULAR_TTF,
+                                     static_cast<int>(HACK_REGULAR_TTF_SIZE),
+                                     FONT_BASE_SIZE, nullptr, 0);
+  SetTextureFilter(hackFont.texture, TEXTURE_FILTER_BILINEAR);
+  GenTextureMipmaps(&hackFont.texture);
+  SetTextureFilter(hackFont.texture, TEXTURE_FILTER_TRILINEAR);
+
+  GuiSetFont(hackFont);
+  GuiSetStyle(DEFAULT, TEXT_SIZE, 24);
+  GuiSetStyle(DEFAULT, TEXT_PADDING, 12);
+
+  char passwordBuf[256] = {};
+  bool secretViewActive = false;
+
+  int result = 0; // 0 = open, 1 = OK, -1 = Cancel/timeout/window close
+  const double start = GetTime();
+
+  while (!WindowShouldClose() && result == 0 && !g_signal_received) {
+    if (g_pinentry.timeout > 0 &&
+        (GetTime() - start) > static_cast<double>(g_pinentry.timeout)) {
+      result = -1;
+      break;
+    }
+
+    BeginDrawing();
+    ClearBackground(GetColor(GuiGetStyle(DEFAULT, BACKGROUND_COLOR)));
+    DrawTextEx(hackFont, PROJECT_DESCRIPTION, {40.0f, 40.0f}, 40.0f, 1.0f,
+               DARKBLUE);
+    DrawFPS(screenWidth - 120, 20);
+
+    // dialogResult: 1 = Continue, 2 = Cancel, 0 = window X closed
+    int dialogResult = GuiTextInputBox(
+        (Rectangle){screenWidth / 2 - 300, screenHeight / 2 - 125, 600, 250},
+        "GPG: <email@maildomain.ngo>",
+        "Enter the passphrase to     \nunlock your credentials.     ",
+        "Continue;Cancel", passwordBuf, static_cast<int>(sizeof(passwordBuf)),
+        &secretViewActive);
+
+    if (dialogResult == 2 || dialogResult == 0) {
+      result = -1;
+    } else if (dialogResult == 1) {
+      result = 1;
+    }
+
+    EndDrawing();
+  }
+
+  CloseWindow();
+
+  const bool accepted = (result == 1);
+  if (accepted) {
+    password.assign(passwordBuf);
+  }
+
+  explicit_bzero(passwordBuf, sizeof(passwordBuf));
+  return accepted;
+}
+
+static gpg_error_t cmd_getpin(assuan_context_t ctx, char * /*line*/) {
+  std::string pass;
+
+  if (!ShowPinentryDialog(pass)) {
+    if (!pass.empty()) {
+      explicit_bzero(pass.data(), pass.size());
+    }
+    return gpg_error(GPG_ERR_CANCELED);
+  }
+
+  assuan_begin_confidential(ctx);
+  const gpg_error_t err = assuan_send_data(ctx, pass.data(), pass.size());
+  assuan_end_confidential(ctx);
+
+  if (!pass.empty()) {
+    explicit_bzero(pass.data(), pass.size());
+  }
+  return err;
+}
+
+static gpg_error_t cmd_confirm(assuan_context_t /*ctx*/, char * /*line*/) {
+  return 0;
+}
+
+static const struct {
+  const char *name;
+  assuan_handler_t handler;
+} kPinentryCommands[] = {
+    {"SETDESC", cmd_setdesc},
+    {"SETPROMPT", cmd_setprompt},
+    {"SETTITLE", cmd_settitle},
+    {"SETERROR", cmd_seterror},
+    {"SETTIMEOUT", cmd_settimeout},
+    {"SETREPEAT", cmd_setrepeat},
+    {"GETPIN", cmd_getpin},
+    {"CONFIRM", cmd_confirm},
+    {nullptr, nullptr},
+};
+
+static int RunPinentryServer() {
+  SetTraceLogLevel(LOG_NONE);
+
+  assuan_context_t ctx = nullptr;
+  gpg_error_t err = assuan_new(&ctx);
+  if (err) {
+    std::cerr << "ERROR(pinentry): assuan_new failed: " << gpg_strerror(err)
+              << std::endl;
+    return EXIT_FAILURE;
+  }
+
+  assuan_fd_t filedes[2] = {STDIN_FILENO, STDOUT_FILENO};
+  err = assuan_init_pipe_server(ctx, filedes);
+  if (err) {
+    std::cerr << "ERROR(pinentry): assuan_init_pipe_server failed: "
+              << gpg_strerror(err) << std::endl;
+    assuan_release(ctx);
+    return EXIT_FAILURE;
+  }
+
+  for (const auto &command : kPinentryCommands) {
+    if (!command.name) {
+      break;
+    }
+
+    err = assuan_register_command(ctx, command.name, command.handler, nullptr);
+    if (err) {
+      std::cerr << "ERROR(pinentry): failed to register " << command.name
+                << ": " << gpg_strerror(err) << std::endl;
+      assuan_release(ctx);
+      return EXIT_FAILURE;
+    }
+  }
+
+  while (true) {
+    err = assuan_accept(ctx);
+    if (err) {
+      break;
+    }
+
+    err = assuan_process(ctx);
+    if (err) {
+      break;
+    }
+  }
+
+  assuan_release(ctx);
+  return EXIT_SUCCESS;
 }
 
 struct DecryptResult {
@@ -326,7 +537,7 @@ int main(int argc, char **argv) {
   std::atexit(Cleanup);
 
   if (CheckSingleInstance()) {
-    return 0;
+    return EXIT_SUCCESS;
   }
 
   Application app;
@@ -343,7 +554,7 @@ int main(int argc, char **argv) {
 
   if (app.macro == UNKNOWN) {
     std::cerr << "Error: unknown macro" << std::endl;
-    exit(EXIT_SUCCESS);
+    exit(EXIT_FAILURE);
   }
 
   if (argc >= 3 && app.macro == GIT && strcmp(argv[2], "store") == 0) {
@@ -368,6 +579,8 @@ int main(int argc, char **argv) {
     }
 
     predicate = parse_git_predicate(inputs);
+  } else if (app.macro == GPG) {
+    return RunPinentryServer();
   }
 
   std::string config_file = "$HOME/.config/pinentry.methuselah";
@@ -403,7 +616,7 @@ int main(int argc, char **argv) {
   if (gpg_file.empty()) {
     std::cerr << "ERROR(configuration): Missing gpg file on "
               << config_path.string() << std::endl;
-    exit(1);
+    exit(EXIT_FAILURE);
   }
 
   const std::filesystem::path gpg_path = resolve_path(gpg_file);
@@ -417,7 +630,7 @@ int main(int argc, char **argv) {
   if (std::filesystem::exists(gpg_path)) {
     SPDLOG_TRACE("gpg: OK");
   } else {
-    exit(1);
+    exit(EXIT_FAILURE);
   }
 
   // try stored gpg agent
@@ -426,7 +639,7 @@ int main(int argc, char **argv) {
     if (app.macro == GIT) {
       handoff_git_credentials(predicate, remember_result);
     }
-    exit(0);
+    exit(EXIT_SUCCESS);
   }
 
   SetTraceLogCallback(RaylibLogCallback);
@@ -436,7 +649,7 @@ int main(int argc, char **argv) {
 
   if (!IsWindowReady()) {
     std::cerr << "ERROR: Failed to initialize window" << std::endl;
-    return 1;
+    return EXIT_FAILURE;
   }
 
   int mon = GetCurrentMonitor();
@@ -513,5 +726,5 @@ int main(int argc, char **argv) {
   }
 
   UnloadFont(hackFont);
-  return 0;
+  return EXIT_SUCCESS;
 }
