@@ -77,7 +77,17 @@ config_h = configure_file(
 
 # Source files
 sources = files(
-    'src/main.cpp'
+    'src/application.cpp',
+    'src/config.cpp',
+    'src/git_credentials.cpp',
+    'src/gpg_decrypt.cpp',
+    'src/instance_lock.cpp',
+    'src/logging.cpp',
+    'src/main.cpp',
+    'src/path.cpp',
+    'src/pinentry_server.cpp',
+    'src/signal_guard.cpp',
+    'src/ui_session.cpp',
 )
 
 # Executable
