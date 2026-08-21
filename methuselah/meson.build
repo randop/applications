@@ -1,10 +1,13 @@
 project('methuselah',
         'cpp',
-        version: '0.3.1',
+        version: run_command('cat', 'VERSION', check : true).stdout().strip(),
         default_options: [
-            'warning_level=0',
             'cpp_std=c++20',
-            'buildtype=release'
+            'buildtype=release',
+            'optimization=3',
+            'strip=true',
+            'b_lto=true',
+            'b_ndebug=true'
         ])
 
 # Dependencies
