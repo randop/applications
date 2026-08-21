@@ -1,5 +1,5 @@
 # methuselah
-git credential helper
+gpg and git credential helper
 
 ### Dependencies
 ```sh
@@ -14,6 +14,13 @@ apt install \
 
 # For Artix/Arch
 pacman -Syy \
+  base-devel \
+  meson \
+  cmake \
+  pkgconfig \
+  git \
+  alsa-lib \
+  mesa \
   gpgme \
   libxi \
   libassuan \
