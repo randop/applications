@@ -1,6 +1,6 @@
 project('methuselah',
         'cpp',
-        version: '0.3.0',
+        version: '0.3.1',
         default_options: [
             'warning_level=0',
             'cpp_std=c++20',

@@ -5,8 +5,6 @@
 #define RAYGUI_IMPLEMENTATION
 #include "raygui.h"
 
-#include "debug.hpp"
-
 #include <algorithm>
 #include <assuan.h>
 #include <boost/algorithm/string.hpp>
