@@ -1,0 +1,139 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>4.1.1</version>
+        <relativePath />
+    </parent>
+
+    <groupId>com.quizbin.apex</groupId>
+    <artifactId>apex</artifactId>
+    <version>0.0.1-SNAPSHOT</version>
+    <name>apex</name>
+    <description>Apex project for Spring Boot</description>
+
+    <properties>
+        <java.version>25</java.version>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <version>1.18.36</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-devtools</artifactId>
+            <scope>runtime</scope>
+            <optional>true</optional>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <directory>${project.basedir}/.target</directory>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+
+            <plugin>
+                <groupId>com.diffplug.spotless</groupId>
+                <artifactId>spotless-maven-plugin</artifactId>
+                <version>2.44.4</version>
+                <!-- Use latest stable version -->
+                <configuration>
+                    <!-- Optional: Ratchet from branch to only format changed files -->
+                    <!-- <ratchetFrom>origin/main</ratchetFrom> -->
+
+                    <!-- Java Formatting with Palantir -->
+                    <java>
+                        <includes>
+                            <include>src/main/java/**/*.java</include>
+                            <include>src/test/java/**/*.java</include>
+                        </includes>
+
+                        <!-- Palantir Java Format -->
+                        <palantirJavaFormat>
+                            <version>2.71.0</version>
+                            <!-- Latest compatible version -->
+                            <style>PALANTIR</style>
+                        </palantirJavaFormat>
+
+                        <removeUnusedImports />
+                        <importOrder>
+                            <order>java,javax,org,com,</order>
+                        </importOrder>
+                        <trimTrailingWhitespace />
+                        <endWithNewline />
+                    </java>
+
+                    <!-- POM.xml Formatting -->
+                    <pom>
+                        <includes>
+                            <include>pom.xml</include>
+                        </includes>
+                        <sortPom>
+                            <version>4.0.0</version>
+                            <encoding>UTF-8</encoding>
+                            <nrOfIndentSpace>4</nrOfIndentSpace>
+                            <keepBlankLines>true</keepBlankLines>
+                            <indentBlankLines>false</indentBlankLines>
+                            <indentAttribute>schemaLocation</indentAttribute>
+                            <spaceBeforeCloseEmptyElement>true</spaceBeforeCloseEmptyElement>
+                            <sortModules>false</sortModules>
+                            <sortExecutions>false</sortExecutions>
+                            <predefinedSortOrder>recommended_2008_06</predefinedSortOrder>
+                            <expandEmptyElements>false</expandEmptyElements>
+                            <sortProperties>true</sortProperties>
+                        </sortPom>
+                    </pom>
+                </configuration>
+
+                <!-- Optional: Bind to verify phase to enforce formatting on build -->
+                <executions>
+                    <execution>
+                        <id>spotless-apply</id>
+                        <goals>
+                            <goal>apply</goal>
+                        </goals>
+                        <phase>compile</phase>
+                    </execution>
+                    <execution>
+                        <id>spotless-check</id>
+                        <goals>
+                            <goal>check</goal>
+                        </goals>
+                        <phase>verify</phase>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+        <outputDirectory>${project.basedir}/.target/classes</outputDirectory>
+        <testOutputDirectory>${project.basedir}/.target/test-classes</testOutputDirectory>
+    </build>
+
+</project>
