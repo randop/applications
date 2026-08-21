@@ -38,19 +38,17 @@ enum PinEntryMacro { UNKNOWN, GPG, GIT };
 
 struct Application {
   PinEntryMacro macro = UNKNOWN;
-};
-
-struct PinentryState {
+  std::string title;
+  std::string subheader;
   std::string desc;
   std::string prompt;
-  std::string title;
   std::string error_msg;
   int timeout = 0;
   bool do_repeat = false;
 };
 
 /*** global variables ***/
-static PinentryState g_pinentry;
+static Application app;
 
 void init_logging() {
   auto console = spdlog::stderr_logger_mt("console");
@@ -161,32 +159,32 @@ bool CheckSingleInstance() {
 }
 
 static gpg_error_t cmd_setdesc(assuan_context_t /*ctx*/, char *line) {
-  g_pinentry.desc = (line && *line) ? line : "";
+  app.desc = (line && *line) ? line : "";
   return 0;
 }
 
 static gpg_error_t cmd_setprompt(assuan_context_t /*ctx*/, char *line) {
-  g_pinentry.prompt = (line && *line) ? line : "";
+  app.prompt = (line && *line) ? line : "";
   return 0;
 }
 
 static gpg_error_t cmd_settitle(assuan_context_t /*ctx*/, char *line) {
-  g_pinentry.title = (line && *line) ? line : "";
+  app.title = (line && *line) ? line : "";
   return 0;
 }
 
 static gpg_error_t cmd_seterror(assuan_context_t /*ctx*/, char *line) {
-  g_pinentry.error_msg = (line && *line) ? line : "";
+  app.error_msg = (line && *line) ? line : "";
   return 0;
 }
 
 static gpg_error_t cmd_settimeout(assuan_context_t /*ctx*/, char *line) {
-  g_pinentry.timeout = line ? std::atoi(line) : 0;
+  app.timeout = line ? std::atoi(line) : 0;
   return 0;
 }
 
 static gpg_error_t cmd_setrepeat(assuan_context_t /*ctx*/, char * /*line*/) {
-  g_pinentry.do_repeat = true;
+  app.do_repeat = true;
   return 0;
 }
 
@@ -228,8 +226,8 @@ static bool ShowPinentryDialog(std::string &password) {
   const double start = GetTime();
 
   while (!WindowShouldClose() && result == 0 && !g_signal_received) {
-    if (g_pinentry.timeout > 0 &&
-        (GetTime() - start) > static_cast<double>(g_pinentry.timeout)) {
+    if (app.timeout > 0 &&
+        (GetTime() - start) > static_cast<double>(app.timeout)) {
       result = -1;
       break;
     }
@@ -243,10 +241,8 @@ static bool ShowPinentryDialog(std::string &password) {
     // dialogResult: 1 = Continue, 2 = Cancel, 0 = window X closed
     int dialogResult = GuiTextInputBox(
         (Rectangle){screenWidth / 2 - 300, screenHeight / 2 - 125, 600, 250},
-        "GPG: <email@maildomain.ngo>",
-        "Enter the passphrase to     \nunlock your credentials.     ",
-        "Continue;Cancel", passwordBuf, static_cast<int>(sizeof(passwordBuf)),
-        &secretViewActive);
+        app.title.c_str(), app.subheader.c_str(), "Continue;Cancel",
+        passwordBuf, static_cast<int>(sizeof(passwordBuf)), &secretViewActive);
 
     if (dialogResult == 2 || dialogResult == 0) {
       result = -1;
@@ -341,7 +337,7 @@ static int RunPinentryServer() {
     }
   }
 
-  while (true) {
+  while (!g_signal_received) {
     err = assuan_accept(ctx);
     if (err) {
       break;
@@ -538,13 +534,15 @@ int main(int argc, char **argv) {
     return EXIT_SUCCESS;
   }
 
-  Application app;
+  app.subheader = "Enter the passphrase to     \nunlock your credentials.     ";
 
   if (argc >= 2) {
     if (strcmp(argv[1], "--macro=git") == 0) {
       app.macro = GIT;
+      app.title = "git credentials";
       SPDLOG_TRACE("macro: git");
     } else if (strcmp(argv[1], "--macro=gpg") == 0) {
+      app.title = "gpg credentials";
       app.macro = GPG;
       SPDLOG_TRACE("macro: gpg");
     }
@@ -687,10 +685,8 @@ int main(int argc, char **argv) {
 
     int result = GuiTextInputBox(
         (Rectangle){screenWidth / 2 - 300, screenHeight / 2 - 125, 600, 250},
-        "GPG: <email@maildomain.ngo>",
-        "Enter the passphrase to     \nunlock your credentials.     ",
-        "Continue;Cancel", passwordBuf, static_cast<int>(sizeof(passwordBuf)),
-        &secretViewActive);
+        app.title.c_str(), app.subheader.c_str(), "Continue;Cancel",
+        passwordBuf, static_cast<int>(sizeof(passwordBuf)), &secretViewActive);
 
     // result: 1 = Continue, 2 = Cancel, 0 = window X closed
     if (result == 1) {

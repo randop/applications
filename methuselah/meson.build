@@ -1,14 +1,16 @@
 project('methuselah',
-        'cpp',
-        version: run_command('cat', 'VERSION', check : true).stdout().strip(),
-        default_options: [
-            'cpp_std=c++20',
-            'buildtype=release',
-            'optimization=3',
-            'strip=true',
-            'b_lto=true',
-            'b_ndebug=true'
-        ])
+  'cpp',
+  version: run_command('cat', 'VERSION', check : true).stdout().strip(),
+  default_options: [
+    'cpp_std=c++20',
+    'buildtype=release',
+    'optimization=3',
+    'strip=true',
+    'b_lto=true',
+    'b_ndebug=true'
+  ],
+  meson_version : '>= 1.0.1'
+)
 
 # Dependencies
 cmake = import('cmake')
