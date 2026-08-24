@@ -350,6 +350,25 @@ calc_cores() {
   echo "$usable"
 }
 
+if detect_ubuntu_jammy; then
+  echo "Compiling gcc 13.4 on ubuntu 22 LTS jammy..."
+  mkdir -pv ~/opt/gcc
+  cd ~/opt/gcc
+  wget https://ftp.gnu.org/gnu/gcc/gcc-13.4.0/gcc-13.4.0.tar.xz
+  tar -xf gcc-13.4.0.tar.xz
+  cd ~/opt/gcc/gcc-13.4.0
+  ./contrib/download_prerequisites
+  mkdir -pv ~/opt/gcc/gcc-13.4.0/build
+  mkdir -pv ~/opt/gcc/current
+  cd ~/opt/gcc/gcc-13.4.0/build
+  ../configure \
+    --prefix=~/opt/gcc/current \
+    --enable-languages=c,c++ \
+    --disable-multilib \
+    --enable-checking=release \
+    --with-system-zlib
+fi
+
 ###########################################################
 # NOTE: workaround for latest gcc (GCC) 16.1.1 20260728
 # causing c-ares library to fail during compilation

@@ -20,5 +20,12 @@ sudo apt install build-essential \
   autoconf \
   libtool \
   libtool-bin \
-  libgnutls28-dev
+  libgnutls28-dev \
+  libgmp-dev \
+  libmpfr-dev \
+  libmpc-dev \
+  libisl-dev \
+  texinfo \
+  libzstd-dev \
+  zlib1g-dev
 ```
