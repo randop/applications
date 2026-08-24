@@ -374,6 +374,10 @@ if detect_ubuntu_jammy; then
     make install
   fi
   export PATH="$HOME/opt/gcc/current/bin:$PATH"
+  rm -fv $HOME/.local/bin/gcc-13
+  rm -fv $HOME/.local/bin/g++-13
+  ln -sv $HOME/opt/gcc/current/bin/gcc $HOME/.local/bin/gcc-13
+  ln -sv $HOME/opt/gcc/current/bin/g++ $HOME/.local/bin/g++-13
 fi
 
 ###########################################################
