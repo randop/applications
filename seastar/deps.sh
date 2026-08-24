@@ -373,7 +373,7 @@ if detect_ubuntu_jammy; then
     make -j$(nproc)
     make install
   fi
-  export PATH="$HOME/opt/gcc/current/bin:$PATH"
+  export PATH="$HOME/opt/gcc/current/bin:$HOME/.local/bin:$PATH"
   rm -fv $HOME/.local/bin/gcc-13
   rm -fv $HOME/.local/bin/g++-13
   ln -sv $HOME/opt/gcc/current/bin/gcc $HOME/.local/bin/gcc-13
