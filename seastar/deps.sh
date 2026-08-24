@@ -354,8 +354,8 @@ if detect_ubuntu_jammy; then
   echo "Compiling gcc 13.4 on ubuntu 22 LTS jammy..."
   mkdir -pv ~/opt/gcc
   cd ~/opt/gcc
-  wget https://ftp.gnu.org/gnu/gcc/gcc-13.4.0/gcc-13.4.0.tar.xz
-  tar -xf gcc-13.4.0.tar.xz
+  wget http://mirror.rise.ph/gnu/gcc/gcc-13.4.0/gcc-13.4.0.tar.gz
+  tar -xf gcc-13.4.0.tar.gz
   cd ~/opt/gcc/gcc-13.4.0
   ./contrib/download_prerequisites
   mkdir -pv ~/opt/gcc/gcc-13.4.0/build
