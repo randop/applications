@@ -341,6 +341,15 @@ fi
 echo "PKG_CONFIG_PATH: $PKG_CONFIG_PATH"
 echo "CMAKE_PREFIX_PATH: $CMAKE_PREFIX_PATH"
 
+calc_cores() {
+  local mem_gb=$(($(awk '/MemTotal/ {print $2}' /proc/meminfo) / 1024 / 1024))
+  local cpu_cores=$(nproc)
+  local usable=$((mem_gb < cpu_cores ? mem_gb : cpu_cores))
+  usable=$((usable - 1))
+  [ "$usable" -lt 1 ] && usable=1
+  echo "$usable"
+}
+
 ###########################################################
 # NOTE: workaround for latest gcc (GCC) 16.1.1 20260728
 # causing c-ares library to fail during compilation
@@ -348,7 +357,7 @@ echo "CMAKE_PREFIX_PATH: $CMAKE_PREFIX_PATH"
 #   cc1plus: all warnings being treated as errors
 ###########################################################
 SEASTAR_COMPILER_FLAGS="-Wno-unused-but-set-variable"
-SEASTAR_COMPILER_NCPU=$(($(nproc) - 1))
+SEASTAR_COMPILER_NCPU=$(calc_cores)
 
 if [ -z "$SEASTAR_PKG_VERSION" ]; then
   echo "Compiling seastar ${SEASTAR_VERSION} ..."
