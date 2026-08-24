@@ -362,7 +362,7 @@ if detect_ubuntu_jammy; then
   mkdir -pv ~/opt/gcc/current
   cd ~/opt/gcc/gcc-13.4.0/build
   ../configure \
-    --prefix=~/opt/gcc/current \
+    --prefix=$HOME/opt/gcc/current \
     --enable-languages=c,c++ \
     --disable-multilib \
     --enable-checking=release \
