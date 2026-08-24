@@ -15,5 +15,10 @@ sudo apt install build-essential \
   clang-format \
   wget \
   unzip \
-  liblz4-dev
+  liblz4-dev \
+  automake \
+  autoconf \
+  libtool \
+  libtool-bin \
+  libgnutls28-dev
 ```
