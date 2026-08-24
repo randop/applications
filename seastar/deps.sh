@@ -356,21 +356,24 @@ if detect_ubuntu_jammy; then
   cd ~/opt/gcc
   if [ ! -f gcc-13.4.0.tar.gz ]; then
     wget http://mirror.rise.ph/gnu/gcc/gcc-13.4.0/gcc-13.4.0.tar.gz
+    tar -xf gcc-13.4.0.tar.gz
   fi
-  tar -xf gcc-13.4.0.tar.gz
-  cd ~/opt/gcc/gcc-13.4.0
-  ./contrib/download_prerequisites
-  mkdir -pv ~/opt/gcc/gcc-13.4.0/build
-  mkdir -pv ~/opt/gcc/current
-  cd ~/opt/gcc/gcc-13.4.0/build
-  ../configure \
-    --prefix=$HOME/opt/gcc/current \
-    --enable-languages=c,c++ \
-    --disable-multilib \
-    --enable-checking=release \
-    --with-system-zlib
-  make -j$(nproc)
-  make install
+  if [ ! -f $HOME/opt/gcc/current/bin/g++ ]; then
+    cd ~/opt/gcc/gcc-13.4.0
+    ./contrib/download_prerequisites
+    mkdir -pv ~/opt/gcc/gcc-13.4.0/build
+    mkdir -pv ~/opt/gcc/current
+    cd ~/opt/gcc/gcc-13.4.0/build
+    ../configure \
+      --prefix=$HOME/opt/gcc/current \
+      --enable-languages=c,c++ \
+      --disable-multilib \
+      --enable-checking=release \
+      --with-system-zlib
+    make -j$(nproc)
+    make install
+  fi
+  export PATH="$HOME/opt/gcc/current/bin:$PATH"
 fi
 
 ###########################################################
