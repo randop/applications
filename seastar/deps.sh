@@ -367,6 +367,8 @@ if detect_ubuntu_jammy; then
     --disable-multilib \
     --enable-checking=release \
     --with-system-zlib
+  make -j$(nproc)
+  make install
 fi
 
 ###########################################################
