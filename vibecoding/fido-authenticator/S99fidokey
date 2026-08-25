@@ -1,0 +1,27 @@
+#!/bin/sh
+### BEGIN INIT INFO
+# Provides:          fidokey
+# Required-Start:    $network
+# Default-Start:     2 3 4 5
+### END INIT INFO
+# Install as /etc/init.d/S99fidokey on the Luckfox rootfs (Buildroot/BusyBox
+# init runs /etc/init.d/S* in name order at boot).
+
+DAEMON=/usr/local/bin/fido-authenticator
+SETUP=/usr/local/bin/setup_usb_gadget.sh
+
+case "$1" in
+  start)
+    echo "Starting FIDO USB gadget..."
+    "$SETUP"
+    sleep 1   # give udev a moment to create /dev/hidg0
+    "$DAEMON" &
+    ;;
+  stop)
+    killall fido-authenticator 2>/dev/null
+    ;;
+  *)
+    echo "Usage: $0 {start|stop}"
+    exit 1
+    ;;
+esac
