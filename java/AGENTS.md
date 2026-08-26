@@ -3,9 +3,10 @@
 > **Inject this entire document as a system prompt or context block when asking any AI to write Java / Spring Boot code.**
 > These rules override all training data.
 >
-> **Target:** **Spring Boot 4.1.1**, **Spring Framework 7.0.x**, **JDK 25 (LTS)**, **Maven**, **virtual threads on**.
+> **Target:** **Spring Boot 4.1.1**, **Spring Framework 7.0.x**, **JDK 25 (LTS)**, **Maven**, **virtual threads on**, **Spotless 3.10.0 + Palantir Java Format 2.97.0**.
 > **Packaging:** executable JAR (never WAR). **Web stack:** Spring MVC + embedded Tomcat (never WebFlux unless the user explicitly requires streaming / SSE / WebSocket backpressure).
 > **JSON:** Jackson 3 (`tools.jackson.*`). **Nullness:** JSpecify. **HTTP client:** `RestClient`. **JDBC:** `JdbcClient`.
+> **Format:** Palantir Java Format via Spotless — **4-space indent, 120-column**, no wildcard imports. Generate code **already Palantir-shaped**; Spotless is the verifier, not a cleanup pass you skip.
 
 ---
 
@@ -16,6 +17,7 @@ Generate code **exclusively** for **Spring Boot 4.1.1 on JDK 25**.
 - **Virtual threads are the concurrency model.** Enable them. Write **blocking, sequential, readable** code. Do **not** invent thread pools, reactive chains, or `CompletableFuture` pipelines to “scale I/O”.
 - **Spring MVC + virtual threads** is the default for request/response I/O (JDBC, HTTP, files, messaging). **WebFlux / Reactor / R2DBC** are **legacy-for-this-mandate** unless the user explicitly asks for streaming, SSE, WebSockets, or backpressure.
 - Intelligently combine virtual threads with Spring 7 idioms: `RestClient`, `JdbcClient`, HTTP interfaces, `@Retryable`, `@ConcurrencyLimit`, JSpecify, Jackson 3 `JsonMapper`, records, sealed types, `ProblemDetail`, constructor injection, and Micrometer observations.
+- Format every Java file as **Palantir Java Format 2.97.0** (`PALANTIR`, 4-space, 120-col) via **Spotless 3.10.0**. The formatter is a build gate, not a suggestion.
 - Prioritize **correctness**, **bounded downstream resources**, **shutdown safety**, **observability**, and **null-safe APIs**. Throughput without a Hikari / HTTP / DB bound is a production incident waiting to happen.
 
 **Version pins (do not drift):**
@@ -29,6 +31,8 @@ Generate code **exclusively** for **Spring Boot 4.1.1 on JDK 25**.
 | Jakarta EE baseline | **11** (Servlet 6.1, Persistence 3.2, Validation 3.1) |
 | Jackson | **3.x** (`tools.jackson`), annotations stay `com.fasterxml.jackson.annotation` |
 | `spring.threads.virtual.enabled` | **`true`** (mandatory) |
+| `com.diffplug.spotless:spotless-maven-plugin` | **3.10.0** |
+| `com.palantir.javaformat:palantir-java-format` | **2.97.0** (`<style>PALANTIR</style>`) |
 
 If a snippet would only compile on Java 17/21, Spring Boot 2/3, `javax.*`, Jackson 2 `ObjectMapper` as the primary mapper, `RestTemplate`, or `spring-boot-starter-web`, it is **wrong**. Rewrite it.
 
@@ -639,6 +643,8 @@ Enable via `@ConfigurationPropertiesScan` on the application class (or `@EnableC
         <java.version>25</java.version>
         <maven.compiler.release>25</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <spotless.version>3.10.0</spotless.version>
+        <palantir-java-format.version>2.97.0</palantir-java-format.version>
     </properties>
 
     <dependencies>
@@ -704,6 +710,84 @@ Enable via `@ConfigurationPropertiesScan` on the application class (or `@EnableC
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
             </plugin>
+            <plugin>
+                <groupId>com.diffplug.spotless</groupId>
+                <artifactId>spotless-maven-plugin</artifactId>
+                <version>${spotless.version}</version>
+                <executions>
+                    <execution>
+                        <id>spotless</id>
+                        <goals>
+                            <goal>check</goal>
+                        </goals>
+                    </execution>
+                </executions>
+                <configuration>
+                    <encoding>UTF-8</encoding>
+                    <lineEndings>UNIX</lineEndings>
+                    <java>
+                        <palantirJavaFormat>
+                            <version>${palantir-java-format.version}</version>
+                            <style>PALANTIR</style>
+                            <formatJavadoc>true</formatJavadoc>
+                        </palantirJavaFormat>
+                        <formatAnnotations/>
+                        <shortenFullyQualifiedTypes/>
+                        <importOrder>
+                            <order>java,javax|jakarta,org,com,,\#</order>
+                            <semanticSort>true</semanticSort>
+                        </importOrder>
+                        <removeUnusedImports/>
+                        <forbidWildcardImports/>
+                        <forbidModuleImports/>
+                        <trimTrailingWhitespace/>
+                        <endWithNewline/>
+                        <toggleOffOn/>
+                    </java>
+                    <pom>
+                        <sortPom>
+                            <encoding>UTF-8</encoding>
+                            <nrOfIndentSpace>4</nrOfIndentSpace>
+                            <expandEmptyElements>false</expandEmptyElements>
+                            <spaceBeforeCloseEmptyElement>true</spaceBeforeCloseEmptyElement>
+                            <keepBlankLines>true</keepBlankLines>
+                            <endWithNewline>true</endWithNewline>
+                            <predefinedSortOrder>recommended_2008_06</predefinedSortOrder>
+                            <sortDependencies>groupId,artifactId</sortDependencies>
+                            <sortPlugins>groupId,artifactId</sortPlugins>
+                            <sortProperties>true</sortProperties>
+                        </sortPom>
+                    </pom>
+                    <markdown>
+                        <includes>
+                            <include>**/*.md</include>
+                        </includes>
+                        <flexmark>
+                            <emulationProfile>COMMONMARK</emulationProfile>
+                            <formatterOptions>
+                                <rightMargin>120</rightMargin>
+                            </formatterOptions>
+                        </flexmark>
+                        <trimTrailingWhitespace/>
+                        <endWithNewline/>
+                    </markdown>
+                    <formats>
+                        <format>
+                            <includes>
+                                <include>.gitignore</include>
+                                <include>**/*.yml</include>
+                                <include>**/*.yaml</include>
+                            </includes>
+                            <trimTrailingWhitespace/>
+                            <endWithNewline/>
+                            <indent>
+                                <spaces>true</spaces>
+                                <spacesPerTab>2</spacesPerTab>
+                            </indent>
+                        </format>
+                    </formats>
+                </configuration>
+            </plugin>
         </plugins>
     </build>
 </project>
@@ -722,7 +806,7 @@ Enable via `@ConfigurationPropertiesScan` on the application class (or `@EnableC
 | `spring-boot-starter-web-services` | **`spring-boot-starter-webservices`** |
 | Undertow starter | **removed** (Servlet 6.1). Tomcat (default) or Jetty |
 
-Test artifacts follow `spring-boot-starter-<tech>-test` / `spring-boot-<tech>-test`. Do not rely on `@SpringBootTest` to auto-wire MockMvc / `TestRestTemplate` — see §14.
+Test artifacts follow `spring-boot-starter-<tech>-test` / `spring-boot-<tech>-test`. Do not rely on `@SpringBootTest` to auto-wire MockMvc / `TestRestTemplate` — see §15.
 
 BOM / versions: **never** hardcode Spring Framework, Jackson, Hibernate, or Tomcat versions. The parent BOM manages them.
 
@@ -736,11 +820,229 @@ Optional JDK 25 runtime flags (document in README / container spec, not in Java 
 
 G1 remains the default GC. Do not switch to ZGC / Shenandoah unless the user asks. AOT cache (`-XX:AOTCache=app.aot`, JEP 514/515) is an ops concern, not an application-code concern.
 
-**No Gradle** unless the user explicitly asks. **No** `module-info.java` unless the user explicitly asks (Spring Boot apps are typically non-modular on the classpath).
+**No Gradle** unless the user explicitly asks. **No** `module-info.java` unless the user explicitly asks (Spring Boot apps are typically non-modular on the classpath). Spotless `<forbidModuleImports/>` enforces this.
 
 ---
 
-## 13.) APPLICATION YAML CANONICAL DEFAULTS
+## 13.) SPOTLESS + PALANTIR JAVA FORMAT (MANDATORY)
+
+Formatting is **not optional** and **not “whatever Checkstyle you remember.”** Every generated Java file must already match **Palantir Java Format 2.97.0** in **`PALANTIR`** style, as enforced by **Spotless Maven Plugin 3.10.0**.
+
+Do **not** use Google Java Format, Eclipse JDT, Prettier-Java, Checkstyle-as-formatter, or Spring Java Format (`io.spring.javaformat`). Palantir is the only formatter.
+
+### 13.1 Pins and why they are explicit
+
+Spotless 3.10.0’s **default** Palantir version is **2.71.0**. That is stale. **Always pin 2.97.0** (latest as of 2026-08-06) so JDK 25 syntax and the current Palantir layout stay stable across machines.
+
+| Tool | Coordinate | Version |
+|---|---|---|
+| Spotless Maven plugin | `com.diffplug.spotless:spotless-maven-plugin` | **3.10.0** (2026-08-17) |
+| Palantir Java Format | `com.palantir.javaformat:palantir-java-format` | **2.97.0** (2026-08-06) |
+| Style enum | `<style>PALANTIR</style>` | not `GOOGLE`, not `AOSP` |
+
+Spotless 3.x requires **JRE 17+** (we run **25**). Do not emit Spotless 2.x config (`removeWildcardImports` was renamed to **`forbidWildcardImports`** in 3.0.0).
+
+### 13.2 What `PALANTIR` style actually is
+
+Palantir Java Format is google-java-format’s engine with Palantir’s layout. Non-negotiable:
+
+| Rule | Value |
+|---|---|
+| Indent | **4 spaces**. Never tabs. Never 2-space Google indent. |
+| Column limit | **120**. Not 80, not 100, not 140. |
+| Continuation indent | **8 spaces** (two indents) on wrapped lines. |
+| Braces | Same line (`K&R`). No Allman. |
+| Javadoc | Formatted (`<formatJavadoc>true</formatJavadoc>`). |
+| Wildcard imports | **Forbidden**. |
+| `import module …` | **Forbidden** (Spotless `forbidModuleImports`; Java 25+). |
+| Type-use annotations | `formatAnnotations` — do not break `@Nullable Map<String, Foo>` onto a new line incorrectly. |
+| File endings | UTF-8, LF, trailing newline, no trailing whitespace. |
+
+**Write code as Palantir would emit it.** Do not write 80-column Google style and hope `spotless:apply` saves you in an environment that only runs `spotless:check`.
+
+### 13.3 Generate this shape (correct)
+
+```java
+@Service
+public final class UserService {
+    private final UserRepository users;
+    private final Clock clock;
+
+    public UserService(UserRepository users, Clock clock) {
+        this.users = users;
+        this.clock = clock;
+    }
+
+    public UserResponse create(CreateUserRequest request) {
+        var user = users.insert(request.email(), request.displayName(), clock.instant());
+        return UserResponse.from(user);
+    }
+
+    public UserResponse get(long id) {
+        return users.findById(id)
+                .map(UserResponse::from)
+                .orElseThrow(() -> new NotFoundException("user", id));
+    }
+}
+```
+
+Fluent chains wrap **before column 80 on the last dot of a line**, continuation at 8 spaces:
+
+```java
+return jdbc.sql("""
+                SELECT id, email, display_name, created_at
+                FROM users
+                WHERE id = :id
+                """)
+        .param("id", id)
+        .query(User.class)
+        .optional();
+```
+
+Lambdas stay **on one line** when they fit in 120; otherwise wrap the body, not the `->` onto its own lonely line:
+
+```java
+// fits — keep it
+.map(UserResponse::from)
+
+// does not fit — Palantir inlines parameters, wraps the body
+.forEach(order -> process(order.id(), order.amount(), order.currency(), clock.instant()));
+```
+
+Long parameter lists wrap **one param per line**, aligned:
+
+```java
+public Dashboard(
+        UserRepository users,
+        OrderRepository orders,
+        CreditClient credits,
+        Clock clock) {
+    this.users = users;
+    this.orders = orders;
+    this.credits = credits;
+    this.clock = clock;
+}
+```
+
+Annotations on members and methods sit on their **own line**. Parameter annotations stay with the parameter:
+
+```java
+@PostMapping
+@ResponseStatus(HttpStatus.CREATED)
+UserResponse create(@Valid @RequestBody CreateUserRequest request) {
+    return users.create(request);
+}
+```
+
+Import order **must** match Spotless (blank line between groups; statics last):
+
+```java
+package com.example.app.api;
+
+import java.time.Instant;
+import java.util.List;
+
+import jakarta.validation.Valid;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RestController;
+
+import com.example.app.application.UserService;
+import com.example.app.api.dto.CreateUserRequest;
+import com.example.app.api.dto.UserResponse;
+```
+
+Group 1 `java`, group 2 `javax` **and** `jakarta` (same group — `|` in the order string), group 3 `org`, group 4 `com`, group 5 everything else, group 6 static (`#`). `semanticSort` is on: identifiers sort by type-then-name, not raw ASCII.
+
+### 13.4 Forbidden format (never generate)
+
+```java
+// 2-space Google indent
+@Service
+public class UserService {
+  private final UserRepository users;
+
+// 100-column Google wrap, or 80-column nervous wrapping of short lines
+public UserResponse create(
+    CreateUserRequest request) {
+
+// wildcard / module imports
+import java.util.*;
+import module java.base;
+
+// Allman braces
+if (user == null)
+{
+    throw new NotFoundException("user", id);
+}
+
+// star-static
+import static org.springframework.web.bind.annotation.RequestMethod.*;
+
+// fully-qualified types in signatures instead of imports
+public java.util.Optional<com.example.app.domain.User> find(long id) { ... }
+```
+
+`shortenFullyQualifiedTypes` runs **before** `importOrder` and `removeUnusedImports`. Prefer simple names + imports in the source you emit; do not leave `java.util.List` in method signatures.
+
+### 13.5 Goals, ratchet, escape hatches
+
+- Bind **`spotless:check`** to the default `verify` lifecycle (the canonical POM does this). `mvn verify` **fails** on format drift.
+- `mvn spotless:apply` is the only rewrite tool. Do not also add `fmt-maven-plugin`, `spring-javaformat-maven-plugin`, or EditorConfig-as-a-Maven-plugin.
+- Do **not** set `<ratchetFrom>origin/main</ratchetFrom>` on a **new** project — every file must be clean. Ratchet is for migrating a dirty legacy tree, and only if the user asks.
+- Escape hatch, rarely: `// spotless:off` … `// spotless:on` around a block that a generator or a checksum must keep byte-stable. Never wrap a whole class.
+- Skip flags (`-Dspotless.skip=true`, `-Dspotless.check.skip=true`) are **not** allowed in README scripts or CI samples.
+
+### 13.6 EditorConfig (emit next to `pom.xml`)
+
+Palantir does not read EditorConfig. This file exists so IntelliJ / VS Code do not **fight** Spotless on save. Install the **Palantir Java Format** IntelliJ plugin ([plugin 13180](https://plugins.jetbrains.com/plugin/13180-palantir-java-format)) and enable it as the reformat action.
+
+```editorconfig
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.java]
+indent_style = space
+indent_size = 4
+continuation_indent_size = 8
+max_line_length = 120
+
+[*.{xml,xsd,xsl}]
+indent_style = space
+indent_size = 4
+
+[*.{yaml,yml,md,json}]
+indent_style = space
+indent_size = 2
+max_line_length = 120
+
+[*.md]
+trim_trailing_whitespace = false
+```
+
+### 13.7 POM formatting
+
+Spotless `<pom><sortPom>` owns `pom.xml`. When you emit a POM:
+
+- 4-space indent, UTF-8, trailing newline.
+- Dependencies and plugins sorted by `groupId,artifactId`.
+- Properties sorted.
+- Do not hand-align XML attributes into columns.
+- Keep the Boot parent first; do not invent a different element order than SortPom `recommended_2008_06`.
+
+YAML: **do not** run Jackson YAML pretty-print (`WRITE_DOC_START_MARKER` rewrites documents). Only trim + newline + 2-space indent, as in the canonical plugin config.
+
+---
+
+## 14.) APPLICATION YAML CANONICAL DEFAULTS
 
 ```yaml
 spring:
@@ -802,9 +1104,9 @@ spring:
 
 ---
 
-## 14.) TESTING
+## 15.) TESTING
 
-### 14.1 Stack
+### 15.1 Stack
 
 - JUnit 5 (Jupiter) only. No JUnit 4.
 - AssertJ for assertions. No `org.junit.jupiter.api.Assertions` soup when AssertJ is on the classpath.
@@ -858,7 +1160,7 @@ class UserApiIT {
 }
 ```
 
-### 14.2 Test rules
+### 15.2 Test rules
 
 - Tests must compile and be meaningful. No `assertTrue(true)`.
 - Do not use `Thread.sleep` to wait. Awaitility is acceptable for async; most MVC tests need neither.
@@ -868,7 +1170,7 @@ class UserApiIT {
 
 ---
 
-## 15.) OBSERVABILITY AND ACTUATOR
+## 16.) OBSERVABILITY AND ACTUATOR
 
 - Every app gets `spring-boot-starter-actuator`.
 - Name the app: `spring.application.name`.
@@ -880,7 +1182,7 @@ class UserApiIT {
 
 ---
 
-## 16.) SECURITY (WHEN AUTH IS IN SCOPE)
+## 17.) SECURITY (WHEN AUTH IS IN SCOPE)
 
 - Spring Security 7.1. CSRF stays **on** for cookie/session browser apps. Stateless Bearer APIs may use CSRF disabled **only** with a documented non-cookie auth story.
 - Never `permitAll()` the whole API “for now”.
@@ -895,7 +1197,7 @@ If the user did **not** ask for auth, do not add Spring Security “because prod
 
 ---
 
-## 17.) JDK 25 LANGUAGE AND STYLE
+## 18.) JDK 25 LANGUAGE AND PALANTIR STYLE
 
 **Use:**
 
@@ -917,23 +1219,27 @@ If the user did **not** ask for auth, do not add Spring Security “because prod
 - Kotlin, Groovy, Scala.
 - Lombok `@Data`, `@Builder` on JPA entities. Lombok `@Value` is redundant with records.
 
-**Style:**
+**Style (Palantir — see §13 for the full contract):**
 
-- 4-space indent, no tabs.
-- One public top-level type per file.
+- **4-space indent, 120-column limit, 8-space continuation.** Never 2-space Google indent. Never tabs.
+- Opening braces on the same line. One public top-level type per file.
+- No wildcard imports, no `import module`, no fully-qualified types in signatures when an import will do.
+- Import order: `java` / `javax|jakarta` / `org` / `com` / other / static. Blank line between groups.
+- Fluent chains wrap on the dot; keep lambdas on one line when they fit in 120.
 - Package by feature when the app has more than one bounded context; otherwise classic `config` / `api` / `domain` / `infrastructure`.
-- No wildcard imports.
 - No commented-out code.
 - No `e.printStackTrace()`.
 - No `System.out.println` (tests may use it only in throwaway mains — prefer the logger).
+- Emit `.editorconfig` + Spotless plugin on every new project. Code you write must pass `mvn spotless:check` **as emitted**.
 
 ---
 
-## 18.) PROJECT LAYOUT
+## 19.) PROJECT LAYOUT
 
 ```text
 app/
-  pom.xml
+  pom.xml                            # Spotless plugin 3.10.0 + Palantir 2.97.0
+  .editorconfig                      # 4-space Java / 120 cols; does not replace Spotless
   src/main/java/com/example/app/
     Application.java                 # @SpringBootApplication @EnableResilientMethods @ConfigurationPropertiesScan
     package-info.java                # @NullMarked
@@ -985,7 +1291,7 @@ Do not use `SpringApplicationBuilder` / `WebApplicationType.REACTIVE` / `sources
 
 ---
 
-## 19.) FORBIDDEN PATTERNS (NEVER GENERATE)
+## 20.) FORBIDDEN PATTERNS (NEVER GENERATE)
 
 ### Concurrency
 
@@ -1038,10 +1344,23 @@ Do not use `SpringApplicationBuilder` / `WebApplicationType.REACTIVE` / `sources
 - Hardcoded library versions already in the Boot BOM
 - `spring-boot-starter-parent` version other than **4.1.1**
 - Enabling GraalVM native image by default (supported, but opt-in; GraalVM native-image **25+**)
+- Spotless **2.x**, `googleJavaFormat`, Eclipse JDT formatter, `spring-javaformat-maven-plugin`, `fmt-maven-plugin`
+- Palantir `<style>GOOGLE</style>` or `<style>AOSP</style>`
+- Unpinned Palantir (Spotless default 2.71.0 is **not** acceptable — pin **2.97.0**)
+- 2-space indent, 100-column Google wrap, wildcard imports, `import module`
+- `-Dspotless.skip=true` in documented build commands
+- `<ratchetFrom>` on a greenfield project
+
+### Format
+
+- Mixing formatters
+- Hand-aligning assignments into columns (Palantir will undo it)
+- `spotless:off` around an entire class
+- CRLF line endings in `.java` / `.xml` / `.yaml`
 
 ---
 
-## 20.) DEPENDENCY CHEATSHEET
+## 21.) DEPENDENCY CHEATSHEET
 
 Add **only** what the feature needs.
 
@@ -1061,16 +1380,17 @@ Add **only** what the feature needs.
 | JDBC slice | `spring-boot-starter-jdbc-test` (test) |
 | Security test annotations | `spring-boot-starter-security-test` (test) |
 | PostgreSQL driver | `org.postgresql:postgresql` (runtime) |
+| Format (build plugin, not a dependency) | `com.diffplug.spotless:spotless-maven-plugin:3.10.0` + Palantir **2.97.0** |
 
 Do not add `spring-boot-starter-classic`. Do not add both webmvc and webflux.
 
 ---
 
-## 21.) QUALITY BAR FOR GENERATED CODE
+## 22.) QUALITY BAR FOR GENERATED CODE
 
 A response that “works on my machine” is not enough. Generated projects must:
 
-1. **Compile on JDK 25** with `mvn -q verify` (or at least `compile` + tests that exist).
+1. **Compile on JDK 25** with `mvn -q verify` (this **includes** `spotless:check`).
 2. **Boot** with virtual threads actually enabled (the yaml flag present; no executor that undoes it).
 3. **Bound** Hikari and any outbound HTTP (`@ConcurrencyLimit` or pool settings).
 4. **Fail** with `ProblemDetail` on known domain errors; validation errors are 400.
@@ -1078,26 +1398,29 @@ A response that “works on my machine” is not enough. Generated projects must
 6. **Use** constructor injection, records for DTOs, JSpecify `@NullMarked`, and Flyway if there is a schema.
 7. **Shut down** gracefully (`server.shutdown: graceful`).
 8. **Not** start a reactive stack, a second embedded server, or a thread pool “for performance”.
+9. **Pass Palantir format as emitted** — 4-space, 120-col, Spotless 3.10.0 / Palantir 2.97.0, no wildcard imports. Do not ship code that only becomes clean after `spotless:apply`.
 
 If the user asks for WebFlux, Kotlin, Gradle, native image, or gRPC: honor that **narrowly**, keep virtual-thread rules for any remaining blocking code, and still pin Boot **4.1.1** + JDK **25**.
 
 ---
 
-## 22.) RESPONSE REQUIREMENTS
+## 23.) RESPONSE REQUIREMENTS
 
 Every Spring Boot code response **must**:
 
-1. Start with: **"Spring Boot 4.1.1 / JDK 25 compliant — virtual threads + MVC + RestClient/JdbcClient + JSpecify + Jackson 3."**
+1. Start with: **"Spring Boot 4.1.1 / JDK 25 compliant — virtual threads + MVC + RestClient/JdbcClient + JSpecify + Jackson 3 + Spotless Palantir 2.97.0."**
 2. State whether virtual threads are enabled (they must be) and how downstream I/O is bounded.
 3. Use Boot 4 starter artifact IDs and Jackson 3 types.
 4. Include the relevant `pom.xml` coordinates and `application.yaml` keys when scaffolding or when they change.
 5. Prefer a **complete, compiling** unit (class + collaborators + tests) over a disconnected snippet.
 6. Explain non-obvious idiom choices in one or two sentences (e.g. why `@ConcurrencyLimit` sits on the HTTP client, why OSIV is off, why structured concurrency was not used).
 7. If a preview API is used, say so in the first paragraph and show the compiler/runtime flags.
+8. Emit Java **already in Palantir layout** (4-space, 120-col, Palantir import order). Scaffolding **must** include the Spotless plugin pin and `.editorconfig`.
 
 **Scaffolding a new app — emit at minimum:**
 
-- `pom.xml` (parent 4.1.1, `java.version=25`, webmvc starter)
+- `pom.xml` (parent 4.1.1, `java.version=25`, webmvc starter, **Spotless 3.10.0 + Palantir 2.97.0**)
+- `.editorconfig`
 - `Application.java`
 - `package-info.java` with `@NullMarked`
 - `application.yaml` with `spring.threads.virtual.enabled: true`
@@ -1106,7 +1429,7 @@ Every Spring Boot code response **must**:
 
 ---
 
-## 23.) QUICK DECISION TABLE
+## 24.) QUICK DECISION TABLE
 
 | Situation | Do this |
 |---|---|
@@ -1121,9 +1444,10 @@ Every Spring Boot code response **must**:
 | Tests of HTTP + DB | `@SpringBootTest` + `@AutoConfigureRestTestClient` + Testcontainers `@ServiceConnection` |
 | Auth not requested | do not add Security |
 | Schema change | Flyway SQL, never ddl-auto |
+| Formatting | Spotless 3.10.0 + Palantir 2.97.0 `PALANTIR` (4-space / 120). Never Google Java Format. |
 
 ---
 
-*Document version: Spring Boot 4.1.1 / Spring Framework 7 / JDK 25 / Maven / Virtual Threads*
+*Document version: Spring Boot 4.1.1 / Spring Framework 7 / JDK 25 / Maven / Virtual Threads / Spotless 3.10.0 + Palantir Java Format 2.97.0*
 *Generated 2026-08-26*
 *Inject this as a system prompt prefix for any AI session generating Spring Boot code.*
