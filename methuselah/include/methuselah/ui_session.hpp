@@ -24,6 +24,7 @@ public:
 
   static void silence_trace_logs();
   static void install_log_callback();
+  static void install_debug_callback();
 
   [[nodiscard]] bool ready() const noexcept;
   [[nodiscard]] std::optional<std::string>

@@ -4,6 +4,7 @@
 #include "hack_font.h"
 #include "methuselah/secure_memory.hpp"
 #include "methuselah/signal_guard.hpp"
+#include "shader_sdf.h"
 
 #include "raylib.h"
 
@@ -52,6 +53,37 @@ void raylib_log_callback(int log_level, const char *text, va_list args) {
   (void)prefix;
 }
 
+void raylib_debug_callback(int log_level, const char *text, va_list args) {
+  const char *prefix = nullptr;
+  switch (log_level) {
+  case LOG_TRACE:
+    prefix = "TRACE";
+    break;
+  case LOG_DEBUG:
+    prefix = "DEBUG";
+    break;
+  case LOG_INFO:
+    prefix = "INFO";
+    break;
+  case LOG_WARNING:
+    prefix = "WARN";
+    break;
+  case LOG_ERROR:
+    prefix = "ERROR";
+    break;
+  case LOG_FATAL:
+    prefix = "FATAL";
+    break;
+  default:
+    prefix = "?";
+    break;
+  }
+
+  char formatted[2048];
+  vsnprintf(formatted, sizeof(formatted), text, args);
+  SPDLOG_INFO("<{}> {}", prefix, formatted);
+}
+
 } // namespace
 
 struct UiSession::Impl {
@@ -63,7 +95,8 @@ struct UiSession::Impl {
 };
 
 UiSession::UiSession() : impl_(std::make_unique<Impl>()) {
-  SetConfigFlags(FLAG_WINDOW_UNDECORATED | FLAG_VSYNC_HINT | FLAG_MSAA_4X_HINT);
+  SetConfigFlags(FLAG_WINDOW_UNDECORATED | FLAG_VSYNC_HINT | FLAG_MSAA_4X_HINT |
+                 FLAG_WINDOW_HIGHDPI);
   InitWindow(800, 600, PROJECT_NAME);
 
   if (!IsWindowReady()) {
@@ -82,17 +115,25 @@ UiSession::UiSession() : impl_(std::make_unique<Impl>()) {
   SetTargetFPS(60);
   SetWindowTitle(PROJECT_NAME);
 
-  constexpr int kFontBaseSize = 48;
+  constexpr int kFontBaseSize = 96;
+  constexpr int kFontGlyphCount = 224;
+  int codepoints[kFontGlyphCount];
+  for (int i = 0; i < kFontGlyphCount; i++) {
+    codepoints[i] = 32 + i;
+  }
   impl_->font = LoadFontFromMemory(".ttf", HACK_REGULAR_TTF,
                                    static_cast<int>(HACK_REGULAR_TTF_SIZE),
-                                   kFontBaseSize, nullptr, 0);
+                                   kFontBaseSize, codepoints, kFontGlyphCount);
   SetTextureFilter(impl_->font.texture, TEXTURE_FILTER_BILINEAR);
   GenTextureMipmaps(&impl_->font.texture);
   SetTextureFilter(impl_->font.texture, TEXTURE_FILTER_TRILINEAR);
   impl_->font_loaded = true;
 
+  Vector2 dpiScale = GetWindowScaleDPI();
+  float uiScale = dpiScale.x;
+
   GuiSetFont(impl_->font);
-  GuiSetStyle(DEFAULT, TEXT_SIZE, 24);
+  GuiSetStyle(DEFAULT, TEXT_SIZE, (int)(24 * uiScale));
   GuiSetStyle(DEFAULT, TEXT_PADDING, 12);
 
   impl_->ready = true;
@@ -120,6 +161,10 @@ void UiSession::install_log_callback() {
   SetTraceLogCallback(raylib_log_callback);
 }
 
+void UiSession::install_debug_callback() {
+  SetTraceLogCallback(raylib_debug_callback);
+}
+
 bool UiSession::ready() const noexcept { return impl_ && impl_->ready; }
 
 std::optional<std::string>
@@ -127,6 +172,8 @@ UiSession::prompt_password(const PromptOptions &options) {
   if (!ready()) {
     return std::nullopt;
   }
+
+  Shader sdfShader = LoadShaderFromMemory(NULL, SHADER_SDF);
 
   SecureArray<256> password_buf;
   bool secret_view_active = false;
@@ -142,7 +189,9 @@ UiSession::prompt_password(const PromptOptions &options) {
 
     BeginDrawing();
     ClearBackground(GetColor(GuiGetStyle(DEFAULT, BACKGROUND_COLOR)));
-    DrawTextEx(impl_->font, PROJECT_TAG, {40.0f, 40.0f}, 40.0f, 1.0f, DARKBLUE);
+
+    BeginShaderMode(sdfShader);
+    DrawTextEx(impl_->font, PROJECT_TAG, {40.0f, 40.0f}, 48.0f, 1.0f, DARKBLUE);
     DrawFPS(impl_->screen_width - 120, 20);
 
     const Rectangle box{impl_->screen_width / 2 - 300,
@@ -150,6 +199,7 @@ UiSession::prompt_password(const PromptOptions &options) {
     const int dialog_result = GuiTextInputBox(
         box, options.title.c_str(), options.message.c_str(), "Continue;Cancel",
         password_buf.data(), password_buf.size(), &secret_view_active);
+    EndShaderMode();
 
     if (dialog_result == 2 || dialog_result == 0) {
       result = -1;
@@ -159,6 +209,8 @@ UiSession::prompt_password(const PromptOptions &options) {
 
     EndDrawing();
   }
+
+  UnloadShader(sdfShader);
 
   if (result != 1) {
     return std::nullopt;

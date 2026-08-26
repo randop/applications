@@ -42,10 +42,12 @@ Macro parse_macro(int argc, char **argv) {
   if (flag == "--macro=git") {
     SPDLOG_TRACE("macro: git");
     return Macro::Git;
-  }
-  if (flag == "--macro=gpg") {
+  } else if (flag == "--macro=gpg") {
     SPDLOG_TRACE("macro: gpg");
     return Macro::Gpg;
+  } else if (flag == "--macro=dummy") {
+    SPDLOG_TRACE("macro: dummy");
+    return Macro::Dummy;
   }
   return Macro::Unknown;
 }
@@ -130,6 +132,32 @@ int run_git_flow(const GitPredicate &predicate) {
   return EXIT_SUCCESS;
 }
 
+int run_dummy() {
+  UiSession::install_debug_callback();
+  UiSession ui;
+  if (!ui.ready()) {
+    return EXIT_FAILURE;
+  }
+
+  PromptOptions options;
+  options.title = "dummy";
+  options.message = kDefaultMessage;
+
+  while (!SignalGuard::received()) {
+    std::optional<std::string> password = ui.prompt_password(options);
+    if (!password) {
+      break;
+    }
+  }
+
+  if (SignalGuard::received()) {
+    SPDLOG_TRACE("application received signal {}, cleaning up...",
+                 SignalGuard::signum());
+  }
+
+  return EXIT_SUCCESS;
+}
+
 } // namespace
 
 int Application::run(int argc, char **argv) {
@@ -155,15 +183,16 @@ int Application::run(int argc, char **argv) {
 
   if (macro == Macro::Git && argc >= 3 && std::strcmp(argv[2], "store") == 0) {
     return EXIT_SUCCESS;
-  }
-
-  if (macro == Macro::Gpg) {
+  } else if (macro == Macro::Gpg) {
     PinentryServer server("gpg credentials", kDefaultMessage);
     return server.run();
+  } else if (macro == Macro::Git) {
+    const GitPredicate predicate = GitPredicate::read_from_stdin();
+    return run_git_flow(predicate);
+  } else if (macro == Macro::Dummy) {
+    return run_dummy();
   }
-
-  const GitPredicate predicate = GitPredicate::read_from_stdin();
-  return run_git_flow(predicate);
+  return EXIT_FAILURE;
 }
 
 void Application::version() {
