@@ -189,6 +189,8 @@ subprojects/.wraplock
 .build/
 *.apk.idsig
 lib/
+dex/
+classes.dex
 
 # keystore
 android.keystore

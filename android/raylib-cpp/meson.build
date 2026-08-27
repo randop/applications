@@ -1,5 +1,5 @@
 project('raylib-android-cpp', ['c', 'cpp'],
-  version: '0.1.5',
+  version: run_command('cat', 'VERSION', check : true).stdout().strip(),
   default_options: [
     'cpp_std=c++23',
     'warning_level=2',
@@ -32,6 +32,14 @@ raylib_opts.add_cmake_defines({
 raylib_proj = cmake.subproject('raylib', options: raylib_opts)
 raylib_dep = raylib_proj.dependency('raylib')
 
+raygui_proj = subproject('raygui',
+  default_options: [
+    'warning_level=0',
+    'werror=false',
+  ]
+)
+raygui_inc = raygui_proj.get_variable('raygui_inc')
+
 # native_app_glue is required
 native_app_glue = files('/home/johnpaul/opt/android/sdk/ndk/29.0.14206865/sources/android/native_app_glue/android_native_app_glue.c')
 
@@ -44,11 +52,11 @@ lib = shared_library('main',
   include_directories: [
     inc,
     include_directories('/home/johnpaul/opt/android/sdk/ndk/29.0.14206865/sources/android/native_app_glue'),
+    raygui_inc,
   ],
   cpp_args: [
     '-DANDROID',
     '-DPLATFORM_ANDROID',
-    '-D__ANDROID_API__=34',
   ],
   link_args: [
     '-u', 'ANativeActivity_onCreate',

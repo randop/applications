@@ -3,6 +3,7 @@
 export ANDROID_NDK="$HOME/opt/android/sdk/ndk/29.0.14206865"
 export ANDROID_SDK="$HOME/opt/android/sdk"
 export ANDROID_HOME="$HOME/opt/android"
+export ANDROID_PLATFORM=$ANDROID_SDK/platforms/android-34
 
 export JAVA_HOME="$HOME/opt/jdk/current"
 

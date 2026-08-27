@@ -2,21 +2,22 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.example.raylibcpp"
     android:versionCode="1"
-    android:versionName="0.1.5">
+    android:versionName="0.1.27">
 
     <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="34"/>
     <uses-feature android:glEsVersion="0x00020000" android:required="true"/>
 
     <application
         android:label="Raylib C++23"
-        android:hasCode="false"
+        android:hasCode="true"
         android:allowBackup="false"
         android:theme="@android:style/Theme.NoTitleBar">
 
         <activity
-            android:name="android.app.NativeActivity"
+            android:name="com.example.raylibcpp.NativeLoader"
             android:exported="true"
-            android:configChanges="orientation|keyboardHidden|screenSize"
+            android:configChanges="orientation|keyboardHidden|screenSize|screenLayout|uiMode|smallestScreenSize|density"
+            android:windowSoftInputMode="adjustResize|stateHidden"
             android:screenOrientation="portrait"
             android:launchMode="singleTask">
 
