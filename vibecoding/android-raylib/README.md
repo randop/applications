@@ -266,7 +266,7 @@ Add the permission and keep `android:hasCode="false"`:
 Runtime permission requests normally require a tiny bit of Java/Kotlin (or a GameActivity helper). For a barebones NativeActivity build you can:
 - Grant via `adb shell pm grant com.example.raylibcpp android.permission.CAMERA`
 - Or assume the permission is already granted (common for dedicated/kiosk devices)
-- Or add a minimal one-class Java permission helper later if you need full Play Store compliance.
+- Or add a minimal one-class Java permission helper
 
 ### 2. Link libraries (Meson)
 In your `shared_library(...)` (or the equivalent link_args):
@@ -477,4 +477,283 @@ int main() {
 - Official NDK camera samples: `android/ndk-samples` → `camera/basic` and `camera/texture-view` (the “basic” one is closest to pure native + ImageReader).
 - Blog / clean examples: sisik.eu “Using Android Native Camera API”, logits-systems/Cam2Ndk, sixo/native-camera.
 - Headers live under `$NDK/toolchains/llvm/prebuilt/.../sysroot/usr/include/camera/` and `media/`.
+
+---
+
+## Permission helper
+
+**Minimal Java helper** for runtime `CAMERA` permission and native library loading.
+
+### 1. `NativeLoader.java`
+Place it at the path that matches your package, e.g.  
+`android/src/com/example/raylibcpp/NativeLoader.java`  
+(adjust package name to match your `AndroidManifest.xml`).
+
+```java
+package com.example.raylibcpp;
+
+import android.Manifest;
+import android.app.NativeActivity;
+import android.content.pm.PackageManager;
+import android.os.Bundle;
+import android.util.Log;
+
+public class NativeLoader extends NativeActivity {
+    private static final String TAG = "NativeLoader";
+    private static final int REQUEST_CAMERA = 1001;
+
+    static {
+        // Load your shared library (must match android.app.lib_name / libmain.so)
+        System.loadLibrary("main");
+    }
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        // Request camera permission before the native side tries to open the camera
+        if (checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[]{ Manifest.permission.CAMERA }, REQUEST_CAMERA);
+        }
+        super.onCreate(savedInstanceState);
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == REQUEST_CAMERA) {
+            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                Log.i(TAG, "CAMERA permission granted");
+                // Optional: notify native code that it is now safe to open the camera
+                // nativeOnCameraPermissionGranted();
+            } else {
+                Log.e(TAG, "CAMERA permission denied");
+                // Optional: finish() or show a message
+            }
+        }
+    }
+
+    // Optional native callbacks (uncomment + implement in C++ if you want)
+    // private native void nativeOnCameraPermissionGranted();
+    // private native void nativeOnCameraPermissionDenied();
+}
+```
+
+### 2. Update `AndroidManifest.xml`
+Change the activity name and keep the library meta-data:
+
+```xml
+<manifest ...>
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="true" />
+
+    <application
+        android:label="Raylib C++ Camera"
+        android:hasCode="true"          <!-- now true because we have a Java class -->
+        ... >
+
+        <activity
+            android:name="com.example.raylibcpp.NativeLoader"
+            android:exported="true"
+            android:configChanges="orientation|keyboardHidden|screenSize"
+            android:screenOrientation="landscape"
+            android:theme="@android:style/Theme.NoTitleBar.Fullscreen"
+            android:launchMode="singleTask">
+
+            <meta-data
+                android:name="android.app.lib_name"
+                android:value="main" />
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>
+```
+
+### 3. Packaging notes (aapt / your script)
+Because you now have a Java class you must:
+
+1. Compile the `.java` → `.class`
+2. Convert to `classes.dex` (with `d8` or `dx`)
+3. Include `classes.dex` in the APK
+
+Minimal commands (adapt paths):
+
+```bash
+# Compile
+javac -classpath $ANDROID_SDK/platforms/android-34/android.jar \
+      -d android/obj \
+      android/src/com/example/raylibcpp/NativeLoader.java
+
+# Make dex
+d8 --output android/build \
+   android/obj/com/example/raylibcpp/NativeLoader.class
+
+# Then when packaging with aapt:
+aapt package ... -F unsigned.apk
+aapt add unsigned.apk classes.dex
+# + your lib/<abi>/libmain.so as before
+```
+
+(Your existing packaging script just needs these two extra steps.)
+
+### 4. Optional: notify native code
+If you want the C++ side to know the permission result, add the native methods in the Java class and declare them in C++:
+
+```cpp
+// In your C++ (or a small JNI file)
+extern "C" {
+    JNIEXPORT void JNICALL
+    Java_com_example_raylibcpp_NativeLoader_nativeOnCameraPermissionGranted(JNIEnv*, jobject) {
+        // set a global flag or call your AndroidCamera::open()
+    }
+}
+```
+
+Most projects simply check permission status from native code after the activity has started (or just attempt to open the camera and handle failure).
+
+---
+
+## QR code scanning
+
+**QR code detection and processing on the live camera feed** in pure C++23 and raylib and NativeActivity setup. Use a lightweight native library (recommended: **zxing-cpp**) that operates directly on the RGBA (or YUV) frames you already acquire from `AImageReader`.
+
+No Java/Kotlin is required.
+
+### 1. Recommended library: zxing-cpp
+- Modern C++17/20/23 compatible
+- Excellent performance on mobile
+- Supports QR + many other formats
+- Easy to integrate as a Meson subproject or static library
+- Works on raw grayscale / RGB / RGBA buffers
+
+Alternatives if you want something even smaller:
+- **quirc** (pure C, very small, QR-only)
+- ZBar (older)
+
+zxing-cpp is the best balance for a raylib project.
+
+### 2. Meson integration
+Add to your root `meson.build` (or a subdir):
+
+```meson
+# Option A: Meson wrap / subproject (preferred)
+zxing_proj = subproject('zxing-cpp', required: true,
+  default_options: ['readers=true', 'writers=false', 'experimental=false'])
+zxing_dep = zxing_proj.get_variable('zxing_dep')  # adjust to actual variable name
+
+# Option B: system / prebuilt / manual
+# zxing_dep = dependency('zxing', required: false)
+# or declare_dependency(include_directories: ..., link_with: ...)
+
+# Then in your shared_library:
+dependencies: [raylib_dep, zxing_dep],
+```
+
+Or vendor the source and build it as a static library target inside your project.
+
+Link flags stay the same as the camera stage (`-lcamera2ndk -lmediandk` etc.).
+
+### 3. Frame pipeline (camera → QR → raylib)
+Extend the previous `AndroidCamera` so that after you convert a frame to RGBA you also run detection.
+
+```cpp
+#include <ZXing/ReadBarcode.h>
+#include <ZXing/BarcodeFormat.h>
+#include <ZXing/Result.h>
+// or the newer ImageView / ReadBarcodes API depending on zxing-cpp version
+
+struct QRResult {
+    bool found = false;
+    std::string text;
+    // optional: std::vector<Point> corners; for drawing overlays
+};
+
+QRResult detectQR(const uint8_t* rgba, int width, int height) {
+    QRResult res;
+
+    // zxing-cpp expects a view. For RGBA:
+    ZXing::ImageView image{rgba, width, height, ZXing::ImageFormat::RGBA};
+
+    // or convert to luminance first for slightly better speed/accuracy on some devices
+    // ZXing::ImageView image{gray.data(), width, height, ZXing::ImageFormat::Lum};
+
+    auto options = ZXing::ReaderOptions()
+        .setFormats(ZXing::BarcodeFormat::QRCode)  // restrict to QR for speed
+        .setTryHarder(true)
+        .setTryRotate(true)
+        .setIsPure(false);
+
+    auto results = ZXing::ReadBarcodes(image, options);  // or ReadBarcode for single
+
+    if (!results.empty()) {
+        res.found = true;
+        res.text = results[0].text();
+        // res.corners = results[0].position(); // if you want to draw the quad
+    }
+    return res;
+}
+```
+
+In the main loop (after `cam.acquireLatestRGBA`):
+
+```cpp
+std::string lastQR;
+double lastDetectTime = 0.0;
+const double detectInterval = 0.15; // ~6–7 Hz is plenty; higher wastes CPU
+
+// inside the loop
+if (cam.acquireLatestRGBA(rgba, w, h)) {
+    // update texture as before...
+    UpdateTexture(camTex, rgba.data());
+
+    // Throttle detection – camera may deliver 30 fps, you rarely need that rate
+    double now = GetTime();
+    if (now - lastDetectTime >= detectInterval) {
+        auto qr = detectQR(rgba.data(), w, h);
+        if (qr.found && qr.text != lastQR) {
+            lastQR = qr.text;
+            // do something: log, trigger action, show UI, etc.
+            TraceLog(LOG_INFO, "QR: %s", lastQR.c_str());
+        }
+        lastDetectTime = now;
+    }
+}
+
+// Drawing
+BeginDrawing();
+ClearBackground(BLACK);
+if (texReady) {
+    // draw camera texture scaled...
+    DrawTextureEx(camTex, {0,0}, 0.0f, scale, WHITE);
+}
+if (!lastQR.empty()) {
+    DrawRectangle(0, GetScreenHeight()-80, GetScreenWidth(), 80, Fade(BLACK, 0.7f));
+    DrawText(lastQR.c_str(), 20, GetScreenHeight()-55, 32, GREEN);
+}
+DrawFPS(10, 10);
+EndDrawing();
+```
+
+### 4. Performance tips for mobile
+- Restrict formats to `BarcodeFormat::QRCode` only.
+- Run detection every 100–200 ms instead of every camera frame.
+- Prefer a moderate resolution for the `AImageReader` (720p or even 640×480 is usually enough for QR).
+- Optional: convert RGBA → grayscale once and feed luminance to zxing (slightly faster).
+- Keep the conversion + detection off the absolute critical path if you later add heavier processing; a simple worker thread + lock-free / double-buffer queue works well.
+- zxing-cpp’s `TryHarder` / `TryRotate` help with awkward angles but cost CPU — tune them.
+
+### 5. Optional enhancements
+- **Overlay the QR quad**: zxing returns corner points. Map them through the same scale/offset you use for the texture and draw lines with `DrawLineEx`.
+- **Multiple codes**: use `ReadBarcodes` and iterate.
+- **Action on new code**: debounce so the same code doesn’t fire repeatedly (compare with `lastQR` + a short cooldown).
+- **Still capture + high-res QR**: on button press, issue a still-capture request (higher resolution JPEG or YUV) and run detection on that single frame.
+- **Front camera / orientation**: apply the sensor orientation rotation before detection or let zxing’s `TryRotate` handle it.
+
+### 6. Build / packaging reminders
+- Add the zxing-cpp sources or wrap file to your Meson setup.
+- No extra Android permissions beyond the existing `CAMERA`.
+- The resulting `libmain.so` grows by a few hundred KB (static zxing-cpp is modest).
+- Test on a real device; emulator camera behavior can be limited.
 
