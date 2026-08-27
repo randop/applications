@@ -243,3 +243,238 @@ meson compile -C build-arm64
 ```
 
 This gives a completely Java/Kotlin-free binary package driven by Meson + NDK toolchain. For a more polished multi-ABI / asset / signing pipeline you can extend the packaging script or add a second Meson custom target that invokes it. The official NDK “native-activity” sample and raylib’s Android wiki are the two best references for the low-level details.
+
+---
+
+## Camera
+
+**Camera capture and live preview in pure C++23 with raylib on Android NativeActivity** using the NDK Camera2 API (`libcamera2ndk`) + `AImageReader` (from `libmediandk`). No Java/Kotlin sources are required for the capture path itself.
+
+Raylib has no built-in Android camera support, so you capture frames yourself, convert them (usually YUV → RGBA), and feed them into a `Texture2D` for drawing.
+
+### 1. Manifest additions
+Add the permission and keep `android:hasCode="false"`:
+
+```xml
+<uses-permission android:name="android.permission.CAMERA" />
+<!-- optional but recommended -->
+<uses-feature android:name="android.hardware.camera" android:required="true" />
+<uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
+```
+
+**Permission note (important for pure native):**  
+Runtime permission requests normally require a tiny bit of Java/Kotlin (or a GameActivity helper). For a barebones NativeActivity build you can:
+- Grant via `adb shell pm grant com.example.raylibcpp android.permission.CAMERA`
+- Or assume the permission is already granted (common for dedicated/kiosk devices)
+- Or add a minimal one-class Java permission helper later if you need full Play Store compliance.
+
+### 2. Link libraries (Meson)
+In your `shared_library(...)` (or the equivalent link_args):
+
+```meson
+link_args: [
+  # ... previous flags ...
+  '-lcamera2ndk',
+  '-lmediandk',
+  '-landroid',
+  '-llog',
+  # ...
+]
+```
+
+Also make sure the NDK include path is visible for:
+
+```cpp
+#include <camera/NdkCameraManager.h>
+#include <camera/NdkCameraDevice.h>
+#include <camera/NdkCameraCaptureSession.h>
+#include <camera/NdkCameraMetadata.h>
+#include <media/NdkImageReader.h>
+#include <media/NdkImage.h>
+```
+
+### 3. Minimal camera helper (C++23)
+Create something like `src/android_camera.hpp` / `.cpp`. Below is a concise, self-contained sketch that produces RGBA frames suitable for raylib.
+
+```cpp
+// android_camera.hpp (header-only sketch for clarity)
+#pragma once
+#include <camera/NdkCameraManager.h>
+#include <camera/NdkCameraDevice.h>
+#include <camera/NdkCameraCaptureSession.h>
+#include <media/NdkImageReader.h>
+#include <media/NdkImage.h>
+#include <android/native_window.h>
+#include <atomic>
+#include <mutex>
+#include <vector>
+#include <string>
+
+class AndroidCamera {
+public:
+    bool open(int width = 1280, int height = 720, int maxImages = 4);
+    void close();
+    bool isReady() const { return ready_.load(); }
+
+    // Call from your render thread. Returns true if a new frame was copied.
+    bool acquireLatestRGBA(std::vector<uint8_t>& outRgba, int& outW, int& outH);
+
+private:
+    static void onImageAvailable(void* ctx, AImageReader* reader);
+    // ... device / session state callbacks (onDisconnected, onError, etc.)
+
+    ACameraManager* mgr_ = nullptr;
+    ACameraDevice* device_ = nullptr;
+    ACaptureSession* session_ = nullptr;
+    AImageReader* reader_ = nullptr;
+    ANativeWindow* readerWindow_ = nullptr;
+    ACaptureRequest* request_ = nullptr;
+
+    std::mutex frameMtx_;
+    std::vector<uint8_t> latestRgba_;
+    int frameW_ = 0, frameH_ = 0;
+    std::atomic<bool> ready_{false};
+    std::atomic<bool> newFrame_{false};
+};
+```
+
+Core implementation outline (simplified):
+
+```cpp
+bool AndroidCamera::open(int width, int height, int maxImages) {
+    mgr_ = ACameraManager_create();
+    // 1. Get camera ID list, pick back-facing (or first available)
+    // 2. ACameraManager_openCamera(...)
+    // 3. Create AImageReader with AIMAGE_FORMAT_YUV_420_888 (most compatible)
+    //    or AIMAGE_FORMAT_RGBA_8888 if the device supports it for the chosen size
+    AImageReader_new(width, height, AIMAGE_FORMAT_YUV_420_888, maxImages, &reader_);
+    AImageReader_getWindow(reader_, &readerWindow_);
+    AImageReader_setImageListener(reader_, &listener); // listener.context = this; listener.onImageAvailable = onImageAvailable;
+
+    // 4. Create capture session output from the ImageReader window
+    // 5. Create TEMPLATE_PREVIEW request, add the output target
+    // 6. ACameraDevice_createCaptureSession + setRepeatingRequest
+    ready_ = true;
+    return true;
+}
+
+void AndroidCamera::onImageAvailable(void* ctx, AImageReader* reader) {
+    auto* self = static_cast<AndroidCamera*>(ctx);
+    AImage* image = nullptr;
+    if (AImageReader_acquireLatestImage(reader, &image) != AMEDIA_OK) return;
+
+    // YUV_420_888 → RGBA conversion (you need a small converter;
+    // many open-source ones exist, or use libyuv if you want to vendor it)
+    int w, h;
+    AImage_getWidth(image, &w);
+    AImage_getHeight(image, &h);
+    // ... extract planes with AImage_getPlaneData / getPlaneRowStride / getPlanePixelStride
+    // ... convert to tightly packed RGBA
+    {
+        std::lock_guard lock(self->frameMtx_);
+        self->latestRgba_ = std::move(converted);
+        self->frameW_ = w;
+        self->frameH_ = h;
+        self->newFrame_ = true;
+    }
+    AImage_delete(image);
+}
+
+bool AndroidCamera::acquireLatestRGBA(std::vector<uint8_t>& out, int& outW, int& outH) {
+    if (!newFrame_.exchange(false)) return false;
+    std::lock_guard lock(frameMtx_);
+    out = latestRgba_;          // or swap
+    outW = frameW_;
+    outH = frameH_;
+    return true;
+}
+```
+
+You must implement the full set of state callbacks (`ACameraDevice_StateCallbacks`, `ACameraCaptureSession_stateCallbacks`) and clean up everything in `close()` (stop repeating request, close session, close device, delete reader, etc.).
+
+### 4. Integration with raylib main loop
+```cpp
+#include "raylib.h"
+#include "android_camera.hpp"
+
+AndroidCamera cam;
+Texture2D camTex = {0};
+Image camImg = {0};
+bool texReady = false;
+
+int main() {
+    InitWindow(0, 0, "raylib + camera");
+    SetTargetFPS(60);
+    SetExitKey(0);
+
+    // Wait until the native window exists (raylib Android backend is ready)
+    // then:
+    if (!cam.open(1280, 720)) {
+        // handle error
+    }
+
+    while (!WindowShouldClose()) {
+        // Poll new camera frame
+        std::vector<uint8_t> rgba;
+        int w, h;
+        if (cam.acquireLatestRGBA(rgba, w, h)) {
+            if (!texReady || camImg.width != w || camImg.height != h) {
+                if (texReady) {
+                    UnloadTexture(camTex);
+                    UnloadImage(camImg);
+                }
+                camImg = {
+                    .data = rgba.data(),   // temporary; better to own the buffer
+                    .width = w,
+                    .height = h,
+                    .mipmaps = 1,
+                    .format = PIXELFORMAT_UNCOMPRESSED_R8G8B8A8
+                };
+                // Prefer: create Image with your own owned buffer, then
+                camTex = LoadTextureFromImage(camImg);
+                texReady = true;
+            } else {
+                // Update existing texture (fast path)
+                UpdateTexture(camTex, rgba.data());
+            }
+        }
+
+        BeginDrawing();
+        ClearBackground(BLACK);
+        if (texReady) {
+            // Scale to fit while preserving aspect
+            float scale = fminf((float)GetScreenWidth() / camTex.width,
+                                (float)GetScreenHeight() / camTex.height);
+            DrawTextureEx(camTex, {0,0}, 0.0f, scale, WHITE);
+        } else {
+            DrawText("Waiting for camera...", 40, 40, 30, LIGHTGRAY);
+        }
+        DrawFPS(10, 10);
+        EndDrawing();
+    }
+
+    cam.close();
+    if (texReady) {
+        UnloadTexture(camTex);
+        // UnloadImage if you own the data
+    }
+    CloseWindow();
+    return 0;
+}
+```
+
+### 5. Practical tips & limitations
+- **Format choice**: `AIMAGE_FORMAT_YUV_420_888` is the most widely supported. You need a YUV→RGBA converter (write a simple one or vendor a minimal libyuv). Some devices also support `AIMAGE_FORMAT_RGBA_8888` directly — query the stream configurations.
+- **Resolution**: Always query supported sizes with `ACameraMetadata` / `ACAMERA_SCALER_AVAILABLE_STREAM_CONFIGURATIONS` and pick a size the device actually lists.
+- **Performance**: Do the YUV conversion on a background thread if possible; keep the raylib thread light. `AImageReader_acquireLatestImage` drops old frames automatically.
+- **Lifecycle**: Open the camera only after the `ANativeWindow` is available (after raylib has created the window). Close it on `APP_CMD_PAUSE` / destroy. Raylib’s Android backend already handles most activity lifecycle; just hook the camera open/close into the same places.
+- **Orientation**: Camera sensor orientation is often 90°. Query `ACAMERA_SENSOR_ORIENTATION` and rotate the image or use a raylib transform.
+- **Front vs back**: Enumerate cameras and check `ACAMERA_LENS_FACING`.
+- **Still capture**: You can add a second `AImageReader` (JPEG) or a still-capture request on the same session when the user taps the screen.
+- **Size / binary**: Adding the camera libs increases the `.so` only modestly. Keep using static raylib + static C++ runtime if you want a small APK.
+
+### 6. Recommended references
+- Official NDK camera samples: `android/ndk-samples` → `camera/basic` and `camera/texture-view` (the “basic” one is closest to pure native + ImageReader).
+- Blog / clean examples: sisik.eu “Using Android Native Camera API”, logits-systems/Cam2Ndk, sixo/native-camera.
+- Headers live under `$NDK/toolchains/llvm/prebuilt/.../sysroot/usr/include/camera/` and `media/`.
+
