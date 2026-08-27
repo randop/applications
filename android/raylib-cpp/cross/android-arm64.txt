@@ -1,0 +1,25 @@
+[constants]
+ndk = '/home/johnpaul/opt/android/sdk/ndk/29.0.14206865'
+api = '34'
+triple = 'aarch64-linux-android'
+toolchain = ndk / 'toolchains/llvm/prebuilt/linux-x86_64'
+
+[binaries]
+c = toolchain / 'bin' / (triple + api + '-clang')
+cpp = toolchain / 'bin' / (triple + api + '-clang++')
+ar = toolchain / 'bin/llvm-ar'
+strip = toolchain / 'bin/llvm-strip'
+cmake = '/usr/bin/cmake'
+# pkg-config = ... (usually not needed)
+
+[host_machine]
+system = 'android'
+cpu_family = 'aarch64'
+cpu = 'aarch64'
+endian = 'little'
+
+[built-in options]
+cpp_link_args = ['-static-libstdc++']
+
+[properties]
+sys_root = toolchain / 'sysroot'
