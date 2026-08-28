@@ -2,6 +2,6 @@
 
 namespace methuselah {
 
-enum class Macro { Unknown, Gpg, Git, Dummy };
+enum class Macro { Unknown, Gpg, Git, Dummy, Ssh };
 
 } // namespace methuselah

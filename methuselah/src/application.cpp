@@ -48,6 +48,9 @@ Macro parse_macro(int argc, char **argv) {
   } else if (flag == "--macro=dummy") {
     SPDLOG_TRACE("macro: dummy");
     return Macro::Dummy;
+  } else if (flag == "--macro=ssh") {
+    SPDLOG_TRACE("macro: ssh");
+    return Macro::Ssh;
   }
   return Macro::Unknown;
 }
@@ -158,6 +161,35 @@ int run_dummy() {
   return EXIT_SUCCESS;
 }
 
+int run_ssh_flow() {
+  UiSession::install_log_callback();
+  UiSession ui;
+  if (!ui.ready()) {
+    return EXIT_FAILURE;
+  }
+
+  PromptOptions options;
+  options.title = "ssh agent";
+  options.message = kDefaultMessage;
+
+  while (!SignalGuard::received()) {
+    std::optional<std::string> password = ui.prompt_password(options);
+    if (!password) {
+      break;
+    }
+    std::cout << *password << std::endl;
+    secure_clear(*password);
+    break;
+  }
+
+  if (SignalGuard::received()) {
+    SPDLOG_TRACE("application received signal {}, cleaning up...",
+                 SignalGuard::signum());
+  }
+
+  return EXIT_SUCCESS;
+}
+
 } // namespace
 
 int Application::run(int argc, char **argv) {
@@ -191,6 +223,8 @@ int Application::run(int argc, char **argv) {
     return run_git_flow(predicate);
   } else if (macro == Macro::Dummy) {
     return run_dummy();
+  } else if (macro == Macro::Ssh) {
+    return run_ssh_flow();
   }
   return EXIT_FAILURE;
 }
