@@ -3,6 +3,7 @@
 #define RAYGUI_IMPLEMENTATION
 #include "raygui.h"
 
+#include "background_monitor.hpp"
 #include "config.h"
 #include "hack_font.h"
 
@@ -199,6 +200,8 @@ void TailSvcFile(const std::string &path, SvcBuffer &buffer,
  **/
 
 int main() {
+  using namespace std::chrono_literals;
+
   SetConfigFlags(FLAG_WINDOW_UNDECORATED | FLAG_VSYNC_HINT | FLAG_MSAA_4X_HINT |
                  FLAG_WINDOW_HIGHDPI);
   InitWindow(800, 600, PROJECT_DESCRIPTION);
@@ -225,12 +228,12 @@ int main() {
   GuiSetStyle(DEFAULT, TEXT_PADDING, 12);
   GuiSetStyle(DEFAULT, TEXT_COLOR_NORMAL, ColorToInt(BLACK));
 
-  const int mon = GetCurrentMonitor();
-  const int screenWidth = static_cast<int>(GetMonitorWidth(mon));
-  const int screenHeight = static_cast<int>(GetMonitorHeight(mon));
+  const int current_monitor = GetCurrentMonitor();
+  const int screenWidth = static_cast<int>(GetMonitorWidth(current_monitor));
+  const int screenHeight = static_cast<int>(GetMonitorHeight(current_monitor));
 
-  string header = format("{} display: {}x{}, v{}", PROJECT_DESCRIPTION,
-                         screenWidth, screenHeight, PROJECT_VERSION);
+  string header = format("{} v{} {}x{} |", PROJECT_DESCRIPTION, PROJECT_VERSION,
+                         screenWidth, screenHeight);
 
   SetWindowPosition(0, 0);
   SetWindowSize(screenWidth, screenHeight);
@@ -249,13 +252,37 @@ int main() {
   constexpr int rectStartX = 10;
   constexpr int rectStartY = 70;
 
-  while (!WindowShouldClose()) {
-    BeginDrawing();
-    ClearBackground(RAYWHITE);
-    GuiLabel({2, -5, screenWidth - 150.0f, 70}, header.c_str());
+  sysmon::BackgroundMonitor bg{3000ms};
 
+  string hw_mon_value{};
+
+  Color hwColor = BLUE;
+
+  while (!WindowShouldClose()) {
     auto svcSnapshot = svcBuffer.snapshot();
     size_t rectCount = svcBuffer.count();
+
+    auto hw_mon = bg.get();
+    hw_mon_value = format(
+        "{} cpu={:.1f}% ({}) mem={:.1f}%\n", header, hw_mon.cpu_percent,
+        hw_mon.temp_celsius ? format("{:.1f}°C", *hw_mon.temp_celsius) : "n/a",
+        hw_mon.mem_percent);
+
+    const bool high_cpu = hw_mon.cpu_percent >= 50.0;
+    const bool high_temp = hw_mon.temp_celsius && *hw_mon.temp_celsius >= 50.0;
+    const bool high_mem = hw_mon.mem_percent >= 50.0;
+
+    if (high_cpu || high_temp || high_mem) {
+      hwColor = RED;
+    } else {
+      hwColor = BLUE;
+    }
+
+    BeginDrawing();
+    ClearBackground(RAYWHITE);
+
+    DrawTextEx(font, hw_mon_value.c_str(), {5.0f, 10.0f}, 27, 1, hwColor);
+
     for (size_t i = 0; i < rectCount; ++i) {
       if (strcmp(svcSnapshot[i].name, "NULL") == 0) {
         continue;

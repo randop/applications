@@ -68,6 +68,7 @@ config_h = configure_file(
 # Source files
 sources = files(
     'src/main.cpp',
+    'src/sysmon.cpp'
 )
 
 # Executable
