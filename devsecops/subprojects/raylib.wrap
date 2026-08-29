@@ -1,0 +1,7 @@
+[wrap-git]
+url = https://github.com/raysan5/raylib.git
+revision = e7edb181dc070e0abf90792204b4b6b02bcdd508
+depth = 1
+
+[provide]
+raylib = raylib_dep
