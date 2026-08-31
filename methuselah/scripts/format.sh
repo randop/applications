@@ -8,3 +8,5 @@ find include -type f \
   \( -name "*.cpp" -o -name "*.h" -o -name "*.hpp" -o -name "*.c" -o -name "*.cc" \) \
   ! -name "*_font.h" \
   -exec clang-format -i {} +
+
+meson format -i meson.build
