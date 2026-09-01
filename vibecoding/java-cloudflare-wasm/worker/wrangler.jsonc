@@ -1,0 +1,12 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "java25-wasm-worker",
+  "main": "index.mjs",
+  "compatibility_date": "2026-09-01",
+  "rules": [
+    {
+      "type": "CompiledWasm",
+      "globs": ["**/*.wasm"]
+    }
+  ]
+}

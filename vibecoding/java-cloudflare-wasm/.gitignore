@@ -1,0 +1,5 @@
+target/
+worker/node_modules/
+worker/.wrangler/
+worker/app.wasm
+worker/app.wasm-runtime.js

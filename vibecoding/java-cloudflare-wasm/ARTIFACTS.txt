@@ -1,0 +1,15 @@
+Generated after ./build.sh:
+
+target/worker/app.wasm
+target/worker/app.wasm-runtime.js
+
+Copied deployment artifacts:
+
+worker/app.wasm
+worker/app.wasm-runtime.js
+
+Source deployment files:
+
+worker/index.mjs
+worker/wrangler.jsonc
+worker/package.json
