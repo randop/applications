@@ -1,0 +1,22 @@
+{
+  "name": "currency-graphql-worker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "GraphQL currency conversion API on Cloudflare Workers, backed by Turso, with a C++/WebAssembly precision math engine",
+  "type": "module",
+  "main": "src/worker.js",
+  "scripts": {
+    "build:wasm": "sh wasm/build.sh",
+    "test:wasm": "node tests/wasm.test.mjs",
+    "test:resolvers": "node tests/resolvers.test.mjs",
+    "test": "npm run test:wasm && npm run test:resolvers",
+    "dev": "npm run build:wasm && wrangler dev",
+    "deploy": "npm run build:wasm && wrangler deploy"
+  },
+  "dependencies": {
+    "graphql": "^16.14.2"
+  },
+  "devDependencies": {
+    "wrangler": "^4.127.1"
+  }
+}

@@ -1,0 +1,24 @@
+# wrangler.toml
+#
+# Deploy with: npm run deploy   (builds wasm/currency.wasm first)
+# Local dev with: npm run dev
+
+name = "currency-graphql-api"
+main = "src/worker.js"
+compatibility_date = "2024-11-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Explicitly treat .wasm imports as compiled WebAssembly modules.
+[[rules]]
+type = "CompiledWasm"
+globs = ["**/*.wasm"]
+fallthrough = true
+
+# Non-secret configuration. TURSO_DATABASE_URL looks like:
+#   https://<db-name>-<org>.turso.io
+[vars]
+TURSO_DATABASE_URL = "https://replace-me.turso.io"
+
+# The auth token is a secret -- do NOT put it here. Set it with:
+#   wrangler secret put TURSO_AUTH_TOKEN
+# (paste the token from `turso db tokens create <db-name>` when prompted)
