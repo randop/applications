@@ -1,0 +1,4 @@
+slack_bot
+
+.dist/
+.build/
