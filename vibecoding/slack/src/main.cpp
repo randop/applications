@@ -27,12 +27,18 @@
 //   - Each HTTPS call opens a fresh TLS connection (simplicity over reuse).
 //   - Reconnects automatically if Slack sends a "disconnect" envelope or the
 //     socket drops.
+//   - WebSocket writes (acks + pings) are serialized via a boost::asio::strand
+//     instead of a raw mutex.
 
 #define BOOST_JSON_NO_LIB  // build Boost.JSON header-only from this one TU
 
+#include <boost/asio/bind_executor.hpp>
 #include <boost/asio/connect.hpp>
+#include <boost/asio/executor_work_guard.hpp>
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/ssl.hpp>
+#include <boost/asio/steady_timer.hpp>
+#include <boost/asio/strand.hpp>
 #include <boost/beast/core.hpp>
 #include <boost/beast/http.hpp>
 #include <boost/beast/websocket.hpp>
@@ -40,11 +46,12 @@
 #include <boost/json/src.hpp>  // header-only Boost.JSON implementation
 
 #include <atomic>
-#include <condition_variable>
 #include <cstdlib>
 #include <chrono>
+#include <functional>
+#include <future>
 #include <iostream>
-#include <mutex>
+#include <memory>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -218,11 +225,12 @@ void handleMessageEvent(net::io_context& ioc, ssl::context& ctx, const std::stri
 // Handle one decoded Socket Mode envelope. Acks anything carrying an
 // envelope_id (required by Slack for every dispatched event type).
 //
-// wsWriteMutex guards every frame written to `ws` — both this function's acks
-// and the pinger thread's ping frames — since Beast's websocket::stream isn't
-// safe for concurrent writes from multiple threads.
+// All WebSocket writes are posted through `wsStrand` so they are serialized
+// with the pinger's ping frames (Beast's websocket::stream is not safe for
+// concurrent writes from multiple threads).
 void handleEnvelope(net::io_context& ioc, ssl::context& ctx, const std::string& botToken,
-                     websocket::stream<ssl::stream<tcp::socket>>& ws, std::mutex& wsWriteMutex,
+                     websocket::stream<ssl::stream<tcp::socket>>& ws,
+                     net::strand<net::io_context::executor_type>& wsStrand,
                      const json::object& envelope, bool& shouldReconnect) {
     const std::string type = getStr(envelope, "type");
 
@@ -241,8 +249,20 @@ void handleEnvelope(net::io_context& ioc, ssl::context& ctx, const std::string& 
     if (has(envelope, "envelope_id")) {
         json::object ack;
         ack["envelope_id"] = getStr(envelope, "envelope_id");
-        std::lock_guard<std::mutex> lock(wsWriteMutex);
-        ws.write(net::buffer(json::serialize(json::value(ack))));
+        // Run the write on the strand (serialized with pings). We block
+        // until it completes so the ack is on the wire before we continue
+        // handling the rest of the envelope — same timing as the old mutex.
+        std::promise<void> done;
+        auto fut = done.get_future();
+        net::post(wsStrand, [&ws, ack = std::move(ack), p = std::move(done)]() mutable {
+            beast::error_code ec;
+            ws.write(net::buffer(json::serialize(json::value(ack))), ec);
+            if (ec) {
+                log("ack write failed: " + ec.message());
+            }
+            p.set_value();
+        });
+        fut.wait();
     }
 
     if (type == "events_api") {
@@ -297,27 +317,29 @@ void runSocketModeSession(net::io_context& ioc, ssl::context& ctx, const std::st
     ws.handshake(parsed.host, parsed.target);
     log("WebSocket handshake complete.");
 
-    // --- ping/pong keepalive -------------------------------------------
+    // --- ping/pong keepalive (strand-serialized) -----------------------
     //
     // ws.read() runs synchronously and blocks the main thread until Slack
-    // sends something, so a background thread drives the keepalive: it
-    // sends a ping every kPingInterval and, if no pong has arrived within
-    // kPongTimeout, treats the connection as dead and force-closes the
-    // underlying socket. That close is what unblocks the main thread's
-    // pending ws.read() (it returns with an error), which then falls
-    // through to the normal reconnect path below.
+    // sends something. A steady_timer + strand drives the keepalive:
+    //   - every kPingInterval a ping is posted onto the strand;
+    //   - if no pong arrives within kPongTimeout the lowest-layer socket
+    //     is closed, which unblocks the pending ws.read() so the session
+    //     falls through to the normal reconnect path.
     //
-    // wsWriteMutex serializes ping frames against the ack frames written
-    // in handleEnvelope, since both run on the same stream from different
-    // threads. lastPong is updated from the control_callback, which Beast
-    // invokes synchronously inside ws.read() on the main thread whenever a
-    // pong frame arrives (Beast also auto-replies to any ping *we* receive
+    // The same strand also serializes ack writes from handleEnvelope, so
+    // Beast's websocket::stream never sees concurrent writes.
+    // lastPong is updated from the control_callback, which Beast invokes
+    // synchronously inside ws.read() on the main thread whenever a pong
+    // frame arrives (Beast also auto-replies to any ping *we* receive
     // from Slack, with no extra code needed here).
     constexpr auto kPingInterval = std::chrono::seconds(30);
     constexpr auto kPongTimeout = std::chrono::seconds(60);
 
-    std::mutex wsWriteMutex;
-    std::atomic<std::chrono::steady_clock::time_point> lastPong{std::chrono::steady_clock::now()};
+    // Strand that owns all writes to `ws`.
+    net::strand<net::io_context::executor_type> wsStrand{ioc.get_executor()};
+
+    std::atomic<std::chrono::steady_clock::time_point> lastPong{
+        std::chrono::steady_clock::now()};
 
     ws.control_callback([&lastPong](websocket::frame_type kind, beast::string_view /*payload*/) {
         if (kind == websocket::frame_type::pong) {
@@ -325,39 +347,51 @@ void runSocketModeSession(net::io_context& ioc, ssl::context& ctx, const std::st
         }
     });
 
-    std::mutex pingerMutex;
-    std::condition_variable pingerCv;
-    bool stopPinger = false;
+    // Shared flag so the timer can be cancelled cleanly when the session ends.
+    auto stopPinger = std::make_shared<std::atomic<bool>>(false);
+    auto pingTimer = std::make_shared<net::steady_timer>(ioc);
+    auto lastPingAt = std::make_shared<std::chrono::steady_clock::time_point>(
+        std::chrono::steady_clock::now());
 
-    std::thread pinger([&] {
-        auto lastPingAt = std::chrono::steady_clock::now();
-        std::unique_lock<std::mutex> lock(pingerMutex);
-        while (!stopPinger) {
-            pingerCv.wait_for(lock, std::chrono::seconds(1), [&] { return stopPinger; });
-            if (stopPinger) break;
+    // Recursive lambda that schedules the next ping/timeout check.
+    // Everything that touches `ws` runs on `wsStrand`.
+    auto schedulePing = std::make_shared<std::function<void()>>();
+    *schedulePing = [stopPinger, pingTimer, lastPingAt, schedulePing, &ws, &wsStrand, &lastPong,
+                     kPingInterval, kPongTimeout]() {
+        if (stopPinger->load()) return;
 
-            auto now = std::chrono::steady_clock::now();
+        pingTimer->expires_after(std::chrono::seconds(1));
+        pingTimer->async_wait(net::bind_executor(
+            wsStrand,
+            [stopPinger, pingTimer, lastPingAt, schedulePing, &ws, &lastPong, kPingInterval,
+             kPongTimeout](beast::error_code ec) {
+                if (ec || stopPinger->load()) return;
 
-            if (now - lastPong.load() > kPongTimeout) {
-                log("No pong received within timeout; closing socket to force reconnect.");
-                beast::error_code ec;
-                beast::get_lowest_layer(ws).close(ec);
-                break;
-            }
+                auto now = std::chrono::steady_clock::now();
 
-            if (now - lastPingAt >= kPingInterval) {
-                lastPingAt = now;
-                beast::error_code ec;
-                {
-                    std::lock_guard<std::mutex> wlock(wsWriteMutex);
-                    ws.ping({}, ec);
+                if (now - lastPong.load() > kPongTimeout) {
+                    log("No pong received within timeout; closing socket to force reconnect.");
+                    beast::error_code closeEc;
+                    beast::get_lowest_layer(ws).close(closeEc);
+                    return;
                 }
-                if (ec) {
-                    log("Ping failed: " + ec.message());
+
+                // Fire a ping every kPingInterval (we tick every 1 s).
+                if (now - *lastPingAt >= kPingInterval) {
+                    *lastPingAt = now;
+                    beast::error_code pingEc;
+                    ws.ping({}, pingEc);
+                    if (pingEc) {
+                        log("Ping failed: " + pingEc.message());
+                    }
                 }
-            }
-        }
-    });
+
+                (*schedulePing)();
+            }));
+    };
+
+    // Kick off the first timer.
+    (*schedulePing)();
 
     bool shouldReconnect = false;
     beast::flat_buffer buffer;
@@ -388,21 +422,27 @@ void runSocketModeSession(net::io_context& ioc, ssl::context& ctx, const std::st
         }
 
         try {
-            handleEnvelope(ioc, ctx, botToken, ws, wsWriteMutex, envelope.as_object(), shouldReconnect);
+            handleEnvelope(ioc, ctx, botToken, ws, wsStrand, envelope.as_object(), shouldReconnect);
         } catch (const std::exception& e) {
             log(std::string("Error handling envelope: ") + e.what());
         }
     }
 
-    {
-        std::lock_guard<std::mutex> lock(pingerMutex);
-        stopPinger = true;
-    }
-    pingerCv.notify_all();
-    pinger.join();
+    // Stop the keepalive timer and drain any pending strand work before close.
+    stopPinger->store(true);
+    pingTimer->cancel();
 
-    beast::error_code ec;
-    ws.close(websocket::close_code::normal, ec);
+    // Barrier: wait until the strand has finished any in-flight handler
+    // (ping / timeout check) so we can safely close the socket.
+    {
+        std::promise<void> drained;
+        auto fut = drained.get_future();
+        net::post(wsStrand, [p = std::move(drained)]() mutable { p.set_value(); });
+        fut.wait();
+    }
+
+    beast::error_code closeEc;
+    ws.close(websocket::close_code::normal, closeEc);
 }
 
 }  // namespace
@@ -422,6 +462,13 @@ int main() {
     ctx.set_default_verify_paths();
     ctx.set_verify_mode(ssl::verify_peer);
 
+    // Run the io_context on a background thread so the strand / timer
+    // handlers can execute while the main thread blocks in ws.read().
+    std::thread iocThread([&ioc] {
+        net::executor_work_guard<net::io_context::executor_type> work(ioc.get_executor());
+        ioc.run();
+    });
+
     std::cout << "ArphaXAD is running in socket mode..." << std::endl;
 
     while (true) {
@@ -434,4 +481,9 @@ int main() {
         log("Reconnecting in 1s...");
         std::this_thread::sleep_for(std::chrono::seconds(1));
     }
+
+    // Unreachable in the current design, but keep the thread join for
+    // completeness if the loop is ever made exit-able.
+    ioc.stop();
+    iocThread.join();
 }
