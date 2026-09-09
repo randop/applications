@@ -881,16 +881,23 @@ private:
     bool replyOnThread = false;
     auto weakSelf = weak_from_this();
 
-    bool isPing = false;
+    bool isBotTask = false;
     const std::string pattern = "<@U****> ping";
-    if (is_equals(text, "ping") || wildcardMatch(text, pattern)) {
-      isPing = true;
+
+    json::object reply;
+
+    if (is_equals(prompt, "ping")) {
+      reply["text"] = "*pong*";
+      isBotTask = true;
+    } else if (is_equals(prompt, "/version")) {
+      reply["text"] = std::string(APP_VERSION);
+      isBotTask = true;
+    } else {
+      reply["text"] = "no suitable response at the moment.";
     }
 
-    if (isPing) {
-      json::object reply;
+    if (isBotTask) {
       reply["channel"] = replyChannel;
-      reply["text"] = "*pong*";
 
       if (replyOnThread && !replyThread.empty()) {
         reply["thread_ts"] = replyThread;
