@@ -20,6 +20,8 @@
 //   export SLACK_AI_AGENT_ENDPOINT=https://api.openai.com/v1/chat/completions
 //   ./slack_socket_mode
 
+#define APP_VERSION "1.0.0"
+
 #define BOOST_JSON_NO_LIB
 
 #include <boost/asio/async_result.hpp>
@@ -683,7 +685,7 @@ private:
 
     json::object message;
     message["channel"] = channel;
-    message["text"] = "Boot Notification - Boot ID: " + bootId + " - Welcome!";
+    message["text"] = "Boot Notification - Boot ID: " + bootId + " - Ready!!!";
 
     // Use Block Kit for the title/layout and mrkdwn for inline formatting.
     json::array blocks;
@@ -700,13 +702,28 @@ private:
 
     json::object sectionText;
     sectionText["type"] = "mrkdwn";
-    sectionText["text"] = "- Boot ID: `" + bootId +
-                          "`\n"
-                          "- Welcome!";
+    sectionText["text"] = "🚀 Ready";
 
     json::object section;
     section["type"] = "section";
     section["text"] = std::move(sectionText);
+
+    json::array fields;
+
+    json::object bootField;
+    bootField["type"] = "mrkdwn";
+    bootField["text"] = "Boot ID: `" + bootId + "`";
+
+    fields.push_back(std::move(bootField));
+
+    json::object versionField;
+    versionField["type"] = "mrkdwn";
+    versionField["text"] = "Version: `" APP_VERSION "`";
+
+    fields.push_back(std::move(versionField));
+
+    section["fields"] = std::move(fields);
+
     blocks.push_back(std::move(section));
 
     json::object divider;
@@ -926,6 +943,38 @@ private:
                 std::rethrow_exception(error);
               } catch (const std::exception &e) {
                 log(std::string("AI agent query failed: ") + e.what());
+                json::object message;
+                message["channel"] = replyChannel;
+                message["text"] = std::string("⚠️ AI error: ") + e.what();
+
+                net::post(self->httpPool_, [weakSelf, botToken,
+                                            reply =
+                                                std::move(message)]() mutable {
+                  try {
+                    json::value res =
+                        httpsPostJson("slack.com", "/api/chat.postMessage",
+                                      botToken, json::value(std::move(reply)));
+
+                    if (auto self2 = weakSelf.lock()) {
+                      net::post(self2->strand_,
+                                [self2, res = std::move(res)]() mutable {
+                                  if (!res.is_object() ||
+                                      !getBool(res.as_object(), "ok")) {
+                                    log("chat.postMessage failed: " +
+                                        json::serialize(res));
+                                  }
+                                });
+                    }
+                  } catch (const std::exception &e) {
+                    if (auto self2 = weakSelf.lock()) {
+                      const std::string errorText = e.what();
+                      net::post(self2->strand_, [self2, errorText] {
+                        (void)self2;
+                        log("chat.postMessage error: " + errorText);
+                      });
+                    }
+                  }
+                });
               }
               return;
             }
