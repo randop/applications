@@ -712,15 +712,18 @@ private:
 
     json::object bootField;
     bootField["type"] = "mrkdwn";
-    bootField["text"] = "Boot ID: `" + bootId + "`";
-
+    bootField["text"] = "ℹ️ Boot ID: `" + bootId + "`";
     fields.push_back(std::move(bootField));
 
     json::object versionField;
     versionField["type"] = "mrkdwn";
-    versionField["text"] = "Version: `" APP_VERSION "`";
-
+    versionField["text"] = "ℹ️ Version: `" APP_VERSION "`";
     fields.push_back(std::move(versionField));
+
+    json::object systemField;
+    systemField["type"] = "mrkdwn";
+    systemField["text"] = "🖥️ System: `Linux`";
+    fields.push_back(std::move(systemField));
 
     section["fields"] = std::move(fields);
 
