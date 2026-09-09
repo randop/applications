@@ -49,6 +49,8 @@
 #include <string>
 #include <string_view>
 #include <thread>
+#include <cctype>
+#include <algorithm>
 
 namespace beast = boost::beast;
 namespace http = beast::http;
@@ -65,6 +67,14 @@ namespace {
 // ---------------------------------------------------------------------
 
 void log(const std::string& msg) { std::cerr << "[slack] " << msg << std::endl; }
+
+bool is_equals(const std::string& a, const std::string& b) {
+    return a.size() == b.size() &&
+           std::equal(a.begin(), a.end(), b.begin(),
+               [](unsigned char c1, unsigned char c2) {
+                   return std::tolower(c1) == std::tolower(c2);
+               });
+}
 
 const json::object kEmptyObject;
 
@@ -173,7 +183,7 @@ void handleMessageEvent(net::io_context& ioc, ssl::context& ctx, const std::stri
         return;
     }
 
-    const std::string text = getStr(event, "text");
+    std::string text = getStr(event, "text");
     const std::string channel = getStr(event, "channel");
     const std::string ts = getStr(event, "ts");
     const std::string client_msg_id = getStr(event, "client_msg_id");
@@ -185,10 +195,13 @@ void handleMessageEvent(net::io_context& ioc, ssl::context& ctx, const std::stri
     json::object reply;
     reply["channel"] = channel;
     if (willReplyOnThread) {
-        reply["text"] = "You said: *" + text + "*";
         reply["thread_ts"] = ts;
+    }
+
+    if (is_equals(text, "ping")) {
+      reply["text"] = "*pong*";
     } else {
-        reply["text"] = "Acknowledged: *" + text + "*";
+      reply["text"] = "Acknowledged: *" + text + "*";
     }
 
     try {
