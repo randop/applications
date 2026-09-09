@@ -39,9 +39,12 @@
 #include <boost/beast/websocket/ssl.hpp>
 #include <boost/json/src.hpp>  // header-only Boost.JSON implementation
 
+#include <atomic>
+#include <condition_variable>
 #include <cstdlib>
 #include <chrono>
 #include <iostream>
+#include <mutex>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -173,8 +176,9 @@ void handleMessageEvent(net::io_context& ioc, ssl::context& ctx, const std::stri
     const std::string text = getStr(event, "text");
     const std::string channel = getStr(event, "channel");
     const std::string ts = getStr(event, "ts");
+    const std::string client_msg_id = getStr(event, "client_msg_id");
 
-    log("Received DM: " + text);
+    log("Received message: " + client_msg_id);
 
     const bool willReplyOnThread = false;
 
@@ -200,9 +204,13 @@ void handleMessageEvent(net::io_context& ioc, ssl::context& ctx, const std::stri
 
 // Handle one decoded Socket Mode envelope. Acks anything carrying an
 // envelope_id (required by Slack for every dispatched event type).
+//
+// wsWriteMutex guards every frame written to `ws` — both this function's acks
+// and the pinger thread's ping frames — since Beast's websocket::stream isn't
+// safe for concurrent writes from multiple threads.
 void handleEnvelope(net::io_context& ioc, ssl::context& ctx, const std::string& botToken,
-                     websocket::stream<ssl::stream<tcp::socket>>& ws, const json::object& envelope,
-                     bool& shouldReconnect) {
+                     websocket::stream<ssl::stream<tcp::socket>>& ws, std::mutex& wsWriteMutex,
+                     const json::object& envelope, bool& shouldReconnect) {
     const std::string type = getStr(envelope, "type");
 
     if (type == "hello") {
@@ -220,6 +228,7 @@ void handleEnvelope(net::io_context& ioc, ssl::context& ctx, const std::string& 
     if (has(envelope, "envelope_id")) {
         json::object ack;
         ack["envelope_id"] = getStr(envelope, "envelope_id");
+        std::lock_guard<std::mutex> lock(wsWriteMutex);
         ws.write(net::buffer(json::serialize(json::value(ack))));
     }
 
@@ -275,6 +284,68 @@ void runSocketModeSession(net::io_context& ioc, ssl::context& ctx, const std::st
     ws.handshake(parsed.host, parsed.target);
     log("WebSocket handshake complete.");
 
+    // --- ping/pong keepalive -------------------------------------------
+    //
+    // ws.read() runs synchronously and blocks the main thread until Slack
+    // sends something, so a background thread drives the keepalive: it
+    // sends a ping every kPingInterval and, if no pong has arrived within
+    // kPongTimeout, treats the connection as dead and force-closes the
+    // underlying socket. That close is what unblocks the main thread's
+    // pending ws.read() (it returns with an error), which then falls
+    // through to the normal reconnect path below.
+    //
+    // wsWriteMutex serializes ping frames against the ack frames written
+    // in handleEnvelope, since both run on the same stream from different
+    // threads. lastPong is updated from the control_callback, which Beast
+    // invokes synchronously inside ws.read() on the main thread whenever a
+    // pong frame arrives (Beast also auto-replies to any ping *we* receive
+    // from Slack, with no extra code needed here).
+    constexpr auto kPingInterval = std::chrono::seconds(30);
+    constexpr auto kPongTimeout = std::chrono::seconds(60);
+
+    std::mutex wsWriteMutex;
+    std::atomic<std::chrono::steady_clock::time_point> lastPong{std::chrono::steady_clock::now()};
+
+    ws.control_callback([&lastPong](websocket::frame_type kind, beast::string_view /*payload*/) {
+        if (kind == websocket::frame_type::pong) {
+            lastPong.store(std::chrono::steady_clock::now());
+        }
+    });
+
+    std::mutex pingerMutex;
+    std::condition_variable pingerCv;
+    bool stopPinger = false;
+
+    std::thread pinger([&] {
+        auto lastPingAt = std::chrono::steady_clock::now();
+        std::unique_lock<std::mutex> lock(pingerMutex);
+        while (!stopPinger) {
+            pingerCv.wait_for(lock, std::chrono::seconds(1), [&] { return stopPinger; });
+            if (stopPinger) break;
+
+            auto now = std::chrono::steady_clock::now();
+
+            if (now - lastPong.load() > kPongTimeout) {
+                log("No pong received within timeout; closing socket to force reconnect.");
+                beast::error_code ec;
+                beast::get_lowest_layer(ws).close(ec);
+                break;
+            }
+
+            if (now - lastPingAt >= kPingInterval) {
+                lastPingAt = now;
+                beast::error_code ec;
+                {
+                    std::lock_guard<std::mutex> wlock(wsWriteMutex);
+                    ws.ping({}, ec);
+                }
+                if (ec) {
+                    log("Ping failed: " + ec.message());
+                }
+            }
+        }
+    });
+
     bool shouldReconnect = false;
     beast::flat_buffer buffer;
 
@@ -304,11 +375,18 @@ void runSocketModeSession(net::io_context& ioc, ssl::context& ctx, const std::st
         }
 
         try {
-            handleEnvelope(ioc, ctx, botToken, ws, envelope.as_object(), shouldReconnect);
+            handleEnvelope(ioc, ctx, botToken, ws, wsWriteMutex, envelope.as_object(), shouldReconnect);
         } catch (const std::exception& e) {
             log(std::string("Error handling envelope: ") + e.what());
         }
     }
+
+    {
+        std::lock_guard<std::mutex> lock(pingerMutex);
+        stopPinger = true;
+    }
+    pingerCv.notify_all();
+    pinger.join();
 
     beast::error_code ec;
     ws.close(websocket::close_code::normal, ec);
