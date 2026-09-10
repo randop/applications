@@ -1,0 +1,1 @@
+{"messages":[{"role":"user","content":[{"type":"text","text":"What is 1+1"}]}],"model":"meta/muse-glimmer-30b","max_tokens":16384,"seed":0,"stream":false,"temperature":1,"reasoning_effort":"max"}
