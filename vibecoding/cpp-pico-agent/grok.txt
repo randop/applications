@@ -1,0 +1,6 @@
+Refactor main.cpp with HTTPS WebSocket clients
+> Refactor main.cpp to use https_client.cpp and websocket_client.cpp. Create the classes and includes header files.
+  Next I’ll split the WebSocket client the same way and add ping plus a control-frame callback so Slack keep-alives still work.
+
+Resume this session with:
+  grok --resume 01a08b6c-3f77-7741-825d-18da9f126915
