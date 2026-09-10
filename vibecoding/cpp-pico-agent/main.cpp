@@ -24,16 +24,24 @@
 
 #define BOOST_JSON_NO_LIB
 
-#include <boost/json/src.hpp>
-
-#include "https_client.hpp"
-#include "websocket_client.hpp"
-
-#include <boost/asio/dispatch.hpp>
+#include <boost/asio/async_result.hpp>
+#include <boost/asio/bind_executor.hpp>
+#include <boost/asio/connect.hpp>
+#include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/post.hpp>
+#include <boost/asio/spawn.hpp>
+#include <boost/asio/ssl.hpp>
 #include <boost/asio/steady_timer.hpp>
 #include <boost/asio/strand.hpp>
 #include <boost/asio/thread_pool.hpp>
+#include <boost/beast/core.hpp>
+#include <boost/beast/http.hpp>
+#include <boost/beast/websocket.hpp>
+#include <boost/beast/websocket/ssl.hpp>
+#include <boost/json/src.hpp>
+
+#include <openssl/err.h>
+#include <openssl/ssl.h>
 
 #include <algorithm>
 #include <cctype>
@@ -41,7 +49,6 @@
 #include <cstddef>
 #include <cstdlib>
 #include <deque>
-#include <exception>
 #include <functional>
 #include <iostream>
 #include <memory>
@@ -53,7 +60,13 @@
 #include <utility>
 #include <vector>
 
+namespace beast = boost::beast;
+namespace http = beast::http;
+namespace websocket = beast::websocket;
 namespace net = boost::asio;
+namespace ssl = boost::asio::ssl;
+namespace json = boost::json;
+using tcp = net::ip::tcp;
 
 namespace {
 
@@ -589,46 +602,70 @@ std::string extractAiAgentReply(const json::value &res) {
 }
 
 // This is intentionally synchronous because it is used from the HTTP worker
-// pool, never from the WebSocket strand. Each call owns a short-lived
-// io_context so https_client can run to completion on the worker thread.
+// pool, never from the WebSocket strand.
 json::value httpsPostJson(const std::string &host, const std::string &target,
                           const std::string &bearerToken,
                           const json::value &body) {
   net::io_context ioc;
-  https_client client(ioc);
+  ssl::context ctx{ssl::context::tlsv12_client};
+  ctx.set_default_verify_paths();
+  ctx.set_verify_mode(ssl::verify_peer);
 
-  json::value parsed;
-  std::exception_ptr eptr;
+  tcp::resolver resolver{ioc};
+  auto const results = resolver.resolve(host, "443");
 
-  http_request req;
-  req.method = http_method::POST;
-  req.host = host;
-  req.target = target;
-  req.headers["Authorization"] = "Bearer " + bearerToken;
-  req.headers["Content-Type"] = "application/json; charset=utf-8";
-  req.body = json::serialize(body);
-
-  client.async_request(
-      std::move(req), [&](error_code ec, http_response resp) {
-        if (ec) {
-          eptr = std::make_exception_ptr(
-              std::runtime_error("HTTPS POST failed: " + ec.message()));
-          return;
-        }
-        try {
-          parsed = json::parse(resp.body);
-        } catch (...) {
-          eptr = std::current_exception();
-        }
-      });
-
-  ioc.run();
-
-  if (eptr) {
-    std::rethrow_exception(eptr);
+  ssl::stream<tcp::socket> stream{ioc, ctx};
+  if (!SSL_set_tlsext_host_name(stream.native_handle(), host.c_str())) {
+    throw beast::system_error(beast::error_code(
+        static_cast<int>(::ERR_get_error()), net::error::get_ssl_category()));
   }
 
-  return parsed;
+  net::connect(stream.next_layer(), results.begin(), results.end());
+  stream.handshake(ssl::stream_base::client);
+
+  http::request<http::string_body> req{http::verb::post, target, 11};
+  req.set(http::field::host, host);
+  req.set(http::field::user_agent, "boost-beast-slack-bot/1.0");
+  req.set(http::field::authorization, "Bearer " + bearerToken);
+  req.set(http::field::content_type, "application/json; charset=utf-8");
+  req.body() = json::serialize(body);
+  req.prepare_payload();
+
+  http::write(stream, req);
+
+  beast::flat_buffer buffer;
+  http::response<http::string_body> res;
+  http::read(stream, buffer, res);
+
+  beast::error_code ec;
+  stream.shutdown(ec);
+
+  return json::parse(res.body());
+}
+
+struct WssUrl {
+  std::string host;
+  std::string target;
+};
+
+WssUrl parseWssUrl(const std::string &url) {
+  const std::string prefix = "wss://";
+  if (url.rfind(prefix, 0) != 0) {
+    throw std::runtime_error("expected wss:// url, got: " + url);
+  }
+
+  std::string rest = url.substr(prefix.size());
+  auto slashPos = rest.find('/');
+
+  WssUrl out;
+  if (slashPos == std::string::npos) {
+    out.host = rest;
+    out.target = "/";
+  } else {
+    out.host = rest.substr(0, slashPos);
+    out.target = rest.substr(slashPos);
+  }
+  return out;
 }
 
 // Ask Slack for a fresh Socket Mode WebSocket URL.
@@ -646,25 +683,42 @@ std::string openSocketModeUrl(const std::string &appToken) {
 }
 
 class AiAgentClient : public std::enable_shared_from_this<AiAgentClient> {
+  using strand_type = net::strand<net::io_context::executor_type>;
+  using ssl_stream_type = ssl::stream<tcp::socket>;
+
 public:
-  AiAgentClient(net::io_context &ioc, std::string endpoint, std::string token)
-      : https_(ioc), endpoint_(parseHttpsUrl(endpoint)),
+  AiAgentClient(net::io_context &ioc, ssl::context &sslCtx,
+                std::string endpoint, std::string token)
+      : strand_(net::make_strand(ioc)), resolver_(strand_),
+        stream_(strand_, sslCtx), endpoint_(parseHttpsUrl(endpoint)),
         token_(std::move(token)) {}
 
   template <typename Handler> void query(std::string prompt, Handler handler) {
-    start(std::move(prompt), std::move(handler));
+    net::dispatch(strand_,
+                  [self = shared_from_this(), prompt = std::move(prompt),
+                   handler = std::move(handler)]() mutable {
+                    self->start(std::move(prompt), std::move(handler));
+                  });
   }
 
 private:
-  https_client https_;
+  strand_type strand_;
+  tcp::resolver resolver_;
+  ssl_stream_type stream_;
   HttpsUrl endpoint_;
   std::string token_;
 
+  beast::flat_buffer readBuffer_;
+  http::request<http::string_body> request_;
+  http::response<http::string_body> response_;
+
   template <typename Handler> void start(std::string prompt, Handler handler) {
     if (token_.empty()) {
-      handler(std::make_exception_ptr(
-                  std::runtime_error("SLACK_AI_AGENT_TOKEN is empty.")),
-              std::string{});
+      net::post(strand_, [handler = std::move(handler)]() mutable {
+        handler(std::make_exception_ptr(
+                    std::runtime_error("SLACK_AI_AGENT_TOKEN is empty.")),
+                std::string{});
+      });
       return;
     }
 
@@ -1072,47 +1126,94 @@ private:
     body["max_tokens"] = 16384;
     body["temperature"] = 1;
 
-    http_request req;
-    req.method = http_method::POST;
-    req.host = endpoint_.host;
-    req.target = endpoint_.target;
-    req.headers["Authorization"] = "Bearer " + token_;
-    req.headers["Content-Type"] = "application/json; charset=utf-8";
-    req.body = json::serialize(body);
+    request_ = {};
+    request_.version(11);
+    request_.method(http::verb::post);
+    request_.target(endpoint_.target);
+    request_.set(http::field::host, endpoint_.host);
+    request_.set(http::field::user_agent, "boost-beast-slack-bot/1.0");
+    request_.set(http::field::authorization, "Bearer " + token_);
+    request_.set(http::field::content_type, "application/json; charset=utf-8");
+    request_.body() = json::serialize(body);
     if (APP_DEBUG_AI) {
-      log("ai payload: " + req.body);
+      log("ai payload: " + request_.body());
     }
+    request_.prepare_payload();
 
-    https_.async_request(
-        std::move(req),
-        [self = shared_from_this(), handler = std::move(handler)](
-            error_code ec, http_response resp) mutable {
-          (void)self;
-          if (ec) {
-            handler(std::make_exception_ptr(std::runtime_error(
-                        "AI agent request: " + ec.message())),
-                    std::string{});
-            return;
-          }
+    response_ = {};
+    net::spawn(strand_, [self = shared_from_this(), handler = std::move(handler)](net::yield_context yield) mutable {
+      beast::error_code ec;
 
-          if (resp.status_code < 200 || resp.status_code >= 300) {
-            handler(std::make_exception_ptr(std::runtime_error(
-                        "AI agent HTTP status " +
-                        std::to_string(resp.status_code) + ": " + resp.body)),
-                    std::string{});
-            return;
-          }
+      self->readBuffer_.consume(self->readBuffer_.size());
 
-          try {
-            handler(nullptr,
-                    extractAiAgentReply(json::parse(resp.body)));
-          } catch (const std::exception &e) {
-            handler(std::make_exception_ptr(std::runtime_error(
-                        std::string("AI agent JSON response: ") + e.what())),
-                    std::string{});
-          }
-        });
+      auto results = self->resolver_.async_resolve(self->endpoint_.host, "443", yield[ec]);
+      if (ec) {
+        handler(std::make_exception_ptr(std::runtime_error("AI agent DNS resolve: " + ec.message())), std::string{});
+        return;
+      }
+
+      beast::error_code ignored;
+      self->stream_.next_layer().close(ignored);
+
+      net::async_connect(self->stream_.next_layer(), results, yield[ec]);
+      if (ec) {
+        handler(std::make_exception_ptr(std::runtime_error("AI agent TCP connect: " + ec.message())), std::string{});
+        return;
+      }
+
+      if (!SSL_set_tlsext_host_name(self->stream_.native_handle(), self->endpoint_.host.c_str())) {
+        const beast::error_code sslEc(static_cast<int>(::ERR_get_error()), net::error::get_ssl_category());
+        handler(std::make_exception_ptr(std::runtime_error("AI agent SNI: " + sslEc.message())), std::string{});
+        return;
+      }
+
+      self->stream_.async_handshake(ssl::stream_base::client, yield[ec]);
+      if (ec) {
+        handler(std::make_exception_ptr(std::runtime_error("AI agent TLS handshake: " + ec.message())), std::string{});
+        return;
+      }
+
+      http::async_write(self->stream_, self->request_, yield[ec]);
+      if (ec) {
+        handler(std::make_exception_ptr(std::runtime_error("AI agent HTTP write: " + ec.message())), std::string{});
+        return;
+      }
+
+      http::async_read(self->stream_, self->readBuffer_, self->response_, yield[ec]);
+      if (ec) {
+        handler(std::make_exception_ptr(std::runtime_error("AI agent HTTP read: " + ec.message())), std::string{});
+        return;
+      }
+
+      if (self->response_.result_int() < 200 || self->response_.result_int() >= 300) {
+        const std::string detail = "AI agent HTTP status " + std::to_string(self->response_.result_int()) + ": " + self->response_.body();
+        handler(std::make_exception_ptr(std::runtime_error(detail)), std::string{});
+        return;
+      }
+
+      std::string reply;
+      try {
+        reply = extractAiAgentReply(json::parse(self->response_.body()));
+      } catch (const std::exception &e) {
+        handler(std::make_exception_ptr(std::runtime_error(std::string("AI agent JSON response: ") + e.what())), std::string{});
+        return;
+      }
+
+      beast::error_code shutdown_ec;
+      self->stream_.shutdown(shutdown_ec);
+      if (shutdown_ec == net::error::eof || shutdown_ec == ssl::error::stream_truncated) {
+        shutdown_ec.clear();
+      }
+      if (shutdown_ec) {
+        handler(std::make_exception_ptr(std::runtime_error("AI agent TLS shutdown: " + shutdown_ec.message())), std::string{});
+        return;
+      }
+
+      handler(nullptr, std::move(reply));
+    });
   }
+
+
 };
 
 class SocketModeSession
@@ -1138,8 +1239,10 @@ public:
   }
 
   void start() {
-    net::dispatch(strand_,
-                  [self = shared_from_this()] { self->startOnStrand(); });
+    auto self = shared_from_this();
+    net::spawn(strand_, [self](net::yield_context yield) {
+      self->run(yield);
+    });
   }
 
 private:
@@ -1168,14 +1271,10 @@ private:
   static constexpr auto kPingInterval = std::chrono::seconds(30);
   static constexpr auto kPongTimeout = std::chrono::seconds(60);
 
-  void startOnStrand() {
-    // Beast invokes this callback while the read operation is active.
+  void run(net::yield_context yield) {
+    // Control callback for pong tracking remains callback-based as Beast requires.
     ws_.control_callback([self = shared_from_this()](websocket::frame_type kind,
                                                      beast::string_view) {
-      // control_callback is invoked by Beast as part of the
-      // WebSocket operation. Marshal state changes explicitly onto
-      // the same strand so they remain serialized with timers and
-      // writes.
       net::post(self->strand_, [self, kind] {
         if (kind == websocket::frame_type::pong) {
           self->lastPong_ = std::chrono::steady_clock::now();
@@ -1183,13 +1282,60 @@ private:
       });
     });
 
-    resolver_.async_resolve(
-        parsed_.host, "443",
-        net::bind_executor(strand_, [self = shared_from_this()](
-                                        beast::error_code ec,
-                                        tcp::resolver::results_type results) {
-          self->onResolve(ec, std::move(results));
-        }));
+    beast::error_code ec;
+    try {
+      // ---- connect sequence ----
+      auto results = resolver_.async_resolve(parsed_.host, "443", yield[ec]);
+      if (ec) throw boost::system::system_error(ec, "DNS resolve");
+
+      net::async_connect(ws_.next_layer().next_layer(), results, yield[ec]);
+      if (ec) throw boost::system::system_error(ec, "TCP connect");
+
+      if (!SSL_set_tlsext_host_name(ws_.next_layer().native_handle(),
+                                    parsed_.host.c_str())) {
+        beast::error_code sslEc(static_cast<int>(::ERR_get_error()),
+                                net::error::get_ssl_category());
+        throw boost::system::system_error(sslEc, "SNI");
+      }
+
+      ws_.next_layer().async_handshake(ssl::stream_base::client, yield[ec]);
+      if (ec) throw boost::system::system_error(ec, "TLS handshake");
+
+      ws_.set_option(websocket::stream_base::decorator([](websocket::request_type &req) {
+        req.set(http::field::user_agent, "boost-beast-slack-bot/1.0");
+      }));
+
+      ws_.async_handshake(parsed_.host, parsed_.target, yield[ec]);
+      if (ec) throw boost::system::system_error(ec, "WebSocket handshake");
+
+      log("WebSocket handshake complete.");
+      sendBootNotification();
+      lastPong_ = std::chrono::steady_clock::now();
+      schedulePing();
+
+      // ---- read loop ----
+      while (!stopped_) {
+        readBuffer_.clear();
+        ws_.async_read(readBuffer_, yield[ec]);
+        if (ec) {
+          if (ec == websocket::error::closed) {
+            log("WebSocket closed by peer.");
+          } else {
+            log(std::string("WebSocket read: ") + ec.message());
+          }
+          break;
+        }
+        const std::string raw = beast::buffers_to_string(readBuffer_.data());
+        json::value envelope;
+        try { envelope = json::parse(raw); }
+        catch (...) { continue; }
+        if (envelope.is_object()) {
+          handleEnvelope(envelope.as_object());
+        }
+      }
+    } catch (const boost::system::system_error& e) {
+      if (!stopped_) fail(e.what(), e.code());
+    }
   }
 
   void onResolve(beast::error_code ec, tcp::resolver::results_type results) {
@@ -1687,41 +1833,24 @@ private:
     // This function is only called on strand_.
     writeQueue_.push_back(PendingWrite{std::move(data)});
     if (!writeInProgress_) {
-      writeNext();
+      writeInProgress_ = true;
+      auto self = shared_from_this();
+      net::spawn(strand_, [self](net::yield_context yield){ self->writer_loop(yield); });
     }
   }
 
-  void writeNext() {
-    // This function is only called on strand_.
-    if (writeQueue_.empty()) {
-      writeInProgress_ = false;
-      return;
+  void writer_loop(net::yield_context yield) {
+    beast::error_code ec;
+    while (!stopped_ && !writeQueue_.empty()) {
+      auto &item = writeQueue_.front();
+      ws_.async_write(net::buffer(item.data), yield[ec]);
+      if (ec) {
+        fail("WebSocket write", ec);
+        break;
+      }
+      writeQueue_.pop_front();
     }
-
-    writeInProgress_ = true;
-
-    auto &item = writeQueue_.front();
-
-    ws_.async_write(
-        net::buffer(item.data),
-        net::bind_executor(strand_, [self = shared_from_this()](
-                                        beast::error_code ec, std::size_t) {
-          self->onWrite(ec);
-        }));
-  }
-
-  void onWrite(beast::error_code ec) {
-    if (stopped_) {
-      return;
-    }
-
-    if (ec) {
-      fail("WebSocket write", ec);
-      return;
-    }
-
-    writeQueue_.pop_front();
-    writeNext();
+    writeInProgress_ = false;
   }
 
   void schedulePing() {
