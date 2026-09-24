@@ -7,6 +7,7 @@ export RUSTUP_HOME="$HOME/projects/toolchains/rust/rustup"
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
                     sh -s -- -y --no-modify-path --default-toolchain stable
 ```
+```
 info: downloading installer
 info: profile set to default
 info: default host tuple is x86_64-unknown-linux-gnu
@@ -50,3 +51,13 @@ cargo:rerun-if-env-changed=CFLAGS_x86_64_unknown_linux_gnu
 CFLAGS_x86_64_unknown_linux_gnu = None
 cargo:rerun-if-env-changed=CFLAGS_x86_64-unknown-linux-gnu
 CFLAGS_x86_64-unknown-linux-gnu = None
+```
+
+## configure flatpak and opencode
+```bash
+flatpak override --user \
+  --env=CARGO_HOME=$HOME/projects/toolchains/rust/cargo \
+  --env=RUSTUP_HOME=$HOME/projects/toolchains/rust/rustup \
+  --env=PATH=/app/bin:/usr/bin:$HOME/projects/toolchains/rust/cargo/bin \
+  ai.opencode.opencode
+```
