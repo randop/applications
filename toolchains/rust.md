@@ -55,26 +55,17 @@ cargo:rerun-if-env-changed=CFLAGS_x86_64-unknown-linux-gnu
 CFLAGS_x86_64-unknown-linux-gnu = None
 ```
 
-## configure linker
-```bash
-mkdir -pv $HOME/projects/toolchains/rust/mold
-cd $HOME/projects/toolchains/rust/mold
-wget "https://github.com/rui314/mold/releases/download/v2.42.1/mold-2.42.1-x86_64-linux.tar.gz"
-tar xzvf mold-2.42.1-x86_64-linux.tar.gz --strip-components=1
-ln -sv $HOME/projects/toolchains/rust/mold/bin/mold $HOME/projects/toolchains/rust/cargo/bin/mold
-
-cat > "$CARGO_HOME/config.toml" << EOF
-[target.x86_64-unknown-linux-gnu]
-linker = "mold"
-rustflags = ["-C", "link-arg=-fuse-ld=mold"]
-EOF
-```
-
 ## configure flatpak and opencode
 ```bash
+flatpak install --user flathub org.freedesktop.Sdk//25.08
 flatpak override --user \
   --env=CARGO_HOME=$HOME/projects/toolchains/rust/cargo \
   --env=RUSTUP_HOME=$HOME/projects/toolchains/rust/rustup \
-  --env=PATH=/app/bin:/usr/bin:$HOME/projects/toolchains/rust/cargo/bin \
+  --env=PATH=/app/bin:/usr/bin:$HOME/projects/toolchains/bin:$HOME/projects/toolchains/rust/cargo/bin \
   ai.opencode.opencode
+```
+
+## check installation
+```bash
+flatpak run --devel --command=sh ai.opencode.opencode
 ```
