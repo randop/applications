@@ -45,6 +45,25 @@ pub struct Cli {
     /// Print merged configuration and exit
     #[arg(long, default_value_t = false)]
     pub print_config: bool,
+
+    /// Set the system clock (CLOCK_REALTIME) to the NTP-corrected time.
+    /// Requires root / CAP_SYS_TIME on Linux.
+    #[arg(long, env = "NTP_SET_SYSTEM_TIME", num_args(0..=1), default_missing_value("true"), value_parser = clap::value_parser!(bool))]
+    pub set_system_time: Option<bool>,
+
+    /// Also write the system time to the hardware clock (RTC) via
+    /// `hwclock --systohc`. Implies --set-system-time.
+    #[arg(long, env = "NTP_SYNC_HWCLOCK", num_args(0..=1), default_missing_value("true"), value_parser = clap::value_parser!(bool))]
+    pub sync_hwclock: Option<bool>,
+
+    /// Show what time would be set without actually changing any clock.
+    #[arg(long, env = "NTP_DRY_RUN", num_args(0..=1), default_missing_value("true"), value_parser = clap::value_parser!(bool))]
+    pub dry_run: Option<bool>,
+
+    /// Safety guard: refuse to step the clock if |offset| exceeds this many
+    /// seconds (0 = no limit). Env NTP_MAX_OFFSET_SECS.
+    #[arg(long, env = "NTP_MAX_OFFSET_SECS")]
+    pub max_offset_secs: Option<f64>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum, Serialize, Deserialize)]
@@ -72,6 +91,10 @@ pub struct FileConfig {
     pub retries: Option<u32>,
     pub ntp_version: Option<u8>,
     pub format: Option<OutputFormat>,
+    pub set_system_time: Option<bool>,
+    pub sync_hwclock: Option<bool>,
+    pub dry_run: Option<bool>,
+    pub max_offset_secs: Option<f64>,
 }
 
 /// Fully resolved runtime configuration.
@@ -83,6 +106,11 @@ pub struct Config {
     pub retries: u32,
     pub ntp_version: u8,
     pub format: OutputFormat,
+    pub set_system_time: bool,
+    pub sync_hwclock: bool,
+    pub dry_run: bool,
+    /// 0.0 = no limit
+    pub max_offset_secs: f64,
     pub config_file_used: Option<PathBuf>,
 }
 
@@ -95,6 +123,10 @@ impl Default for Config {
             retries: 2,
             ntp_version: 4,
             format: OutputFormat::Text,
+            set_system_time: false,
+            sync_hwclock: false,
+            dry_run: false,
+            max_offset_secs: 0.0,
             config_file_used: None,
         }
     }
@@ -141,6 +173,18 @@ impl Config {
                 if let Some(v) = file.format {
                     base.format = v;
                 }
+                if let Some(v) = file.set_system_time {
+                    base.set_system_time = v;
+                }
+                if let Some(v) = file.sync_hwclock {
+                    base.sync_hwclock = v;
+                }
+                if let Some(v) = file.dry_run {
+                    base.dry_run = v;
+                }
+                if let Some(v) = file.max_offset_secs {
+                    base.max_offset_secs = v;
+                }
                 used = Some(path);
             } else if cli.config.is_some() {
                 anyhow::bail!("config file not found: {}", path.display());
@@ -167,12 +211,34 @@ impl Config {
         if let Some(v) = cli.format {
             base.format = v;
         }
+        if let Some(v) = cli.set_system_time {
+            base.set_system_time = v;
+        }
+        if let Some(v) = cli.sync_hwclock {
+            base.sync_hwclock = v;
+        }
+        if let Some(v) = cli.dry_run {
+            base.dry_run = v;
+        }
+        if let Some(v) = cli.max_offset_secs {
+            base.max_offset_secs = v;
+        }
+        // --sync-hwclock implies setting the system clock first.
+        if base.sync_hwclock {
+            base.set_system_time = true;
+        }
 
         if !(3..=4).contains(&base.ntp_version) {
             anyhow::bail!("ntp_version must be 3 or 4, got {}", base.ntp_version);
         }
         if base.timeout.is_zero() {
             anyhow::bail!("timeout must be > 0");
+        }
+        if !(base.max_offset_secs >= 0.0 && base.max_offset_secs.is_finite()) {
+            anyhow::bail!(
+                "max_offset_secs must be >= 0 (0 = no limit), got {}",
+                base.max_offset_secs
+            );
         }
 
         Ok(base)

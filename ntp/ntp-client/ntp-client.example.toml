@@ -17,3 +17,16 @@ ntp_version = 4
 
 # "text" or "json"
 format = "text"
+
+# Set CLOCK_REALTIME to the NTP-corrected time (needs root / CAP_SYS_TIME).
+set_system_time = false
+
+# Also write system time to the hardware clock via `hwclock --systohc`.
+# Implies set_system_time = true.
+sync_hwclock = false
+
+# Show what would be set without changing any clock.
+dry_run = false
+
+# Safety guard: refuse to step if |offset| exceeds this (seconds). 0 = no limit.
+max_offset_secs = 0.0
