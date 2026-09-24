@@ -1,0 +1,22 @@
+[server]
+listen = "0.0.0.0:993"
+
+[server.tls]
+certificate = "/etc/imap/server.crt"
+private_key = "/etc/imap/server.key"
+
+[storage]
+directory = "/var/lib/imap"
+
+[auth]
+oauth_enabled = true
+
+[auth.workos]
+issuer = "https://YOUR_WORKOS_DOMAIN"
+audience = "YOUR_WORKOS_CLIENT_ID"
+jwks_url = "https://YOUR_WORKOS_DOMAIN/oauth2/jwks"
+
+[limits]
+max_command_bytes = 16384
+# Maximum APPEND/literal message size: 5 MiB.
+max_literal_bytes = 5242880
