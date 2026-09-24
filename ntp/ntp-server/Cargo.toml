@@ -1,0 +1,15 @@
+[package]
+name = "ntp-server"
+version = "0.1.0"
+edition = "2021"
+description = "Minimal async NTP (RFC 5905) UDP server"
+license = "MIT"
+keywords = ["ntp", "time", "udp", "server"]
+categories = ["network-programming"]
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+clap = { version = "4", features = ["derive"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["full"] }
