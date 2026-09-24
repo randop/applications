@@ -10,9 +10,9 @@
 </p>
 
 ### 🏠 [Homepage](https://gitlab.com/randop/applications)
-#### The repository of my applications written in C++, C, Javascript, and more.
+#### The repository of my applications written in C++, C, Javascript, JAVA, Python, Rust and more
 
->  Copyright © 2010 — 2025 Randolph Ledesma
+>  Copyright © 2010 — 2026 Randolph Ledesma
 >
 > Licensed under the Apache License, Version 2.0 (the "License");
 > you may not use this file except in compliance with the License.
@@ -27,6 +27,6 @@
 > limitations under the License.
 >
 
-Copyright © 2010 — 2025 [Randolph Ledesma](https://gitlab.com/randop).
+Copyright © 2010 — 2026 [Randolph Ledesma](https://gitlab.com/randop).
 
-Last updated on 2025-06-10T6:11:15.000Z
+Last updated on 2026-09-24T09:51:37.000Z
