@@ -4,7 +4,8 @@ import { promisify } from "util";
 
 const log = console;
 
-const DEFAULT_NTP_PORT: number = 123;
+const DEFAULT_NTP_SERVER: string = "127.0.0.1";
+const DEFAULT_NTP_PORT: number = 1123;
 const NTP_PACKET_SIZE: number = 48;
 const TIMEOUT_MS: number = 10_000;
  
@@ -70,7 +71,7 @@ class NtpClient {
 }
 
 async function main(): Promise<void> {
-  const client = new NtpClient("pool.ntp.org", DEFAULT_NTP_PORT);
+  const client = new NtpClient(DEFAULT_NTP_SERVER, DEFAULT_NTP_PORT);
   await client.resolve();
   const ntpData = Buffer.alloc(NTP_PACKET_SIZE);
   ntpData[0] = 0x1b;

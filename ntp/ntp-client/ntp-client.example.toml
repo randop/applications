@@ -1,0 +1,19 @@
+# Example config for ntp-client.
+# Path: ./ntp-client.toml  (or pass --config <path>, or set NTP_CLIENT_CONFIG)
+# Precedence: CLI flags > env vars > this file > built-in defaults.
+
+# Standard NTP uses port 123. The local test server uses 1123.
+server = "127.0.0.1"
+port = 1123
+
+# Seconds per attempt (float allowed).
+timeout_secs = 5.0
+
+# Extra retries after the first attempt.
+retries = 2
+
+# 3 or 4
+ntp_version = 4
+
+# "text" or "json"
+format = "text"
