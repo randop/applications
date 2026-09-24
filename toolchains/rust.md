@@ -1,7 +1,9 @@
 # rust
 
-## Setup
+## setup
 ```bash
+mkdir -pv $HOME/projects/toolchains/rust
+cd $HOME/projects/toolchains/rust
 export CARGO_HOME="$HOME/projects/toolchains/rust/cargo"
 export RUSTUP_HOME="$HOME/projects/toolchains/rust/rustup"
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
@@ -51,6 +53,21 @@ cargo:rerun-if-env-changed=CFLAGS_x86_64_unknown_linux_gnu
 CFLAGS_x86_64_unknown_linux_gnu = None
 cargo:rerun-if-env-changed=CFLAGS_x86_64-unknown-linux-gnu
 CFLAGS_x86_64-unknown-linux-gnu = None
+```
+
+## configure linker
+```bash
+mkdir -pv $HOME/projects/toolchains/rust/mold
+cd $HOME/projects/toolchains/rust/mold
+wget "https://github.com/rui314/mold/releases/download/v2.42.1/mold-2.42.1-x86_64-linux.tar.gz"
+tar xzvf mold-2.42.1-x86_64-linux.tar.gz --strip-components=1
+ln -sv $HOME/projects/toolchains/rust/mold/bin/mold $HOME/projects/toolchains/rust/cargo/bin/mold
+
+cat > "$CARGO_HOME/config.toml" << EOF
+[target.x86_64-unknown-linux-gnu]
+linker = "mold"
+rustflags = ["-C", "link-arg=-fuse-ld=mold"]
+EOF
 ```
 
 ## configure flatpak and opencode
