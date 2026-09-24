@@ -9,12 +9,12 @@ mod watcher;
 use anyhow::{Context, Result};
 use config::Config;
 use oauth::WorkosAuthenticator;
+use rustls::crypto::ring;
 use session::Session;
 use std::sync::Arc;
+use store::DirectoryStore;
 use tokio::net::TcpListener;
 use tracing::{error, info};
-use rustls::crypto::ring;
-use store::DirectoryStore;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -27,9 +27,7 @@ async fn main() -> Result<()> {
         return Ok(());
     }
 
-    tracing_subscriber::fmt()
-        .with_env_filter("info")
-        .init();
+    tracing_subscriber::fmt().with_env_filter("info").init();
 
     let config_path = std::env::var("IMAP_CONFIG").unwrap_or_else(|_| "config.toml".into());
     let cfg = Arc::new(Config::load(&config_path)?);
@@ -40,10 +38,7 @@ async fn main() -> Result<()> {
     let store = Arc::new(DirectoryStore::open(&cfg.storage.directory)?);
     let _watcher = store.start_watcher()?;
     let auth = Arc::new(WorkosAuthenticator::new(cfg.auth.workos.clone())?);
-    let tls = tls::load_server_config(
-        &cfg.server.tls.certificate,
-        &cfg.server.tls.private_key,
-    )?;
+    let tls = tls::load_server_config(&cfg.server.tls.certificate, &cfg.server.tls.private_key)?;
 
     let listener = TcpListener::bind(&cfg.server.listen).await?;
     info!(listen = %cfg.server.listen, storage = %cfg.storage.directory.display(), "IMAP server listening");

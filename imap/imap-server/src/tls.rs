@@ -1,8 +1,11 @@
 use anyhow::{Context, Result};
-use rustls::{pki_types::{CertificateDer, PrivateKeyDer}, ServerConfig};
+use rustls::{
+    ServerConfig,
+    pki_types::{CertificateDer, PrivateKeyDer},
+};
 use rustls_pemfile::{certs, private_key};
-use std::{fs::File, io::BufReader, path::Path};
 use std::sync::Arc;
+use std::{fs::File, io::BufReader, path::Path};
 
 pub fn load_server_config(cert: &Path, key: &Path) -> Result<Arc<ServerConfig>> {
     let mut cert_reader = BufReader::new(File::open(cert).context("open TLS certificate")?);

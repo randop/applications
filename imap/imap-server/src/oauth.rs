@@ -1,6 +1,6 @@
 use crate::config::WorkosConfig;
-use anyhow::{bail, Context, Result};
-use jsonwebtoken::{decode, decode_header, Algorithm, DecodingKey, Validation};
+use anyhow::{Context, Result, bail};
+use jsonwebtoken::{Algorithm, DecodingKey, Validation, decode, decode_header};
 use reqwest::Client;
 use serde::Deserialize;
 use std::sync::Arc;
@@ -56,7 +56,8 @@ impl WorkosAuthenticator {
     }
 
     async fn refresh_jwks(&self) -> Result<Jwks> {
-        let response = self.client
+        let response = self
+            .client
             .get(&self.cfg.jwks_url)
             .send()
             .await
@@ -98,17 +99,25 @@ impl WorkosAuthenticator {
             }
         }
 
-        let decoding_key = DecodingKey::from_rsa_components(&key.n, &key.e)
-            .context("build RSA decoding key")?;
+        let decoding_key =
+            DecodingKey::from_rsa_components(&key.n, &key.e).context("build RSA decoding key")?;
         let mut validation = Validation::new(Algorithm::RS256);
         validation.set_issuer(&[self.cfg.issuer.as_str()]);
-        validation.set_audience(&[self.cfg.audience.as_str()]);
+
+        if !self.cfg.audience.trim().is_empty() {
+            validation.set_audience(&[self.cfg.audience.as_str()]);
+        } else {
+            validation.validate_aud = false;
+        }
 
         let claims = decode::<Claims>(token, &decoding_key, &validation)
             .context("validate OAuth JWT")?
             .claims;
 
-        Ok(Identity { subject: claims.sub, email: claims.email })
+        Ok(Identity {
+            subject: claims.sub,
+            email: claims.email,
+        })
     }
 }
 

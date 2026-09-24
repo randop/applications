@@ -1,4 +1,4 @@
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use serde::Deserialize;
 use std::path::PathBuf;
 
@@ -60,11 +60,11 @@ impl Config {
 
     pub fn validate(&self) -> Result<()> {
         if !self.auth.oauth_enabled {
-            bail!("auth.oauth_enabled must be true; this server supports OAuth authentication only");
+            bail!(
+                "auth.oauth_enabled must be true; this server supports OAuth authentication only"
+            );
         }
-        if self.auth.workos.issuer.trim().is_empty()
-            || self.auth.workos.audience.trim().is_empty()
-            || self.auth.workos.jwks_url.trim().is_empty()
+        if self.auth.workos.issuer.trim().is_empty() || self.auth.workos.jwks_url.trim().is_empty()
         {
             bail!("auth.workos issuer, audience, and jwks_url are required when OAuth is enabled");
         }
@@ -91,7 +91,9 @@ mod tests {
                     private_key: "key.pem".into(),
                 },
             },
-            storage: StorageConfig { directory: "mail".into() },
+            storage: StorageConfig {
+                directory: "mail".into(),
+            },
             auth: AuthConfig {
                 oauth_enabled: true,
                 workos: WorkosConfig {

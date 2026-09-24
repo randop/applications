@@ -11,10 +11,11 @@ directory = "/var/lib/imap"
 [auth]
 oauth_enabled = true
 
+# TODO: replace with real values
 [auth.workos]
-issuer = "https://YOUR_WORKOS_DOMAIN"
-audience = "YOUR_WORKOS_CLIENT_ID"
-jwks_url = "https://YOUR_WORKOS_DOMAIN/oauth2/jwks"
+issuer = "https://api.workos.com/user_management/client_xxx"
+audience = ""
+jwks_url = "https://api.workos.com/sso/jwks/client_xxx"
 
 [limits]
 max_command_bytes = 16384
