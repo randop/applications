@@ -14,7 +14,7 @@ pub struct DirectoryWatcher {
 }
 
 impl DirectoryWatcher {
-    pub fn start(store: Arc<DirectoryStore>, root: PathBuf) -> Result<Self> {
+    pub fn start(store: Arc<DirectoryStore>, spool: PathBuf) -> Result<Self> {
         let (tx, rx) = mpsc::sync_channel::<()>(1);
         let mut watcher =
             notify::recommended_watcher(move |result: notify::Result<Event>| match result {
@@ -29,8 +29,8 @@ impl DirectoryWatcher {
             })
             .context("create filesystem watcher")?;
         watcher
-            .watch(&root, RecursiveMode::NonRecursive)
-            .with_context(|| format!("watch {}", root.display()))?;
+            .watch(&spool, RecursiveMode::NonRecursive)
+            .with_context(|| format!("watch {}", spool.display()))?;
         let worker = thread::Builder::new()
             .name("imap-fs-reconcile".into())
             .spawn(move || {

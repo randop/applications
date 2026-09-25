@@ -6,7 +6,8 @@ certificate = "/etc/imap/server.crt"
 private_key = "/etc/imap/server.key"
 
 [storage]
-directory = "/var/lib/imap"
+spool = "/var/spool/imap"
+inbox = "/var/lib/imap"
 
 [auth]
 oauth_enabled = true

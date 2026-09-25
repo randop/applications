@@ -24,7 +24,8 @@ pub struct TlsConfig {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct StorageConfig {
-    pub directory: PathBuf,
+    pub spool: PathBuf,
+    pub inbox: PathBuf,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -92,7 +93,8 @@ mod tests {
                 },
             },
             storage: StorageConfig {
-                directory: "mail".into(),
+                spool: "spool".into(),
+                inbox: "mail".into(),
             },
             auth: AuthConfig {
                 oauth_enabled: true,

@@ -25,7 +25,8 @@ pub struct Message {
 }
 
 pub struct DirectoryStore {
-    root: PathBuf,
+    inbox: PathBuf,
+    spool: PathBuf,
     db: Mutex<Connection>,
 }
 
@@ -38,9 +39,10 @@ fn uidvalidity_from_uuid_v7(id: Uuid) -> u32 {
 }
 
 impl DirectoryStore {
-    pub fn open(root: &Path) -> Result<Self> {
-        fs::create_dir_all(root)?;
-        let meta = root.join(".imap");
+    pub fn open(inbox: &Path, spool: &Path) -> Result<Self> {
+        fs::create_dir_all(inbox)?;
+        fs::create_dir_all(spool)?;
+        let meta = inbox.join(".imap");
         fs::create_dir_all(&meta)?;
         let db = Connection::open(meta.join("metadata.sqlite"))?;
         db.execute_batch(
@@ -84,16 +86,27 @@ impl DirectoryStore {
         }
 
         let s = Self {
-            root: root.to_path_buf(),
+            inbox: inbox.to_path_buf(),
+            spool: spool.to_path_buf(),
             db: Mutex::new(db),
         };
         s.reconcile()?;
         Ok(s)
     }
 
-    pub(crate) fn reconcile(&self) -> Result<()> {
-        let db = self.db.lock().unwrap();
-        for entry in fs::read_dir(&self.root)? {
+    #[allow(dead_code)]
+    pub fn inbox_dir(&self) -> &Path {
+        &self.inbox
+    }
+
+    #[allow(dead_code)]
+    pub fn spool_dir(&self) -> &Path {
+        &self.spool
+    }
+
+    fn collect_uuid_files(dir: &Path) -> Result<Vec<(Uuid, PathBuf)>> {
+        let mut out = Vec::new();
+        for entry in fs::read_dir(dir)? {
             let entry = entry?;
             let path = entry.path();
             if path.extension().and_then(|x| x.to_str()) != Some("eml") {
@@ -105,28 +118,72 @@ impl DirectoryStore {
             let Ok(uuid) = Uuid::parse_str(stem) else {
                 continue;
             };
+            out.push((uuid, path));
+        }
+        Ok(out)
+    }
 
-            let exists: bool = db.query_row(
-                "SELECT EXISTS(SELECT 1 FROM messages WHERE uuid=?1)",
-                params![uuid.to_string()],
-                |r| r.get(0),
+    fn ensure_indexed(&self, uuid: &Uuid) -> Result<()> {
+        let db = self.db.lock().unwrap();
+        let exists: bool = db.query_row(
+            "SELECT EXISTS(SELECT 1 FROM messages WHERE uuid=?1)",
+            params![uuid.to_string()],
+            |r| r.get(0),
+        )?;
+        if !exists {
+            let uid: u32 =
+                db.query_row("SELECT uidnext FROM mailbox WHERE id=1", [], |r| r.get(0))?;
+            db.execute(
+                "INSERT INTO messages(uuid,uid,internal_date) VALUES(?1,?2,?3)",
+                params![uuid.to_string(), uid, Utc::now().to_rfc3339()],
             )?;
-            if !exists {
-                let uid: u32 =
-                    db.query_row("SELECT uidnext FROM mailbox WHERE id=1", [], |r| r.get(0))?;
-                db.execute(
-                    "INSERT INTO messages(uuid,uid,internal_date) VALUES(?1,?2,?3)",
-                    params![uuid.to_string(), uid, Utc::now().to_rfc3339()],
-                )?;
-                db.execute("UPDATE mailbox SET uidnext=uidnext+1 WHERE id=1", [])?;
+            db.execute("UPDATE mailbox SET uidnext=uidnext+1 WHERE id=1", [])?;
+        }
+        Ok(())
+    }
+
+    fn move_to_inbox(&self, uuid: &Uuid, spool_path: &Path) -> Result<()> {
+        let dest = self.inbox.join(format!("{uuid}.eml"));
+        if spool_path == dest {
+            return Ok(());
+        }
+        if dest.exists() {
+            // Already delivered; drop the spool duplicate.
+            if spool_path.exists() {
+                let _ = fs::remove_file(spool_path);
             }
+            return Ok(());
+        }
+        match fs::rename(spool_path, &dest) {
+            Ok(()) => Ok(()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(_) => {
+                // Fall back for cross-device moves: copy + remove.
+                fs::copy(spool_path, &dest)?;
+                let _ = fs::remove_file(spool_path);
+                Ok(())
+            }
+        }
+    }
+
+    pub(crate) fn reconcile(&self) -> Result<()> {
+        // Ingest new arrivals from the spool directory: index first, then
+        // move the message file into the inbox directory.
+        for (uuid, spool_path) in Self::collect_uuid_files(&self.spool)? {
+            self.ensure_indexed(&uuid)?;
+            self.move_to_inbox(&uuid, &spool_path)?;
+        }
+        // Repair: index any message files already in the inbox that are
+        // missing from the metadata (e.g. restored from backup).
+        for (uuid, _) in Self::collect_uuid_files(&self.inbox)? {
+            self.ensure_indexed(&uuid)?;
         }
         Ok(())
     }
 
     #[allow(dead_code)]
     pub fn start_watcher(self: &Arc<Self>) -> Result<crate::watcher::DirectoryWatcher> {
-        crate::watcher::DirectoryWatcher::start(self.clone(), self.root.clone())
+        crate::watcher::DirectoryWatcher::start(self.clone(), self.spool.clone())
     }
 
     pub fn uidvalidity(&self) -> Result<u32> {
@@ -147,7 +204,7 @@ impl DirectoryStore {
         while let Some(r) = rows.next()? {
             let uuid: String = r.get(0)?;
             let uuid = Uuid::parse_str(&uuid)?;
-            let path = self.root.join(format!("{uuid}.eml"));
+            let path = self.inbox.join(format!("{uuid}.eml"));
             if !path.exists() {
                 continue;
             }
@@ -168,8 +225,8 @@ impl DirectoryStore {
     #[allow(dead_code)]
     pub fn append(&self, bytes: &[u8], flags: &str) -> Result<Message> {
         let uuid = Uuid::now_v7();
-        let tmp = self.root.join(format!(".{uuid}.tmp"));
-        let final_path = self.root.join(format!("{uuid}.eml"));
+        let tmp = self.inbox.join(format!(".{uuid}.tmp"));
+        let final_path = self.inbox.join(format!("{uuid}.eml"));
         fs::write(&tmp, bytes)?;
         fs::rename(&tmp, &final_path)?;
 
@@ -242,7 +299,7 @@ impl DirectoryStore {
         let db = self.db.lock().unwrap();
         let mut removed = Vec::new();
         for (uuid, uid) in doomed {
-            let path = self.root.join(format!("{uuid}.eml"));
+            let path = self.inbox.join(format!("{uuid}.eml"));
             let _ = fs::remove_file(path);
             db.execute("DELETE FROM messages WHERE uid=?1", params![uid])?;
             removed.push(uid);
@@ -263,7 +320,7 @@ impl DirectoryStore {
             )
             .optional()?;
         match uuid {
-            Some(uuid) => Ok(Some(fs::read(self.root.join(format!("{uuid}.eml")))?)),
+            Some(uuid) => Ok(Some(fs::read(self.inbox.join(format!("{uuid}.eml")))?)),
             None => Ok(None),
         }
     }
