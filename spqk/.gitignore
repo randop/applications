@@ -1,0 +1,32 @@
+# Meson build directories
+build/
+builddir/
+.build/
+
+# Compiled object files
+*.o
+*.obj
+*.so
+*.dll
+*.dylib
+*.a
+*.lib
+
+# Meson subproject cache
+subprojects/packagecache/
+
+# IDE / editor files
+.vs/
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.sublime-project
+*.sublime-workspace
+compile_commands.json
+
+# OS files
+.DS_Store
+Thumbs.db
+._*

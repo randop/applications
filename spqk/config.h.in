@@ -1,0 +1,3 @@
+#pragma once
+
+#define SPQK_VERSION @SPQK_VERSION@
