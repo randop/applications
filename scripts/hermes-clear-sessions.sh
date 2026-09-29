@@ -35,5 +35,8 @@ for id in $SESSION_IDS; do
   hermes sessions delete "$id" --yes
 done
 
+hermes sessions prune --newer-than 1h --yes
+hermes sessions prune --older-than 1h --yes
+
 echo "----------------------------------------"
 echo "All sessions cleared successfully."
