@@ -12,8 +12,11 @@ builddir/
 *.a
 *.lib
 
-# Meson subproject cache
-subprojects/packagecache/
+# Meson subprojects: ignore downloaded/extracted sources,
+# keep only the wrap files and any local patches
+subprojects/*
+!subprojects/*.wrap
+!subprojects/packagefiles/
 
 # IDE / editor files
 .vs/

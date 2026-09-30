@@ -7,12 +7,14 @@
 #include <iostream>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <string_view>
 #include <vector>
 
 #include "config.h"
+#include "playback.hpp"
 
 #include <boost/program_options.hpp>
 #include <boost/json.hpp>
@@ -62,11 +64,13 @@ struct SpeechData {
   bool has_punctuation_list = false;
   std::vector<std::pair<espeak_PARAMETER, int>> extra_parameters;
   std::string output_file;
+  std::optional<int> silence_ms;
 };
 
 struct SpeechBatch {
   std::vector<SpeechData> items;
   std::string output_file;
+  std::optional<int> batch_silence_ms;
 };
 
 std::vector<short>* active_audio_samples = nullptr;
@@ -76,6 +80,15 @@ int collect_audio(short* samples, int count, espeak_EVENT*) {
     active_audio_samples->insert(active_audio_samples->end(), samples, samples + count);
   }
   return 0;
+}
+
+int parse_silence_ms(const boost::json::value& value, const char* field_name) {
+  if (!value.is_int64() || value.as_int64() < 0 ||
+      value.as_int64() > std::numeric_limits<int>::max()) {
+    throw std::runtime_error(std::string("field '") + field_name +
+                             "' must be a nonnegative integer within range");
+  }
+  return static_cast<int>(value.as_int64());
 }
 
 SpeechData parse_speech_item(const boost::json::value& parsed) {
@@ -91,7 +104,7 @@ SpeechData parse_speech_item(const boost::json::value& parsed) {
         name != "pitch" && name != "volume" && name != "range" &&
         name != "punctuation" && name != "capitals" && name != "word_gap" &&
         name != "intonation" && name != "ssml_break_mul" &&
-        name != "punctuation_list" &&
+        name != "punctuation_list" && name != "silence_ms" &&
         name != "output_file") {
       throw std::runtime_error("unknown field '" + name + "'");
     }
@@ -238,6 +251,10 @@ SpeechData parse_speech_item(const boost::json::value& parsed) {
     }
   }
   read_string("output_file", data.output_file);
+  const auto silence = object.find("silence_ms");
+  if (silence != object.end()) {
+    data.silence_ms = parse_silence_ms(silence->value(), "silence_ms");
+  }
   return data;
 }
 
@@ -253,7 +270,8 @@ SpeechBatch parse_speech_data(const std::string& payload) {
     if (object.contains("items")) {
       for (const auto& field : object) {
         const std::string name = field.key_c_str();
-        if (name != "items" && name != "output_file") {
+        if (name != "items" && name != "output_file" &&
+            name != "batch_silence_ms") {
           throw std::runtime_error("unknown batch field '" + name + "'");
         }
       }
@@ -266,6 +284,10 @@ SpeechBatch parse_speech_data(const std::string& payload) {
           throw std::runtime_error("batch 'output_file' must be a string");
         }
         batch.output_file = object.at("output_file").as_string().c_str();
+      }
+      if (object.contains("batch_silence_ms")) {
+        batch.batch_silence_ms = parse_silence_ms(
+            object.at("batch_silence_ms"), "batch_silence_ms");
       }
       for (const auto& item : items.as_array()) batch.items.push_back(parse_speech_item(item));
     } else {
@@ -340,9 +362,23 @@ bool write_wav(const std::string& path, int sample_rate,
   return true;
 }
 
+std::string escape_xml_text(const std::string& text) {
+  std::string escaped;
+  escaped.reserve(text.size());
+  for (char ch : text) {
+    switch (ch) {
+      case '&': escaped += "&amp;"; break;
+      case '<': escaped += "&lt;"; break;
+      case '>': escaped += "&gt;"; break;
+      default: escaped += ch; break;
+    }
+  }
+  return escaped;
+}
+
 int run_payload(const SpeechData& data, const std::string& output_file,
                 std::vector<short>* batch_samples = nullptr,
-                int* batch_sample_rate = nullptr) {
+                int* batch_sample_rate = nullptr, int trailing_delay_ms = 0) {
   const std::uint64_t id = next_synthesis_id++;
   const std::string voice = data.voice_properties
       ? (!data.voice_name.empty() ? data.voice_name
@@ -391,9 +427,17 @@ int run_payload(const SpeechData& data, const std::string& output_file,
     const std::wstring punctuation = to_wide(data.punctuation_list);
     espeak_SetPunctuationList(punctuation.c_str());
   }
+  std::string synthesis_text = data.text;
+  unsigned int synthesis_flags = espeakCHARS_UTF8;
+  if (trailing_delay_ms > 0) {
+    synthesis_text = "<speak>" + escape_xml_text(data.text) +
+                     "<break time=\"" + std::to_string(trailing_delay_ms) +
+                     "ms\"/></speak>";
+    synthesis_flags |= espeakSSML;
+  }
   unsigned int engine_message_id = 0;
   const espeak_ERROR result = espeak_Synth(
-      data.text.c_str(), 0, 0, POS_CHARACTER, 0, espeakCHARS_UTF8,
+      synthesis_text.c_str(), 0, 0, POS_CHARACTER, 0, synthesis_flags,
       &engine_message_id, nullptr);
   if (result == EE_OK) espeak_Synchronize();
   espeak_Terminate();
@@ -418,12 +462,19 @@ int run_batch(const SpeechBatch& batch) {
   bool use_combined_file = false;
   app_logger->info("spqk.batch status=start code=0 items={} next=spqk.synth.start",
                    batch.items.size());
-  for (const SpeechData& item : batch.items) {
+  for (std::size_t i = 0; i < batch.items.size(); ++i) {
+    const SpeechData& item = batch.items[i];
     const std::string& output_file = item.output_file.empty() ? batch.output_file : item.output_file;
     std::vector<short>* target = item.output_file.empty() && !batch.output_file.empty()
                                      ? &combined_samples : nullptr;
     if (target) use_combined_file = true;
-    if (run_payload(item, output_file, target, target ? &combined_sample_rate : nullptr) != 0) {
+    int trailing_delay = 0;
+    if (i + 1 < batch.items.size()) {
+      if (item.silence_ms) trailing_delay = *item.silence_ms;
+      else if (batch.batch_silence_ms) trailing_delay = *batch.batch_silence_ms;
+    }
+    if (run_payload(item, output_file, target, target ? &combined_sample_rate : nullptr,
+                    trailing_delay) != 0) {
       app_logger->error("spqk.batch status=error code=1 next=exit");
       return 1;
     }
@@ -590,6 +641,10 @@ int run_demo() {
 
 }  // namespace
 
+int speak_payload(const std::string& payload) {
+  return run_batch(parse_speech_data(payload));
+}
+
 int main(int argc, char* argv[]) {
   initialize_logger();
   namespace po = boost::program_options;
@@ -625,7 +680,7 @@ int main(int argc, char* argv[]) {
   if (args.count("list-voices")) return list_voices_json();
   if (args.count("data")) {
     try {
-      return run_batch(parse_speech_data(args["data"].as<std::string>()));
+      return process_speech(args["data"].as<std::string>(), speak_payload);
     } catch (const std::exception& error) {
       std::fprintf(stderr, "invalid --data payload: %s\n", error.what());
       log_synth_error(0, 1, "invalid_payload");

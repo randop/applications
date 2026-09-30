@@ -1,15 +1,17 @@
-fs = import('fs')
-
 project(
     'spqk',
     'cpp',
-    version: fs.read('VERSION').strip(),
+    version: run_command('cat', 'VERSION', check: true).stdout().strip(),
     default_options: ['cpp_std=c++23'],
 )
 
 espeak = dependency('espeak-ng')
-boost_program_options = dependency('boost', modules: ['program_options'])
-boost_json = dependency('boost', modules: ['json'])
+boost = dependency(
+    'boost',
+    modules: ['program_options', 'json', 'container'],
+    version: '>=1.90.0',
+)
+sqlite = dependency('sqlite3')
 spdlog_project = subproject(
     'spdlog',
     default_options: ['std_format=enabled', 'tests=disabled'],
@@ -22,7 +24,12 @@ configure_file(output: 'config.h', configuration: config_data)
 
 executable(
     'spqk',
-    'main.cpp',
-    dependencies: [espeak, boost_program_options, boost_json, spdlog],
+    ['main.cpp', 'playback.cpp'],
+    dependencies: [
+        espeak,
+        boost,
+        sqlite,
+        spdlog,
+    ],
     install: false,
 )

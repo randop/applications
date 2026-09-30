@@ -11,6 +11,8 @@ The `-d` / `--data` option synthesizes a JSON-configured utterance or batch.
 - Speech synthesis library development headers, library, and voice data
 - Boost.Program_options
 - Boost.JSON
+- Boost.Asio
+- SQLite 3
 - spdlog (provided through the Meson wrap, using the standard library formatter)
 
 Meson locates the speech synthesis library and both Boost components through
@@ -68,10 +70,32 @@ use a custom output path for the combined file, use the batch envelope form:
 Per-item `output_file` paths override the shared batch output path in either
 form.
 
+Set `silence_ms` on an item to add silent audio after that item. In a batch
+envelope, `batch_silence_ms` supplies the default delay for items that omit
+`silence_ms`. An item-level value overrides the batch value, including `0` to
+disable the gap after that item. Delays are added only between items, not after
+the final item, during playback or when writing a combined WAV:
+
+```sh
+./build/spqk --data '{"batch_silence_ms":500,"items":[{"text":"First."},{"text":"Second."}]}'
+./build/spqk --data '{"batch_silence_ms":500,"items":[{"text":"First.","silence_ms":150},{"text":"Second."}]}'
+```
+
+Both fields accept nonnegative integer milliseconds. `silence_ms` can also be
+used in an array batch; `batch_silence_ms` is available on the batch envelope
+object containing `items`.
+
+Each `--data` request is first stored as a BLOB in `spqk.sqlite3` in the
+current directory. A Boost.Asio coroutine drains pending rows serially through
+the playback/synthesis path. Successfully processed rows are deleted; failed
+rows remain with status `failed` for inspection. The `payloads` table has the
+columns `id`, `data`, `status`, and `created_at`.
+
 ## JSON payload
 
 The payload accepts a single speech item object, an array of speech item
-objects, or an object with `items` and an optional shared `output_file`.
+objects, or an object with `items` and optional `output_file` and
+`batch_silence_ms` values.
 Each speech item requires a non-empty `text` string; the other fields are
 optional.
 
@@ -90,6 +114,10 @@ optional.
 | `intonation` | integer | Default (`0`) | Passed directly to the synthesis parameter API. |
 | `ssml_break_mul` | integer | Default (`100`) | SSML break multiplier, passed directly to the synthesis API. |
 | `output_file` | string | Play audio | Non-empty path writes mono 16-bit PCM WAV. Empty string is treated as omitted. |
+| `silence_ms` | integer | No delay | Silent delay after this item, before the next batch item; nonnegative milliseconds. Overrides `batch_silence_ms`. |
+
+The batch envelope's optional `batch_silence_ms` field sets the nonnegative
+millisecond delay between items that do not specify their own `silence_ms`.
 
 The `voice` object supports the selection criteria exposed by the synthesis
 library:
