@@ -29,10 +29,19 @@ while true; do
     echo "GATEWAY(2),OK" >>/tmp/svc.txt || echo "GATEWAY(2),BAD" >>/tmp/svc.txt
 
   for svc in $SERVICES; do
-    if systemctl is-active --quiet "$svc"; then
-      status="OK"
+    if [ "$svc" = "NetworkManager" ]; then
+      if systemctl is-active --quiet "$svc" &&
+        ip link show bond0 2>/dev/null | grep -q "state UP"; then
+        status="OK"
+      else
+        status="BAD"
+      fi
     else
-      status="BAD"
+      if systemctl is-active --quiet "$svc"; then
+        status="OK"
+      else
+        status="BAD"
+      fi
     fi
     name=$(alias_for "$svc")
     echo "$name,$status" >>/tmp/svc.txt
