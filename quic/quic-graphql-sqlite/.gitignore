@@ -1,0 +1,35 @@
+# Rust / Cargo
+/target/
+**/*.rs.bk
+Cargo.lock
+
+# TLS / Certificates (Private keys & local certs)
+*.pem
+*.key
+*.crt
+*.pfx
+*.p12
+
+# SQLite Databases & temporary files
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# Archives & Generated Bundles
+*.tar.gz
+*.zip
+
+# Environment & Local Configuration
+.env
+.env.*
+!.env.example
+
+# IDEs & Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*.DS_Store

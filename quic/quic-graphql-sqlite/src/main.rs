@@ -52,7 +52,7 @@ async fn graphql_playground(res: &mut Response) {
 
 #[handler]
 async fn graphql_post(req: &mut Request, res: &mut Response, depot: &mut Depot) {
-    if let Some(schema) = depot.obtain::<AppSchema>().cloned() {
+    if let Ok(schema) = depot.obtain::<AppSchema>() {
         if let Ok(gql_req) = req.parse_json::<GqlRequest>().await {
             let gql_resp = schema.execute(gql_req).await;
             res.render(Json(gql_resp));
@@ -81,7 +81,7 @@ async fn main() -> anyhow::Result<()> {
         .finish();
 
     let router = Router::new()
-        .hoop(salvo::affix::inject(schema))
+        .hoop(salvo::affix_state::inject(schema))
         .push(
             Router::with_path("graphql")
                 .get(graphql_playground)
