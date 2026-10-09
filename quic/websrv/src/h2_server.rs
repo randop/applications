@@ -3,9 +3,8 @@ use std::{collections::HashMap, future::poll_fn};
 
 use bytes::Bytes;
 use http::{header, Response, StatusCode};
-use monoio::net::TcpStream;
+use monoio::io::{AsyncReadRent, AsyncWriteRent};
 use monoio_http::h2::{server, RecvStream};
-use monoio_rustls::ServerTlsStream;
 use tracing::debug;
 
 use crate::{
@@ -15,11 +14,10 @@ use crate::{
 
 const MAX_CONCURRENT_STREAMS: u32 = 128;
 
-pub async fn serve_connection(
-    stream: ServerTlsStream<TcpStream>,
-    app: AppRuntime,
-    quic_port: u16,
-) -> anyhow::Result<()> {
+pub async fn serve_connection<T>(stream: T, app: AppRuntime, quic_port: u16) -> anyhow::Result<()>
+where
+    T: AsyncReadRent + AsyncWriteRent + Unpin + 'static,
+{
     let mut builder = server::Builder::new();
     builder
         .max_concurrent_streams(MAX_CONCURRENT_STREAMS)

@@ -214,43 +214,61 @@ pub async fn serve(
         .context("could not inspect QUIC socket address")?;
     let h3_config = quiche::h3::Config::new().context("could not create HTTP/3 configuration")?;
     let controllers = ControllerRuntime::new(&config.controllers, config.max_request_body_bytes)?;
-    let tcp_http1_enabled = config.tcp_http1_enabled;
-    let http1_cleartext_enabled = config.http1_cleartext_enabled;
-    let tcp_listen = config.listen;
-    let cleartext_listen = config.http1_cleartext_listen;
+    let http1_secure_enabled = config.http1_secure_enabled;
+    let http1_plain_enabled = config.http1_plain_enabled;
+    let http2_secure_enabled = config.http2_secure_enabled;
+    let http2_plain_enabled = config.http2_plain_enabled;
+    let secure_http_enabled = http1_secure_enabled || http2_secure_enabled;
+    let plain_http_enabled = http1_plain_enabled || http2_plain_enabled;
+    let secure_listen = config.listen;
+    let plain_listen = config.plain_listen;
     let app = AppRuntime {
         config: Rc::new(config),
         controllers,
         active_requests: Rc::new(Cell::new(0)),
     };
 
-    if tcp_http1_enabled {
+    if secure_http_enabled {
         let tls_config = crate::http1_server::make_tls_config(
             &app.config.cert_path,
             &app.config.key_path,
-            app.config.http2_enabled,
+            http1_secure_enabled,
+            http2_secure_enabled,
         )?;
-        let listener = monoio::net::TcpListener::bind(tcp_listen).with_context(|| {
-            format!("could not bind io_uring HTTPS/1.1 listener at {tcp_listen}")
+        let listener = monoio::net::TcpListener::bind(secure_listen).with_context(|| {
+            format!("could not bind io_uring secure HTTP TCP listener at {secure_listen}")
         })?;
-        info!(listen = %tcp_listen, protocol = "HTTPS/1.1 + HTTP/2", http2_enabled = app.config.http2_enabled, "TLS HTTP listener started on Monoio io_uring with ALPN");
+        info!(
+            listen = %secure_listen,
+            http1_secure_enabled,
+            http2_secure_enabled,
+            "secure HTTP listener started on Monoio io_uring with TLS ALPN"
+        );
         monoio::spawn(crate::http1_server::serve(
             listener,
             tls_config,
             app.clone(),
-            tcp_listen.port(),
+            secure_listen.port(),
+            http1_secure_enabled,
         ));
     }
 
-    if http1_cleartext_enabled {
-        let listener = monoio::net::TcpListener::bind(cleartext_listen).with_context(|| {
-            format!("could not bind io_uring cleartext HTTP/1.1 listener at {cleartext_listen}")
+    if plain_http_enabled {
+        let listener = monoio::net::TcpListener::bind(plain_listen).with_context(|| {
+            format!("could not bind io_uring plain HTTP TCP listener at {plain_listen}")
         })?;
-        info!(listen = %cleartext_listen, protocol = "HTTP/1.1 cleartext", "plain HTTP/1.1 listener started on Monoio io_uring");
-        monoio::spawn(crate::http1_server::serve_cleartext(
+        info!(
+            listen = %plain_listen,
+            http1_plain_enabled,
+            http2_plain_enabled,
+            "plain HTTP listener started on Monoio io_uring"
+        );
+        monoio::spawn(crate::http1_server::serve_plain(
             listener,
             app.clone(),
-            tcp_listen.port(),
+            secure_listen.port(),
+            http1_plain_enabled,
+            http2_plain_enabled,
         ));
     }
 
@@ -304,7 +322,18 @@ pub async fn serve(
     // Initial packets use a client-chosen original destination CID until the server's
     // source CID is observed. Keep that original CID as an alias for Initial retries.
     let mut cid_aliases: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();
-    info!(listen = %local_addr, runtime = "monoio/IoUringDriver", protocol = "HTTP/3", tcp_https_http1_enabled = tcp_http1_enabled, tcp_cleartext_http1_enabled = http1_cleartext_enabled, cleartext_listen = %cleartext_listen, "websrv started; no fallback driver is configured");
+    info!(
+        listen = %local_addr,
+        runtime = "monoio/IoUringDriver",
+        protocol = "HTTP/3",
+        http1_secure_enabled,
+        http1_plain_enabled,
+        http2_secure_enabled,
+        http2_plain_enabled,
+        secure_listen = %secure_listen,
+        plain_listen = %plain_listen,
+        "websrv started"
+    );
 
     while let Some(event) = event_rx.next().await {
         match event {

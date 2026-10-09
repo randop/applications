@@ -1,8 +1,8 @@
 # websrv
 
-`websrv` is a Linux-only, QUIC-first Rust web server. Its runtime is **Monoio's `IoUringDriver`**, selected explicitly at startup. HTTP/3 over QUIC/UDP is the primary protocol and is implemented with `quiche`. HTTPS over TCP negotiates HTTP/2 or HTTP/1.1 with TLS ALPN; plain HTTP/1.1 is available on a separate configurable TCP listener. All TCP/UDP request-time networking and static content reads use the same mandatory Monoio `IoUringDriver`. Every protocol shares virtual-host routing, static sites, and in-process Rust REST controllers. TCP responses advertise the QUIC endpoint through `Alt-Svc` so compatible clients can upgrade to HTTP/3.
+`websrv` is a Linux-only, QUIC-first Rust web server. Its runtime is **Monoio's `IoUringDriver`**, selected explicitly at startup. HTTP/3 over QUIC/UDP is the primary protocol and is implemented with `quiche`. HTTPS over TCP independently enables HTTP/2 and HTTP/1.1 through TLS ALPN; cleartext HTTP/1.1 and prior-knowledge HTTP/2 (h2c) share a configurable TCP listener. All TCP/UDP request-time networking and static content reads use the same mandatory Monoio `IoUringDriver`. Every protocol shares virtual-host routing, static sites, and in-process Rust REST controllers. TCP responses advertise the QUIC endpoint through `Alt-Svc` so compatible clients can upgrade to HTTP/3.
 
-**There is no Tokio dependency, no epoll/legacy driver feature, and no request-time I/O backend fallback.** If `io_uring_setup` is unavailable or denied by a container seccomp policy, startup fails instead of silently changing drivers. Request-time UDP/TCP socket operations and static-content reads are driven by Monoio’s mandatory `IoUringDriver`. Configuration parsing, path canonicalization, and initial TLS PEM loading are bootstrap operations performed before traffic is accepted. `tcp_http1_enabled: true` enables the TLS TCP listener on the same numeric address/port as the UDP/QUIC listener; ALPN negotiates HTTP/2 (`h2`) or HTTP/1.1. `http2_enabled: true` enables HTTP/2 by default while retaining HTTP/1.1 compatibility. `http1_cleartext_enabled: true` enables plain HTTP/1.1 on `http1_cleartext_listen` (default `0.0.0.0:8080`). All listeners use Monoio's mandatory io_uring driver; disable the relevant booleans to turn listeners off. This is a *protocol* fallback, not an I/O backend fallback.
+**There is no Tokio dependency, no epoll/legacy driver feature, and no request-time I/O backend fallback.** If `io_uring_setup` is unavailable or denied by a container seccomp policy, startup fails instead of silently changing drivers. Request-time UDP/TCP socket operations and static-content reads are driven by Monoio’s mandatory `IoUringDriver`. Configuration parsing, path canonicalization, and initial TLS PEM loading are bootstrap operations performed before traffic is accepted. `http1_secure_enabled: true` enables HTTPS HTTP/1.1 on the secure TCP listener; `http2_secure_enabled: true` independently enables HTTP/2 there. ALPN selects an enabled secure protocol. `http1_plain_enabled: true` enables cleartext HTTP/1.1 on `plain_listen`; `http2_plain_enabled: true` enables cleartext HTTP/2 prior-knowledge on the same listener (default `0.0.0.0:8080`). All listeners use Monoio's mandatory io_uring driver; disable individual protocol flags to disable them. Cleartext HTTP/2 supports prior-knowledge h2c, not the HTTP/1.1 Upgrade mechanism.
 
 ## Architecture
 
@@ -40,7 +40,7 @@ UDP socket (Monoio IoUringDriver)             TCP socket (Monoio IoUringDriver)
 - A container/runtime seccomp policy that permits `io_uring_setup`, `io_uring_enter`, and the required registration calls.
 - Rust stable and Cargo. The `quiche` build may need a C/C++ toolchain, CMake, Clang, Perl, and pkg-config to build its TLS dependency.
 - A trusted certificate chain and matching private key in PEM format, covering every hostname you serve. The same certificate/key pair is used by QUIC and HTTPS (HTTP/2 and HTTP/1.1).
-- UDP ingress for HTTP/3 and TCP ingress for HTTPS/HTTP/2 and HTTPS/1.1 on `0.0.0.0:8443`, plus configurable plain HTTP/1.1 TCP on `0.0.0.0:8080` in the bundled config.
+- UDP ingress for HTTP/3 and TCP ingress for HTTPS/HTTP/2 and HTTPS/1.1 on `0.0.0.0:8443`, plus configurable plain HTTP/1.1 and prior-knowledge HTTP/2 TCP on `0.0.0.0:8080` in the bundled config.
 
 ## Build and run
 
@@ -68,7 +68,7 @@ curl --http3-only --resolve api.example.test:8443:127.0.0.1 \
   --cacert certs/fullchain.pem https://api.example.test:8443/healthz
 ```
 
-The TCP TLS listener shares the same certificate and hostname routing. To explicitly verify the HTTP/1.1 fallback, use a curl build supporting standard TLS:
+The secure TCP listener shares the same certificate and hostname routing. To explicitly verify secure HTTP/1.1, use a curl build supporting standard TLS:
 
 ```bash
 curl --http1.1 --resolve example.test:8443:127.0.0.1 \
@@ -92,16 +92,30 @@ curl --http2 --resolve api.example.test:8443:127.0.0.1 \
   --write-out '\nHTTP version: %{http_version}\n' https://api.example.test:8443/healthz
 ```
 
-The reported HTTP version should be `2`. If `http2_enabled` is `false`, the TLS listener advertises only `http/1.1` and clients use the existing HTTP/1.1 path.
+The reported HTTP version should be `2`. The `http2_secure_enabled` flag controls only secure HTTP/2; secure HTTP/1.1 is independently controlled by `http1_secure_enabled`.
 
-### Local cleartext HTTP/1.1 smoke test
+### Local cleartext HTTP/1.1 and HTTP/2 prior-knowledge smoke test
 
-The bundled config enables plain HTTP/1.1 on TCP port 8080. Use the `Host` header (or `--resolve`) to exercise the same virtual-host routing without TLS:
+The bundled config enables plain HTTP/1.1 and prior-knowledge HTTP/2 on TCP port 8080. Use the `Host` header (or `--resolve`) to exercise the same virtual-host routing without TLS:
 
 ```bash
 curl --http1.1 --resolve example.test:8080:127.0.0.1 http://example.test:8080/
 curl --http1.1 --resolve api.example.test:8080:127.0.0.1 http://api.example.test:8080/healthz
 ```
+
+### Local cleartext HTTP/2 prior-knowledge (h2c) smoke test
+
+When `http2_plain_enabled` is true, clients can connect directly using the HTTP/2 connection preface. This listener supports prior-knowledge h2c, not the HTTP/1.1 `Upgrade: h2c` mechanism.
+
+```bash
+curl --http2-prior-knowledge --resolve example.test:8080:127.0.0.1 \
+  --write-out '\nHTTP version: %{http_version}\n' http://example.test:8080/
+
+curl --http2-prior-knowledge --resolve api.example.test:8080:127.0.0.1 \
+  --write-out '\nHTTP version: %{http_version}\n' http://api.example.test:8080/healthz
+```
+
+Both cleartext protocols share `plain_listen`; the server detects the HTTP/2 connection preface without losing bytes and routes all remaining requests to the same virtual-host dispatcher.
 
 For a trusted local development CA, add the CA certificate to `--cacert`; do not expose development certificates to public traffic.
 
@@ -111,10 +125,11 @@ The shipped config is executable documentation. This is the high-level shape:
 
 ```yaml
 listen: "0.0.0.0:8443"
-tcp_http1_enabled: true
-http2_enabled: true
-http1_cleartext_enabled: true
-http1_cleartext_listen: "0.0.0.0:8080"
+http1_secure_enabled: true
+http1_plain_enabled: true
+plain_listen: "0.0.0.0:8080"
+http2_secure_enabled: true
+http2_plain_enabled: true
 tls_cert: "certs/fullchain.pem"
 tls_key: "certs/privkey.pem"
 max_request_body_bytes: 1048576
@@ -156,10 +171,11 @@ controllers:
 | Key | Meaning |
 |---|---|
 | `listen` | Socket address used for the HTTP/3 UDP listener and, if enabled, the HTTPS TCP listener |
-| `tcp_http1_enabled` | Enables TLS over TCP on the same numeric port as the QUIC UDP listener; ALPN selects HTTP/2 or HTTP/1.1 |
-| `http2_enabled` | Enables HTTP/2 negotiation through TLS ALPN (`h2`); defaults to `true`. Set false to retain HTTPS/1.1 only. |
-| `http1_cleartext_enabled` | Enables plain HTTP/1.1 over TCP without TLS; configured listener uses io_uring too |
-| `http1_cleartext_listen` | TCP socket address for cleartext HTTP/1.1 (bundled default `0.0.0.0:8080`) |
+| `http1_secure_enabled` | Enables HTTPS/1.1 through TLS ALPN; defaults to `true` |
+| `http1_plain_enabled` | Enables cleartext HTTP/1.1 on the shared plain TCP listener |
+| `plain_listen` | Shared TCP socket address for cleartext HTTP/1.1 and prior-knowledge HTTP/2 (bundled default `0.0.0.0:8080`) |
+| `http2_secure_enabled` | Enables HTTP/2 through TLS ALPN (`h2`); defaults to `true` |
+| `http2_plain_enabled` | Enables cleartext HTTP/2 prior-knowledge (h2c); defaults to `false` in custom configs |
 | `tls_cert`, `tls_key` | PEM certificate chain and private key shared by QUIC TLS and rustls; certificate SANs must cover configured hosts |
 | `max_request_body_bytes` | Request payload upper bound; validated at collection and dispatch, with a 16 MiB hard maximum |
 | `max_static_file_bytes` | Maximum bytes read for one static file; validation caps it at 32 MiB |
@@ -187,23 +203,27 @@ Controllers live in `src/controllers/`. The dispatcher receives a parsed HTTP/3,
 
 ## Docker and systemd
 
-Docker image builds include a C toolchain for quiche and declare **UDP 8443, TCP 8443 (HTTP/2/HTTPS/1.1), and TCP 8080** (the latter when cleartext HTTP/1.1 is enabled). Publish only the ports you intend to expose. Mount a certificate and key at `/run/secrets/tls_cert` and `/run/secrets/tls_key`, and make sure the container runtime's seccomp policy permits io_uring. Do not use `--privileged` as a workaround; use an explicit, reviewed seccomp profile.
+Docker image builds include a C toolchain for quiche and declare **UDP 8443, TCP 8443 (HTTP/2/HTTPS/1.1), and TCP 8080** (the latter when cleartext HTTP/1.1 and HTTP/2 prior-knowledge is enabled). Publish only the ports you intend to expose. Mount a certificate and key at `/run/secrets/tls_cert` and `/run/secrets/tls_key`, and make sure the container runtime's seccomp policy permits io_uring. Do not use `--privileged` as a workaround; use an explicit, reviewed seccomp profile.
 
-The systemd unit runs as an unprivileged `websrv` user. Install it and the binary under `/opt/websrv`, edit `/opt/websrv/config.yaml`, and ensure the service user can read the private key and static roots. The bundled config also listens for cleartext HTTP/1.1 on TCP port 8080; firewall that port only if intended for public access.
+The systemd unit runs as an unprivileged `websrv` user. Install it and the binary under `/opt/websrv`, edit `/opt/websrv/config.yaml`, and ensure the service user can read the private key and static roots. The bundled config also listens for cleartext HTTP/1.1 and HTTP/2 prior-knowledge on TCP port 8080; firewall that port only if intended for public access.
 
 ## Security and production readiness
 
 - Use valid TLS certificates and automate rotation; the server does not generate certificates. The configured certificate and private key are shared by QUIC and TCP TLS and must cover every configured hostname.
-- Expose UDP for HTTP/3, TCP for HTTPS/HTTP/2 when `tcp_http1_enabled` is true, and TCP on `http1_cleartext_listen` when `http1_cleartext_enabled` is true. Every listener uses the mandatory io_uring runtime. Plain HTTP is unencrypted; use it only when appropriate (for example, behind a trusted TLS-terminating proxy or for an intentional HTTP endpoint).
+- Expose UDP for HTTP/3, TCP for secure HTTP when either `http1_secure_enabled` or `http2_secure_enabled` is true, and TCP on `plain_listen` when either `http1_plain_enabled` or `http2_plain_enabled` is true. Every listener uses the mandatory io_uring runtime. Plain HTTP is unencrypted; use it only when appropriate (for example, behind a trusted TLS-terminating proxy or for an intentional HTTP endpoint).
 - Keep private keys readable only by the service account.
 - Do not allow the serving account to modify website roots; avoid symlinks inside served roots.
 - Configure edge rate limiting / DDoS protection and observe structured logs before exposing a public endpoint. Active connection migration is disabled in this version; connections are keyed by destination connection ID to allow multiple connections from one client UDP socket without conflation.
 - Audit controller handlers before enabling mutating API routes. The sample item store is in-memory and has no authentication or authorization built in.
 - Set resource limits, benchmark under representative traffic, and test overload behavior before production deployment.
 
+## Version 0.4.0
+
+Adds independent enable flags for secure and cleartext HTTP/1.1 and HTTP/2, consolidates cleartext protocols on `plain_listen`, and implements cleartext HTTP/2 prior-knowledge (h2c). When both plain protocols are enabled, the server detects the HTTP/2 connection preface and replays all sniffed bytes to the selected parser. The startup log uses the concise `websrv started` message. The mandatory Monoio `IoUringDriver`, QUIC/HTTP/3, TLS ALPN, virtual hosting, and Rust controllers remain intact.
+
 ## Version 0.3.1
 
-This release adds TLS ALPN HTTP/2 via `monoio-http` and `monoio-rustls`, reusing the same virtual-host and controller dispatcher and enforcing bounded HTTP/2 response flow control. It aligns `monoio-rustls` with rustls 0.23 and reads ALPN directly from the Monoio TLS stream, fixing the TLS config type mismatch and stream API usage. Existing QUIC/HTTP/3, HTTPS/HTTP/1.1, cleartext HTTP/1.1, YAML configuration, static hosting, and Rust REST controllers remain available. `http2_enabled` defaults to `true`; setting it to `false` keeps the TLS listener on HTTP/1.1 only.
+Added TLS ALPN HTTP/2 via `monoio-http` and `monoio-rustls`, reusing the same virtual-host and controller dispatcher and enforcing bounded HTTP/2 response flow control. Aligned `monoio-rustls` with rustls 0.23 and reads ALPN directly from the Monoio TLS stream. The older config key names are replaced by the five protocol flags listed above.
 
 ## Validation status
 

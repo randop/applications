@@ -1,9 +1,9 @@
-//! TLS ALPN dispatch for HTTP/2 and HTTP/1.1 plus cleartext HTTP/1.1, using Monoio io_uring.
+//! TLS ALPN dispatch for secure HTTP/2 and HTTP/1.1, plus cleartext HTTP/1.1 and h2c on Monoio io_uring.
 use std::{
     cell::Cell,
     collections::HashMap,
     fs::File,
-    io::{self, BufReader},
+    io::{self, BufReader, Cursor},
     path::Path,
     rc::Rc,
     sync::Arc,
@@ -11,7 +11,7 @@ use std::{
 
 use anyhow::{Context, Result};
 use monoio::{
-    io::{AsyncReadRent, AsyncWriteRentExt},
+    io::{AsyncReadRent, AsyncWriteRentExt, PrefixedReadIo},
     net::{TcpListener, TcpStream},
 };
 use monoio_rustls::TlsAcceptor;
@@ -30,7 +30,8 @@ const SOCKET_READ_BYTES: usize = 16 * 1024;
 pub fn make_tls_config(
     cert_path: &Path,
     key_path: &Path,
-    http2_enabled: bool,
+    http1_secure_enabled: bool,
+    http2_secure_enabled: bool,
 ) -> Result<Arc<ServerConfig>> {
     let mut cert_reader = BufReader::new(
         File::open(cert_path)
@@ -60,28 +61,35 @@ pub fn make_tls_config(
         .with_no_client_auth()
         .with_single_cert(certs, key)
         .context("TLS certificate and private key do not match or are unsupported")?;
-    tls.alpn_protocols = if http2_enabled {
-        vec![b"h2".to_vec(), b"http/1.1".to_vec()]
-    } else {
-        vec![b"http/1.1".to_vec()]
-    };
+    tls.alpn_protocols = [
+        (http2_secure_enabled, b"h2".to_vec()),
+        (http1_secure_enabled, b"http/1.1".to_vec()),
+    ]
+    .into_iter()
+    .filter_map(|(enabled, protocol)| enabled.then_some(protocol))
+    .collect();
+    anyhow::ensure!(
+        !tls.alpn_protocols.is_empty(),
+        "at least one secure HTTP protocol must be enabled when building the TLS config"
+    );
     Ok(Arc::new(tls))
 }
 
-/// A single TLS listener negotiates HTTP/2 or HTTP/1.1 with ALPN. Clients which do
-/// not send ALPN retain the legacy HTTP/1.1 behavior.
+/// A single secure listener negotiates only the enabled HTTP protocols via ALPN.
+/// Clients without ALPN use HTTP/1.1 only when `http1_secure_enabled` is true.
 pub async fn serve(
     listener: TcpListener,
     tls_config: Arc<ServerConfig>,
     app: AppRuntime,
     quic_port: u16,
+    http1_secure_enabled: bool,
 ) {
     let active_connections = Rc::new(Cell::new(0usize));
     let acceptor = TlsAcceptor::from(tls_config);
     info!(
-        protocol = "HTTPS/1.1 + HTTP/2 (ALPN)",
+        protocol = "HTTPS (ALPN)",
         runtime = "monoio/IoUringDriver",
-        "TLS listener started on Monoio io_uring"
+        "secure HTTP listener started on Monoio io_uring"
     );
 
     loop {
@@ -98,7 +106,9 @@ pub async fn serve(
                 let acceptor = acceptor.clone();
                 monoio::spawn(async move {
                     let _connection_guard = guard;
-                    if let Err(error) = serve_tls_connection(stream, acceptor, app, quic_port).await
+                    if let Err(error) =
+                        serve_tls_connection(stream, acceptor, app, quic_port, http1_secure_enabled)
+                            .await
                     {
                         debug!(%peer, %error, "TLS connection ended");
                     }
@@ -117,6 +127,7 @@ async fn serve_tls_connection(
     acceptor: TlsAcceptor,
     app: AppRuntime,
     quic_port: u16,
+    http1_secure_enabled: bool,
 ) -> Result<()> {
     let tls_stream = acceptor
         .accept(stream)
@@ -125,22 +136,40 @@ async fn serve_tls_connection(
     let negotiated = tls_stream.alpn_protocol();
     match negotiated.as_deref() {
         Some(b"h2") => crate::h2_server::serve_connection(tls_stream, app, quic_port).await,
-        Some(b"http/1.1") | None => {
+        Some(b"http/1.1") => {
+            anyhow::ensure!(
+                http1_secure_enabled,
+                "client negotiated HTTP/1.1 but HTTP/1.1 over TLS is disabled"
+            );
             serve_http1_stream(tls_stream, app, quic_port).await?;
             Ok(())
         }
+        None if http1_secure_enabled => {
+            serve_http1_stream(tls_stream, app, quic_port).await?;
+            Ok(())
+        }
+        None => anyhow::bail!("client did not negotiate ALPN and HTTP/1.1 over TLS is disabled"),
         Some(protocol) => anyhow::bail!("unsupported negotiated ALPN protocol: {:?}", protocol),
     }
 }
 
-/// Serve plain HTTP/1.1 over TCP without TLS. It uses the same parser, hostname
-/// dispatcher, static-site roots, and in-process Rust controllers as HTTP/2 and H3.
-pub async fn serve_cleartext(listener: TcpListener, app: AppRuntime, quic_port: u16) {
+/// Serve cleartext HTTP/1.1 and/or prior-knowledge HTTP/2 (h2c) over one TCP
+/// listener. When both are enabled, the HTTP/2 connection preface selects H2;
+/// all other prefixes are preserved and passed into the HTTP/1.1 parser.
+pub async fn serve_plain(
+    listener: TcpListener,
+    app: AppRuntime,
+    quic_port: u16,
+    http1_plain_enabled: bool,
+    http2_plain_enabled: bool,
+) {
     let active_connections = Rc::new(Cell::new(0usize));
     info!(
-        protocol = "HTTP/1.1 cleartext",
+        protocol = "cleartext HTTP/1.1 and/or HTTP/2 prior-knowledge",
+        http1_plain_enabled,
+        http2_plain_enabled,
         runtime = "monoio/IoUringDriver",
-        "cleartext listener started on Monoio io_uring"
+        "plain HTTP listener started on Monoio io_uring"
     );
 
     loop {
@@ -156,8 +185,16 @@ pub async fn serve_cleartext(listener: TcpListener, app: AppRuntime, quic_port: 
                 let app = app.clone();
                 monoio::spawn(async move {
                     let _connection_guard = guard;
-                    if let Err(error) = serve_http1_stream(stream, app, quic_port).await {
-                        debug!(%peer, %error, "cleartext HTTP/1.1 connection ended");
+                    if let Err(error) = serve_plain_connection(
+                        stream,
+                        app,
+                        quic_port,
+                        http1_plain_enabled,
+                        http2_plain_enabled,
+                    )
+                    .await
+                    {
+                        debug!(%peer, %error, "plain HTTP connection ended");
                     }
                 });
             }
@@ -166,6 +203,87 @@ pub async fn serve_cleartext(listener: TcpListener, app: AppRuntime, quic_port: 
                 monoio::time::sleep(std::time::Duration::from_millis(25)).await;
             }
         }
+    }
+}
+
+const H2_PRIOR_KNOWLEDGE_PREFACE: &[u8] = b"PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n";
+
+async fn serve_plain_connection(
+    mut stream: TcpStream,
+    app: AppRuntime,
+    quic_port: u16,
+    http1_plain_enabled: bool,
+    http2_plain_enabled: bool,
+) -> Result<()> {
+    match (http1_plain_enabled, http2_plain_enabled) {
+        (true, false) => {
+            serve_http1_stream(stream, app, quic_port).await?;
+            Ok(())
+        }
+        (false, true) => crate::h2_server::serve_connection(stream, app, quic_port).await,
+        (false, false) => Ok(()),
+        (true, true) => {
+            let mut initial = Vec::with_capacity(SOCKET_READ_BYTES);
+            loop {
+                match classify_h2_preface(&initial) {
+                    Some(true) => {
+                        // PrefixedReadIo replays the full preface and any coalesced
+                        // SETTINGS frame bytes to the HTTP/2 state machine.
+                        let prefixed = PrefixedReadIo::new(stream, Cursor::new(initial));
+                        return crate::h2_server::serve_connection(prefixed, app, quic_port).await;
+                    }
+                    Some(false) => {
+                        // This is HTTP/1.1 (or another protocol); never discard the
+                        // sniffed bytes before handing the connection to its parser.
+                        let prefixed = PrefixedReadIo::new(stream, Cursor::new(initial));
+                        serve_http1_stream(prefixed, app, quic_port).await?;
+                        return Ok(());
+                    }
+                    None => {}
+                }
+
+                let (result, buffer) = stream.read(vec![0u8; SOCKET_READ_BYTES]).await;
+                match result {
+                    Ok(0) => return Ok(()),
+                    Ok(read) => initial.extend_from_slice(&buffer[..read]),
+                    Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+                    Err(error) => return Err(error.into()),
+                }
+            }
+        }
+    }
+}
+
+/// `Some(true)` is a complete HTTP/2 prior-knowledge preface, `Some(false)` is
+/// definitively not HTTP/2, and `None` means the bytes are still a valid prefix.
+fn classify_h2_preface(bytes: &[u8]) -> Option<bool> {
+    let matched = bytes.len().min(H2_PRIOR_KNOWLEDGE_PREFACE.len());
+    if bytes[..matched] != H2_PRIOR_KNOWLEDGE_PREFACE[..matched] {
+        Some(false)
+    } else if bytes.len() >= H2_PRIOR_KNOWLEDGE_PREFACE.len() {
+        Some(true)
+    } else {
+        None
+    }
+}
+
+#[cfg(test)]
+mod plain_protocol_tests {
+    use super::{classify_h2_preface, H2_PRIOR_KNOWLEDGE_PREFACE};
+
+    #[test]
+    fn detects_h2_preface_even_when_it_arrives_in_fragments() {
+        for end in 0..H2_PRIOR_KNOWLEDGE_PREFACE.len() {
+            assert_eq!(
+                classify_h2_preface(&H2_PRIOR_KNOWLEDGE_PREFACE[..end]),
+                None,
+                "valid partial preface of length {end} must wait for more bytes",
+            );
+        }
+        assert_eq!(classify_h2_preface(H2_PRIOR_KNOWLEDGE_PREFACE), Some(true));
+        assert_eq!(classify_h2_preface(b"GET / HTTP/1.1\r\n"), Some(false));
+        assert_eq!(classify_h2_preface(b"POST / HTTP/1.1\r\n"), Some(false));
+        assert_eq!(classify_h2_preface(b"PRI X HTTP/2.0\r\n"), Some(false));
     }
 }
 
