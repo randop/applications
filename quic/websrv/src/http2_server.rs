@@ -1,7 +1,15 @@
 //! HTTP/2 request adapter using monoio-http on the mandatory Monoio io_uring runtime.
-use std::{collections::HashMap, future::poll_fn};
+use std::{
+    cell::Cell,
+    collections::HashMap,
+    future::poll_fn,
+    net::IpAddr,
+    rc::Rc,
+    time::{Duration, Instant},
+};
 
 use bytes::Bytes;
+use futures::future::{select, Either};
 use http::{header, Response, StatusCode};
 use monoio::io::{AsyncReadRent, AsyncWriteRent};
 use monoio_http::h2::{server, RecvStream};
@@ -12,42 +20,92 @@ use crate::{
     quic_server::AppRuntime,
 };
 
-const MAX_CONCURRENT_STREAMS: u32 = 128;
+struct ActiveStreamGuard(Rc<Cell<usize>>);
 
-pub async fn serve_connection<T>(stream: T, app: AppRuntime, quic_port: u16) -> anyhow::Result<()>
+impl ActiveStreamGuard {
+    fn new(active: Rc<Cell<usize>>) -> Self {
+        active.set(active.get().saturating_add(1));
+        Self(active)
+    }
+}
+
+impl Drop for ActiveStreamGuard {
+    fn drop(&mut self) {
+        self.0.set(self.0.get().saturating_sub(1));
+    }
+}
+
+pub async fn serve_connection<T>(
+    stream: T,
+    app: AppRuntime,
+    quic_port: u16,
+    peer_ip: IpAddr,
+) -> anyhow::Result<()>
 where
     T: AsyncReadRent + AsyncWriteRent + Unpin + 'static,
 {
     let mut builder = server::Builder::new();
     builder
-        .max_concurrent_streams(MAX_CONCURRENT_STREAMS)
-        .max_header_list_size(64 * 1024)
+        .max_concurrent_streams(app.max_concurrent_streams_per_connection())
+        .max_header_list_size(u32::try_from(app.max_header_bytes()).unwrap_or(u32::MAX))
         .max_send_buffer_size(64 * 1024);
-    let mut h2 = builder
-        .handshake(stream)
-        .await
-        .map_err(|error| anyhow::anyhow!("HTTP/2 handshake failed: {error}"))?;
+    let handshake = monoio::time::timeout(
+        Duration::from_millis(app.timeout_ms("http2_handshake")),
+        builder.handshake(stream),
+    )
+    .await;
+    let mut h2 = match handshake {
+        Ok(Ok(connection)) => connection,
+        Ok(Err(error)) => return Err(anyhow::anyhow!("HTTP/2 handshake failed: {error}")),
+        Err(_) => {
+            app.record_timeout("http2_handshake");
+            anyhow::bail!("HTTP/2 connection preface/handshake deadline exceeded");
+        }
+    };
 
-    while let Some(result) = h2.accept().await {
-        match result {
-            Ok((request, responder)) => {
+    let active_streams = Rc::new(Cell::new(0usize));
+    loop {
+        // An idle keep-alive connection is bounded too. If no complete request
+        // arrives in the idle budget, close the connection rather than retaining
+        // a task and connection state indefinitely.
+        let accepted = monoio::time::timeout(
+            Duration::from_millis(app.timeout_ms("keep_alive_idle")),
+            h2.accept(),
+        )
+        .await;
+        match accepted {
+            Err(_) => {
+                if active_streams.get() != 0 {
+                    // Do not tear down a multiplexed connection merely because no
+                    // new stream completed while existing streams were still working.
+                    debug!(%peer_ip, active_streams = active_streams.get(), "HTTP/2 accept wait elapsed while streams remain active");
+                    continue;
+                }
+                app.record_timeout("keep_alive");
+                debug!(%peer_ip, "HTTP/2 keep-alive idle deadline exceeded; closing connection");
+                return Ok(());
+            }
+            Ok(None) => break,
+            Ok(Some(Ok((request, responder)))) => {
                 let app = app.clone();
+                let stream_guard = ActiveStreamGuard::new(active_streams.clone());
                 monoio::spawn(async move {
-                    if let Err(error) = handle_request(request, responder, app, quic_port).await {
-                        debug!(%error, "HTTP/2 request stream ended with an error");
+                    let _stream_guard = stream_guard;
+                    if let Err(error) =
+                        handle_request(request, responder, app, quic_port, peer_ip).await
+                    {
+                        debug!(%peer_ip, %error, "HTTP/2 request stream ended with an error");
                     }
                 });
             }
-            Err(error) => {
-                debug!(%error, "HTTP/2 stream rejected by protocol layer");
+            Ok(Some(Err(error))) => {
+                debug!(%peer_ip, %error, "HTTP/2 stream rejected by protocol layer");
             }
         }
     }
 
-    // monoio-http requires the connection to remain driven until it reports closed;
-    // this also flushes connection-level frames after the peer stops opening streams.
     if let Err(error) = poll_fn(|cx| h2.poll_closed(cx)).await {
-        debug!(%error, "HTTP/2 connection closed with a protocol error");
+        debug!(%peer_ip, %error, "HTTP/2 connection closed with a protocol error");
     }
     Ok(())
 }
@@ -57,19 +115,9 @@ async fn handle_request(
     mut responder: server::SendResponse<Bytes>,
     app: AppRuntime,
     quic_port: u16,
+    peer_ip: IpAddr,
 ) -> anyhow::Result<()> {
     let (parts, mut incoming) = request.into_parts();
-    let Some(guard) = app.acquire_request() else {
-        send_response(
-            &mut responder,
-            HttpResponse::error(503, "server request capacity reached"),
-            false,
-            quic_port,
-        )
-        .await?;
-        return Ok(());
-    };
-
     let authority = parts
         .uri
         .authority()
@@ -83,16 +131,30 @@ async fn handle_request(
         })
         .unwrap_or_default();
     if authority.is_empty() {
-        send_response(
+        send_response_with_timeout(
             &mut responder,
             HttpResponse::error(400, "HTTP/2 request requires :authority or Host"),
             false,
             quic_port,
+            &app,
         )
         .await?;
-        drop(guard);
         return Ok(());
     }
+    let guard = match app.acquire_request(peer_ip, &authority) {
+        Ok(guard) => guard,
+        Err(rejection) => {
+            send_response_with_timeout(
+                &mut responder,
+                rejection.response(),
+                false,
+                quic_port,
+                &app,
+            )
+            .await?;
+            return Ok(());
+        }
+    };
 
     let raw_path = parts
         .uri
@@ -104,11 +166,12 @@ async fn handle_request(
         || raw_path.contains('#')
         || raw_path.contains('\\')
     {
-        send_response(
+        send_response_with_timeout(
             &mut responder,
             HttpResponse::error(400, "HTTP/2 :path must be origin-form"),
             false,
             quic_port,
+            &app,
         )
         .await?;
         drop(guard);
@@ -130,19 +193,32 @@ async fn handle_request(
 
     let body_limit = app.max_request_body_bytes();
     let mut body = Vec::with_capacity(body_limit.min(16 * 1024));
+    let body_deadline = Instant::now() + Duration::from_millis(app.timeout_ms("request_body"));
     let mut body_too_large = false;
-    while let Some(next) = incoming.data().await {
+    loop {
+        let next = match monoio::time::timeout_at(body_deadline.into(), incoming.data()).await {
+            Ok(next) => next,
+            Err(_) => {
+                app.record_timeout("request_body");
+                drop(incoming);
+                send_response_with_timeout(
+                    &mut responder,
+                    HttpResponse::error(408, "request body deadline exceeded"),
+                    false,
+                    quic_port,
+                    &app,
+                )
+                .await?;
+                drop(guard);
+                return Ok(());
+            }
+        };
+        let Some(next) = next else { break };
         let chunk = match next {
             Ok(chunk) => chunk,
             Err(error) => {
-                send_response(
-                    &mut responder,
-                    HttpResponse::error(400, "could not read HTTP/2 request body"),
-                    false,
-                    quic_port,
-                )
-                .await?;
-                debug!(%error, "HTTP/2 request body read failed");
+                app.record_client_abort();
+                debug!(%peer_ip, %error, "HTTP/2 request body read failed or stream was reset");
                 drop(guard);
                 return Ok(());
             }
@@ -154,34 +230,71 @@ async fn handle_request(
         body.extend_from_slice(&chunk);
         let _ = incoming.flow_control().release_capacity(chunk.len());
     }
+    drop(incoming);
 
     let method = parts.method.as_str().to_owned();
-    let mut response = if body_too_large {
-        HttpResponse::error(413, "request body exceeds configured limit")
-    } else {
-        app.dispatch(HttpRequest {
-            method: method.clone(),
-            authority,
-            path,
-            query,
-            headers,
-            body,
-            body_too_large: false,
-        })
-        .await
+    let is_head = method.eq_ignore_ascii_case("HEAD");
+    let request = HttpRequest {
+        method,
+        authority,
+        path,
+        query,
+        headers,
+        body,
+        body_too_large: false,
     };
-    if method.eq_ignore_ascii_case("HEAD") {
+    let app_for_dispatch = app.clone();
+    let response_work = Box::pin(async move {
+        if body_too_large {
+            HttpResponse::error(413, "request body exceeds configured limit")
+        } else {
+            app_for_dispatch.dispatch(request).await
+        }
+    });
+    // Observe peer resets while application work is running. Completing the
+    // reset branch drops the processing future and therefore cancels its work.
+    let reset_observer = Box::pin(poll_fn(|cx| responder.poll_reset(cx)));
+    let mut response = match select(response_work, reset_observer).await {
+        Either::Left((response, reset_observer)) => {
+            drop(reset_observer);
+            response
+        }
+        Either::Right((_reset, response_work)) => {
+            drop(response_work);
+            app.record_client_abort();
+            drop(guard);
+            return Ok(());
+        }
+    };
+    if is_head {
         response.head_only = true;
     }
-    send_response(
-        &mut responder,
-        response,
-        method.eq_ignore_ascii_case("HEAD"),
-        quic_port,
-    )
-    .await?;
+    let send_result =
+        send_response_with_timeout(&mut responder, response, is_head, quic_port, &app).await;
     drop(guard);
+    send_result?;
     Ok(())
+}
+
+async fn send_response_with_timeout(
+    responder: &mut server::SendResponse<Bytes>,
+    response: HttpResponse,
+    is_head: bool,
+    quic_port: u16,
+    app: &AppRuntime,
+) -> anyhow::Result<()> {
+    match monoio::time::timeout(
+        Duration::from_millis(app.timeout_ms("response_write")),
+        send_response(responder, response, is_head, quic_port),
+    )
+    .await
+    {
+        Ok(result) => result,
+        Err(_) => {
+            app.record_timeout("response_write");
+            anyhow::bail!("HTTP/2 response write deadline exceeded; dropping the stream aborts it");
+        }
+    }
 }
 
 async fn send_response(

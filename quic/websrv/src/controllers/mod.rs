@@ -57,7 +57,12 @@ impl ControllerRuntime {
         })
     }
 
-    pub async fn dispatch(&self, controller_name: &str, request: HttpRequest) -> HttpResponse {
+    pub async fn dispatch(
+        &self,
+        controller_name: &str,
+        request: HttpRequest,
+        metrics: serde_json::Value,
+    ) -> HttpResponse {
         if request.body_too_large || request.body.len() > self.max_body_bytes {
             return HttpResponse::error(413, "request body exceeds configured limit");
         }
@@ -84,8 +89,15 @@ impl ControllerRuntime {
             }
 
             let mut response = match route.handler.as_str() {
-                "health" | "status" | "echo" => {
-                    core::handle(&route.handler, request.clone(), params, self.max_body_bytes).await
+                "health" | "status" | "metrics" | "echo" => {
+                    core::handle(
+                        &route.handler,
+                        request.clone(),
+                        params,
+                        self.max_body_bytes,
+                        metrics.clone(),
+                    )
+                    .await
                 }
                 "items" => {
                     items::handle(

@@ -10,6 +10,32 @@ tls_key: "/run/secrets/tls_key"
 max_request_body_bytes: 1048576
 max_static_file_bytes: 16777216
 log_filter: "info,websrv=info"
+timeouts:
+  tls_handshake_ms: 5000
+  request_headers_ms: 5000
+  request_body_ms: 10000
+  request_process_ms: 5000
+  response_write_ms: 10000
+  keep_alive_idle_ms: 15000
+limits:
+  max_inflight_requests: 256
+  max_inflight_requests_per_ip: 32
+  max_inflight_requests_per_host: 128
+  max_inflight_static_requests: 16
+  max_inflight_controller_requests: 128
+  max_concurrent_streams_per_connection: 128
+  max_header_bytes: 65536
+  max_tcp_connections: 256
+  max_tcp_connections_per_ip: 32
+  max_quic_connections: 512
+  max_quic_connections_per_ip: 64
+  max_tracked_client_ips: 65536
+rate_limit:
+  enabled: true
+  global_requests_per_second: 1000
+  global_burst: 2000
+  requests_per_second_per_ip: 20
+  burst_per_ip: 40
 default_host: "example.test"
 virtual_hosts:
   - host: "example.test"
@@ -32,6 +58,7 @@ controllers:
     routes:
       - { method: "GET", path: "/healthz", handler: "health" }
       - { method: "GET", path: "/status", handler: "status" }
+      - { method: "GET", path: "/metrics", handler: "metrics" }
       - { method: "POST", path: "/echo", handler: "echo" }
       - { method: "GET", path: "/v1/items", handler: "items" }
       - { method: "POST", path: "/v1/items", handler: "items" }

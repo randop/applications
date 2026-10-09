@@ -3,18 +3,23 @@
 
 use std::{
     cell::Cell,
+    cell::RefCell,
     collections::{HashMap, VecDeque},
-    net::SocketAddr,
+    net::{IpAddr, SocketAddr},
     rc::Rc,
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc,
     },
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use anyhow::{Context, Result};
-use futures::{channel::mpsc, SinkExt, StreamExt};
+use futures::{
+    channel::mpsc,
+    future::{select, Either},
+    SinkExt, StreamExt,
+};
 use monoio::net::udp::UdpSocket;
 use quiche::h3::NameValue;
 use ring::rand::SecureRandom;
@@ -31,36 +36,341 @@ const UDP_READ_BUFFER: usize = 65_535;
 const QUIC_PACKET_BUFFER: usize = 1350;
 const TIMER_TICK: Duration = Duration::from_millis(5);
 const RESPONSE_CHUNK: usize = 16 * 1024;
-const MAX_ACTIVE_REQUESTS: usize = 16;
-const MAX_CONNECTIONS: usize = 512;
 
 #[derive(Clone)]
 pub(crate) struct AppRuntime {
     config: Rc<Config>,
     controllers: ControllerRuntime,
-    active_requests: Rc<Cell<usize>>,
+    protection: Rc<RefCell<ProtectionState>>,
 }
 
 pub(crate) struct RequestGuard {
-    active_requests: Rc<Cell<usize>>,
+    protection: Rc<RefCell<ProtectionState>>,
+    client_ip: IpAddr,
+    host_key: String,
+    workload: WorkloadClass,
 }
 
 impl Drop for RequestGuard {
     fn drop(&mut self) {
-        self.active_requests
-            .set(self.active_requests.get().saturating_sub(1));
+        let mut state = self.protection.borrow_mut();
+        state.active_requests = state.active_requests.saturating_sub(1);
+        if let Some(client) = state.clients.get_mut(&self.client_ip) {
+            client.in_flight = client.in_flight.saturating_sub(1);
+            client.last_seen = Instant::now();
+        }
+        let remove_host_counter = if let Some(count) = state.hosts_in_flight.get_mut(&self.host_key)
+        {
+            *count = count.saturating_sub(1);
+            *count == 0
+        } else {
+            false
+        };
+        if remove_host_counter {
+            state.hosts_in_flight.remove(&self.host_key);
+        }
+        match self.workload {
+            WorkloadClass::Static => {
+                state.active_static_requests = state.active_static_requests.saturating_sub(1)
+            }
+            WorkloadClass::Controller => {
+                state.active_controller_requests =
+                    state.active_controller_requests.saturating_sub(1)
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum AdmissionError {
+    GlobalCapacity,
+    PerIpCapacity,
+    PerHostCapacity,
+    WorkloadCapacity,
+    RateLimited,
+    GlobalRateLimited,
+    ClientTableFull,
+}
+
+impl AdmissionError {
+    pub(crate) fn response(self) -> HttpResponse {
+        match self {
+            Self::RateLimited => HttpResponse::error(429, "per-client request rate limit exceeded"),
+            Self::GlobalRateLimited => {
+                HttpResponse::error(503, "server request rate limit exceeded")
+            }
+            Self::GlobalCapacity
+            | Self::PerIpCapacity
+            | Self::PerHostCapacity
+            | Self::WorkloadCapacity
+            | Self::ClientTableFull => HttpResponse::error(503, "server request capacity reached"),
+        }
+    }
+}
+
+struct ClientBudget {
+    in_flight: usize,
+    tcp_connections: usize,
+    quic_connections: usize,
+    tokens: f64,
+    last_refill: Instant,
+    last_seen: Instant,
+}
+
+fn take_rate_limit_token(
+    tokens: &mut f64,
+    last_refill: &mut Instant,
+    now: Instant,
+    requests_per_second: u32,
+    burst: u32,
+) -> bool {
+    let elapsed = now.duration_since(*last_refill).as_secs_f64();
+    *tokens = (*tokens + elapsed * f64::from(requests_per_second)).min(f64::from(burst));
+    *last_refill = now;
+    if *tokens < 1.0 {
+        false
+    } else {
+        *tokens -= 1.0;
+        true
+    }
+}
+
+#[derive(Default)]
+struct ProtectionCounters {
+    rejected_global: u64,
+    rejected_per_ip: u64,
+    rejected_per_host: u64,
+    rejected_workload: u64,
+    rejected_client_table: u64,
+    rate_limited: u64,
+    global_rate_limited: u64,
+    tls_handshake_timeouts: u64,
+    request_header_timeouts: u64,
+    request_body_timeouts: u64,
+    request_process_timeouts: u64,
+    response_write_timeouts: u64,
+    keep_alive_timeouts: u64,
+    client_aborts: u64,
+    rejected_tcp_connections: u64,
+    rejected_quic_connections: u64,
+    http2_handshake_timeouts: u64,
+}
+
+struct ProtectionState {
+    active_requests: usize,
+    active_static_requests: usize,
+    active_controller_requests: usize,
+    active_tcp_connections: usize,
+    active_quic_connections: usize,
+    clients: HashMap<IpAddr, ClientBudget>,
+    hosts_in_flight: HashMap<String, usize>,
+    global_tokens: f64,
+    global_last_refill: Instant,
+    counters: ProtectionCounters,
+}
+
+impl ProtectionState {
+    fn new(rate_limit: &crate::config::RateLimitConfig) -> Self {
+        Self {
+            active_requests: 0,
+            active_static_requests: 0,
+            active_controller_requests: 0,
+            active_tcp_connections: 0,
+            active_quic_connections: 0,
+            clients: HashMap::new(),
+            hosts_in_flight: HashMap::new(),
+            global_tokens: rate_limit.global_burst as f64,
+            global_last_refill: Instant::now(),
+            counters: ProtectionCounters::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+enum WorkloadClass {
+    Static,
+    Controller,
+}
+
+pub(crate) struct TcpConnectionGuard {
+    protection: Rc<RefCell<ProtectionState>>,
+    client_ip: IpAddr,
+}
+
+impl Drop for TcpConnectionGuard {
+    fn drop(&mut self) {
+        let mut state = self.protection.borrow_mut();
+        state.active_tcp_connections = state.active_tcp_connections.saturating_sub(1);
+        if let Some(client) = state.clients.get_mut(&self.client_ip) {
+            client.tcp_connections = client.tcp_connections.saturating_sub(1);
+            client.last_seen = Instant::now();
+        }
+    }
+}
+
+pub(crate) struct QuicConnectionGuard {
+    protection: Rc<RefCell<ProtectionState>>,
+    client_ip: IpAddr,
+}
+
+impl Drop for QuicConnectionGuard {
+    fn drop(&mut self) {
+        let mut state = self.protection.borrow_mut();
+        state.active_quic_connections = state.active_quic_connections.saturating_sub(1);
+        if let Some(client) = state.clients.get_mut(&self.client_ip) {
+            client.quic_connections = client.quic_connections.saturating_sub(1);
+            client.last_seen = Instant::now();
+        }
     }
 }
 
 impl AppRuntime {
-    pub(crate) fn acquire_request(&self) -> Option<RequestGuard> {
-        let current = self.active_requests.get();
-        if current >= MAX_ACTIVE_REQUESTS {
-            return None;
+    pub(crate) fn acquire_request(
+        &self,
+        client_ip: IpAddr,
+        authority: &str,
+    ) -> Result<RequestGuard, AdmissionError> {
+        let (host_key, workload) = self
+            .config
+            .resolve_host(authority)
+            .map(|vhost| {
+                (
+                    vhost.host.clone(),
+                    if vhost.static_site.is_some() {
+                        WorkloadClass::Static
+                    } else {
+                        WorkloadClass::Controller
+                    },
+                )
+            })
+            .unwrap_or_else(|| ("<unmatched-host>".to_owned(), WorkloadClass::Controller));
+        let now = Instant::now();
+        let mut state = self.protection.borrow_mut();
+
+        if state.active_requests >= self.config.limits.max_inflight_requests {
+            state.counters.rejected_global = state.counters.rejected_global.saturating_add(1);
+            return Err(AdmissionError::GlobalCapacity);
         }
-        self.active_requests.set(current + 1);
-        Some(RequestGuard {
-            active_requests: self.active_requests.clone(),
+
+        if self.config.rate_limit.enabled {
+            // Borrow the two token-bucket fields as disjoint fields of the state.
+            // This keeps the refill timestamp updated even when a request is denied.
+            let global_rate_allowed = {
+                let ProtectionState {
+                    global_tokens,
+                    global_last_refill,
+                    ..
+                } = &mut *state;
+                take_rate_limit_token(
+                    global_tokens,
+                    global_last_refill,
+                    now,
+                    self.config.rate_limit.global_requests_per_second,
+                    self.config.rate_limit.global_burst,
+                )
+            };
+            if !global_rate_allowed {
+                state.counters.global_rate_limited =
+                    state.counters.global_rate_limited.saturating_add(1);
+                return Err(AdmissionError::GlobalRateLimited);
+            }
+        }
+
+        // Expire inactive rate-limit entries before admitting a new source. The
+        // table is bounded even when an attacker sprays random source addresses.
+        state.clients.retain(|_, budget| {
+            budget.in_flight > 0
+                || budget.tcp_connections > 0
+                || budget.quic_connections > 0
+                || now.duration_since(budget.last_seen) < Duration::from_secs(60)
+        });
+        if !state.clients.contains_key(&client_ip)
+            && state.clients.len() >= self.config.limits.max_tracked_client_ips
+        {
+            let oldest_inactive = state
+                .clients
+                .iter()
+                .filter(|(_, budget)| {
+                    budget.in_flight == 0
+                        && budget.tcp_connections == 0
+                        && budget.quic_connections == 0
+                })
+                .min_by_key(|(_, budget)| budget.last_seen)
+                .map(|(ip, _)| *ip);
+            if let Some(ip) = oldest_inactive {
+                state.clients.remove(&ip);
+            } else {
+                state.counters.rejected_client_table =
+                    state.counters.rejected_client_table.saturating_add(1);
+                return Err(AdmissionError::ClientTableFull);
+            }
+        }
+
+        let (rate_limited, per_ip_full) = {
+            let client = state
+                .clients
+                .entry(client_ip)
+                .or_insert_with(|| ClientBudget {
+                    in_flight: 0,
+                    tcp_connections: 0,
+                    quic_connections: 0,
+                    tokens: self.config.rate_limit.burst_per_ip as f64,
+                    last_refill: now,
+                    last_seen: now,
+                });
+            client.last_seen = now;
+            let rate_limited = self.config.rate_limit.enabled
+                && !take_rate_limit_token(
+                    &mut client.tokens,
+                    &mut client.last_refill,
+                    now,
+                    self.config.rate_limit.requests_per_second_per_ip,
+                    self.config.rate_limit.burst_per_ip,
+                );
+            let full = client.in_flight >= self.config.limits.max_inflight_requests_per_ip;
+            (rate_limited, full)
+        };
+        if rate_limited {
+            state.counters.rate_limited = state.counters.rate_limited.saturating_add(1);
+            return Err(AdmissionError::RateLimited);
+        }
+        if per_ip_full {
+            state.counters.rejected_per_ip = state.counters.rejected_per_ip.saturating_add(1);
+            return Err(AdmissionError::PerIpCapacity);
+        }
+        if state.hosts_in_flight.get(&host_key).copied().unwrap_or(0)
+            >= self.config.limits.max_inflight_requests_per_host
+        {
+            state.counters.rejected_per_host = state.counters.rejected_per_host.saturating_add(1);
+            return Err(AdmissionError::PerHostCapacity);
+        }
+        let workload_full = match workload {
+            WorkloadClass::Static => {
+                state.active_static_requests >= self.config.limits.max_inflight_static_requests
+            }
+            WorkloadClass::Controller => {
+                state.active_controller_requests
+                    >= self.config.limits.max_inflight_controller_requests
+            }
+        };
+        if workload_full {
+            state.counters.rejected_workload = state.counters.rejected_workload.saturating_add(1);
+            return Err(AdmissionError::WorkloadCapacity);
+        }
+        if let Some(client) = state.clients.get_mut(&client_ip) {
+            client.in_flight += 1;
+        }
+        *state.hosts_in_flight.entry(host_key.clone()).or_insert(0) += 1;
+        state.active_requests += 1;
+        match workload {
+            WorkloadClass::Static => state.active_static_requests += 1,
+            WorkloadClass::Controller => state.active_controller_requests += 1,
+        }
+        Ok(RequestGuard {
+            protection: self.protection.clone(),
+            client_ip,
+            host_key,
+            workload,
         })
     }
 
@@ -68,6 +378,25 @@ impl AppRuntime {
         if request.body_too_large || request.body.len() > self.config.max_request_body_bytes {
             return HttpResponse::error(413, "request body exceeds configured limit");
         }
+        match monoio::time::timeout(
+            Duration::from_millis(self.config.timeouts.request_process_ms),
+            self.dispatch_inner(request),
+        )
+        .await
+        {
+            Ok(response) => response,
+            Err(_) => {
+                self.record_timeout("request_process");
+                warn!(
+                    phase = "request_process",
+                    "request processing deadline exceeded; request future cancelled"
+                );
+                HttpResponse::error(504, "request processing deadline exceeded")
+            }
+        }
+    }
+
+    async fn dispatch_inner(&self, request: HttpRequest) -> HttpResponse {
         let Some(vhost) = self.config.resolve_host(&request.authority) else {
             return HttpResponse::error(421, "no virtual host is configured for this authority");
         };
@@ -76,13 +405,204 @@ impl AppRuntime {
             (Some(site), None) => {
                 static_site::serve(site, &request, self.config.max_static_file_bytes).await
             }
-            (None, Some(controller)) => self.controllers.dispatch(controller, request).await,
+            (None, Some(controller)) => {
+                self.controllers
+                    .dispatch(controller, request, self.metrics_snapshot())
+                    .await
+            }
             _ => HttpResponse::error(500, "invalid virtual-host configuration"),
         }
     }
 
     pub(crate) fn max_request_body_bytes(&self) -> usize {
         self.config.max_request_body_bytes
+    }
+
+    pub(crate) fn record_timeout(&self, phase: &'static str) {
+        let mut state = self.protection.borrow_mut();
+        let counter = match phase {
+            "tls_handshake" => &mut state.counters.tls_handshake_timeouts,
+            "http2_handshake" => &mut state.counters.http2_handshake_timeouts,
+            "request_headers" => &mut state.counters.request_header_timeouts,
+            "request_body" => &mut state.counters.request_body_timeouts,
+            "request_process" => &mut state.counters.request_process_timeouts,
+            "response_write" => &mut state.counters.response_write_timeouts,
+            _ => &mut state.counters.keep_alive_timeouts,
+        };
+        *counter = counter.saturating_add(1);
+    }
+
+    pub(crate) fn record_client_abort(&self) {
+        let mut state = self.protection.borrow_mut();
+        state.counters.client_aborts = state.counters.client_aborts.saturating_add(1);
+    }
+
+    pub(crate) fn metrics_snapshot(&self) -> serde_json::Value {
+        let state = self.protection.borrow();
+        serde_json::json!({
+            "requests_in_flight": state.active_requests,
+            "static_requests_in_flight": state.active_static_requests,
+            "controller_requests_in_flight": state.active_controller_requests,
+            "tcp_connections_in_flight": state.active_tcp_connections,
+            "quic_connections_in_flight": state.active_quic_connections,
+            "tracked_client_ips": state.clients.len(),
+            "requests_rejected_global_capacity_total": state.counters.rejected_global,
+            "requests_rejected_per_ip_capacity_total": state.counters.rejected_per_ip,
+            "requests_rejected_per_host_capacity_total": state.counters.rejected_per_host,
+            "requests_rejected_workload_capacity_total": state.counters.rejected_workload,
+            "requests_rejected_client_table_full_total": state.counters.rejected_client_table,
+            "requests_rate_limited_total": state.counters.rate_limited,
+            "requests_global_rate_limited_total": state.counters.global_rate_limited,
+            "tls_handshake_timeouts_total": state.counters.tls_handshake_timeouts,
+            "request_header_timeouts_total": state.counters.request_header_timeouts,
+            "request_body_timeouts_total": state.counters.request_body_timeouts,
+            "request_process_timeouts_total": state.counters.request_process_timeouts,
+            "response_write_timeouts_total": state.counters.response_write_timeouts,
+            "keep_alive_timeouts_total": state.counters.keep_alive_timeouts,
+            "client_aborts_total": state.counters.client_aborts,
+            "tcp_connections_rejected_total": state.counters.rejected_tcp_connections,
+            "quic_connections_rejected_total": state.counters.rejected_quic_connections,
+            "http2_handshake_timeouts_total": state.counters.http2_handshake_timeouts,
+        })
+    }
+
+    pub(crate) fn timeout_ms(&self, phase: &'static str) -> u64 {
+        match phase {
+            "tls_handshake" => self.config.timeouts.tls_handshake_ms,
+            "http2_handshake" => self.config.timeouts.request_headers_ms,
+            "request_headers" => self.config.timeouts.request_headers_ms,
+            "request_body" => self.config.timeouts.request_body_ms,
+            "request_process" => self.config.timeouts.request_process_ms,
+            "response_write" => self.config.timeouts.response_write_ms,
+            _ => self.config.timeouts.keep_alive_idle_ms,
+        }
+    }
+
+    pub(crate) fn max_header_bytes(&self) -> usize {
+        self.config.limits.max_header_bytes
+    }
+    pub(crate) fn max_concurrent_streams_per_connection(&self) -> u32 {
+        self.config.limits.max_concurrent_streams_per_connection
+    }
+
+    pub(crate) fn acquire_tcp_connection(&self, client_ip: IpAddr) -> Option<TcpConnectionGuard> {
+        let now = Instant::now();
+        let mut state = self.protection.borrow_mut();
+        if state.active_tcp_connections >= self.config.limits.max_tcp_connections {
+            state.counters.rejected_tcp_connections =
+                state.counters.rejected_tcp_connections.saturating_add(1);
+            return None;
+        }
+        state.clients.retain(|_, budget| {
+            budget.in_flight > 0
+                || budget.tcp_connections > 0
+                || budget.quic_connections > 0
+                || now.duration_since(budget.last_seen) < Duration::from_secs(60)
+        });
+        if !state.clients.contains_key(&client_ip)
+            && state.clients.len() >= self.config.limits.max_tracked_client_ips
+        {
+            let oldest_inactive = state
+                .clients
+                .iter()
+                .filter(|(_, budget)| {
+                    budget.in_flight == 0
+                        && budget.tcp_connections == 0
+                        && budget.quic_connections == 0
+                })
+                .min_by_key(|(_, budget)| budget.last_seen)
+                .map(|(ip, _)| *ip);
+            if let Some(ip) = oldest_inactive {
+                state.clients.remove(&ip);
+            } else {
+                state.counters.rejected_tcp_connections =
+                    state.counters.rejected_tcp_connections.saturating_add(1);
+                return None;
+            }
+        }
+        let client = state
+            .clients
+            .entry(client_ip)
+            .or_insert_with(|| ClientBudget {
+                in_flight: 0,
+                tcp_connections: 0,
+                quic_connections: 0,
+                tokens: self.config.rate_limit.burst_per_ip as f64,
+                last_refill: now,
+                last_seen: now,
+            });
+        if client.tcp_connections >= self.config.limits.max_tcp_connections_per_ip {
+            state.counters.rejected_tcp_connections =
+                state.counters.rejected_tcp_connections.saturating_add(1);
+            return None;
+        }
+        client.tcp_connections += 1;
+        client.last_seen = now;
+        state.active_tcp_connections += 1;
+        Some(TcpConnectionGuard {
+            protection: self.protection.clone(),
+            client_ip,
+        })
+    }
+
+    pub(crate) fn acquire_quic_connection(&self, client_ip: IpAddr) -> Option<QuicConnectionGuard> {
+        let now = Instant::now();
+        let mut state = self.protection.borrow_mut();
+        if state.active_quic_connections >= self.config.limits.max_quic_connections {
+            state.counters.rejected_quic_connections =
+                state.counters.rejected_quic_connections.saturating_add(1);
+            return None;
+        }
+        state.clients.retain(|_, budget| {
+            budget.in_flight > 0
+                || budget.tcp_connections > 0
+                || budget.quic_connections > 0
+                || now.duration_since(budget.last_seen) < Duration::from_secs(60)
+        });
+        if !state.clients.contains_key(&client_ip)
+            && state.clients.len() >= self.config.limits.max_tracked_client_ips
+        {
+            let oldest_inactive = state
+                .clients
+                .iter()
+                .filter(|(_, budget)| {
+                    budget.in_flight == 0
+                        && budget.tcp_connections == 0
+                        && budget.quic_connections == 0
+                })
+                .min_by_key(|(_, budget)| budget.last_seen)
+                .map(|(ip, _)| *ip);
+            if let Some(ip) = oldest_inactive {
+                state.clients.remove(&ip);
+            } else {
+                state.counters.rejected_quic_connections =
+                    state.counters.rejected_quic_connections.saturating_add(1);
+                return None;
+            }
+        }
+        let client = state
+            .clients
+            .entry(client_ip)
+            .or_insert_with(|| ClientBudget {
+                in_flight: 0,
+                tcp_connections: 0,
+                quic_connections: 0,
+                tokens: self.config.rate_limit.burst_per_ip as f64,
+                last_refill: now,
+                last_seen: now,
+            });
+        if client.quic_connections >= self.config.limits.max_quic_connections_per_ip {
+            state.counters.rejected_quic_connections =
+                state.counters.rejected_quic_connections.saturating_add(1);
+            return None;
+        }
+        client.quic_connections += 1;
+        client.last_seen = now;
+        state.active_quic_connections += 1;
+        Some(QuicConnectionGuard {
+            protection: self.protection.clone(),
+            client_ip,
+        })
     }
 }
 
@@ -94,12 +614,13 @@ struct PendingRequest {
     headers: HashMap<String, String>,
     body: Vec<u8>,
     body_too_large: bool,
-    over_capacity: bool,
-    guard: Option<RequestGuard>,
+    body_deadline: Instant,
+    cancel_token: Rc<Cell<bool>>,
+    guard: RequestGuard,
 }
 
 impl PendingRequest {
-    fn into_parts(self) -> (HttpRequest, Option<RequestGuard>, bool) {
+    fn into_parts(self) -> (HttpRequest, RequestGuard, Rc<Cell<bool>>) {
         let request = HttpRequest {
             method: self.method,
             authority: self.authority,
@@ -109,7 +630,7 @@ impl PendingRequest {
             body: self.body,
             body_too_large: self.body_too_large,
         };
-        (request, self.guard, self.over_capacity)
+        (request, self.guard, self.cancel_token)
     }
 }
 
@@ -122,22 +643,37 @@ struct OutgoingResponse {
     offset: usize,
     head_only: bool,
     headers_sent: bool,
+    deadline: Instant,
     _guard: Option<RequestGuard>,
 }
 
 struct Session {
     conn: quiche::Connection,
+    peer: SocketAddr,
+    _connection_guard: QuicConnectionGuard,
     h3: Option<quiche::h3::Connection>,
+    header_deadlines: HashMap<u64, Instant>,
+    header_aborted_streams: std::collections::HashSet<u64>,
     pending_requests: HashMap<u64, PendingRequest>,
+    active_cancellations: HashMap<u64, Rc<Cell<bool>>>,
     outgoing: VecDeque<OutgoingResponse>,
 }
 
 impl Session {
-    fn new(conn: quiche::Connection) -> Self {
+    fn new(
+        conn: quiche::Connection,
+        peer: SocketAddr,
+        connection_guard: QuicConnectionGuard,
+    ) -> Self {
         Self {
             conn,
+            peer,
+            _connection_guard: connection_guard,
             h3: None,
+            header_deadlines: HashMap::new(),
+            header_aborted_streams: std::collections::HashSet::new(),
             pending_requests: HashMap::new(),
+            active_cancellations: HashMap::new(),
             outgoing: VecDeque::new(),
         }
     }
@@ -146,8 +682,8 @@ impl Session {
 struct CompletedRequest {
     stream_id: u64,
     request: HttpRequest,
-    guard: Option<RequestGuard>,
-    over_capacity: bool,
+    guard: RequestGuard,
+    cancel_token: Rc<Cell<bool>>,
 }
 
 enum ServerEvent {
@@ -187,14 +723,16 @@ pub fn make_quic_config(config: &Config) -> Result<quiche::Config> {
         })?;
     quic.load_priv_key_from_pem_file(key_path)
         .with_context(|| format!("could not load private key {}", config.key_path.display()))?;
-    quic.set_max_idle_timeout(30_000);
+    quic.set_max_idle_timeout(config.timeouts.keep_alive_idle_ms);
     quic.set_max_recv_udp_payload_size(QUIC_PACKET_BUFFER);
     quic.set_max_send_udp_payload_size(QUIC_PACKET_BUFFER);
     quic.set_initial_max_data(4 * 1024 * 1024);
     quic.set_initial_max_stream_data_bidi_local(1024 * 1024);
     quic.set_initial_max_stream_data_bidi_remote(1024 * 1024);
     quic.set_initial_max_stream_data_uni(1024 * 1024);
-    quic.set_initial_max_streams_bidi(128);
+    quic.set_initial_max_streams_bidi(u64::from(
+        config.limits.max_concurrent_streams_per_connection,
+    ));
     quic.set_initial_max_streams_uni(16);
     quic.set_disable_active_migration(true);
     Ok(quic)
@@ -212,7 +750,11 @@ pub async fn serve(
     let local_addr = socket
         .local_addr()
         .context("could not inspect QUIC socket address")?;
-    let h3_config = quiche::h3::Config::new().context("could not create HTTP/3 configuration")?;
+    let mut h3_config =
+        quiche::h3::Config::new().context("could not create HTTP/3 configuration")?;
+    h3_config.set_max_field_section_size(
+        u64::try_from(config.limits.max_header_bytes).unwrap_or(u64::MAX),
+    );
     let controllers = ControllerRuntime::new(&config.controllers, config.max_request_body_bytes)?;
     let http1_secure_enabled = config.http1_secure_enabled;
     let http1_plain_enabled = config.http1_plain_enabled;
@@ -222,10 +764,11 @@ pub async fn serve(
     let plain_http_enabled = http1_plain_enabled || http2_plain_enabled;
     let secure_listen = config.listen;
     let plain_listen = config.plain_listen;
+    let protection = Rc::new(RefCell::new(ProtectionState::new(&config.rate_limit)));
     let app = AppRuntime {
         config: Rc::new(config),
         controllers,
-        active_requests: Rc::new(Cell::new(0)),
+        protection,
     };
 
     if secure_http_enabled {
@@ -358,7 +901,14 @@ pub async fn serve(
                 guard,
             } => {
                 if let Some(session) = sessions.get_mut(&connection_id) {
-                    queue_response(session, stream_id, response, guard);
+                    session.active_cancellations.remove(&stream_id);
+                    queue_response(
+                        session,
+                        stream_id,
+                        response,
+                        guard,
+                        Duration::from_millis(app.timeout_ms("response_write")),
+                    );
                     pump_outgoing(session);
                 }
                 // If the connection closed while the Rust handler was running, its guard is
@@ -366,9 +916,18 @@ pub async fn serve(
                 pump_all(&socket, &mut sessions).await;
             }
             ServerEvent::Tick => {
-                tick_sessions(&mut sessions, &h3_config);
+                tick_sessions(&mut sessions, &h3_config, &app);
                 pump_all(&socket, &mut sessions).await;
-                sessions.retain(|_, session| !session.conn.is_closed());
+                sessions.retain(|_, session| {
+                    if session.conn.is_closed() {
+                        for token in session.active_cancellations.values() {
+                            token.set(true);
+                        }
+                        false
+                    } else {
+                        true
+                    }
+                });
                 cid_aliases.retain(|_, session_id| sessions.contains_key(session_id));
             }
             ServerEvent::Shutdown => {
@@ -377,6 +936,9 @@ pub async fn serve(
                     "shutdown requested; closing QUIC connections"
                 );
                 for session in sessions.values_mut() {
+                    for token in session.active_cancellations.values() {
+                        token.set(true);
+                    }
                     session.conn.close(true, 0x100, b"server shutdown").ok();
                 }
                 pump_all(&socket, &mut sessions).await;
@@ -417,10 +979,10 @@ fn handle_datagram(
         if packet_type != quiche::Type::Initial {
             return;
         }
-        if sessions.len() >= MAX_CONNECTIONS {
-            debug!(%peer, connections = sessions.len(), "connection limit reached; ignoring new QUIC peer");
+        let Some(connection_guard) = app.acquire_quic_connection(peer.ip()) else {
+            debug!(%peer, "QUIC connection or client tracking limit reached; ignoring new peer");
             return;
-        }
+        };
         let mut server_cid = [0u8; quiche::MAX_CONN_ID_LEN];
         if ring::rand::SystemRandom::new()
             .fill(&mut server_cid)
@@ -433,7 +995,7 @@ fn handle_datagram(
         let key = server_cid.to_vec();
         match quiche::accept(&scid, None, local_addr, peer, quic_config) {
             Ok(conn) => {
-                sessions.insert(key.clone(), Session::new(conn));
+                sessions.insert(key.clone(), Session::new(conn, peer, connection_guard));
                 if !packet_dcid.is_empty() {
                     cid_aliases.insert(packet_dcid, key.clone());
                 }
@@ -456,6 +1018,20 @@ fn handle_datagram(
     if let Err(error) = session.conn.recv(&mut bytes, recv_info) {
         debug!(%peer, %error, "discarding invalid QUIC datagram");
         return;
+    }
+    // Start a header deadline when a client-initiated bidirectional stream first
+    // becomes readable. Remove it once quiche has decoded the HEADERS event.
+    for stream_id in session.conn.readable().collect::<Vec<_>>() {
+        if stream_id % 4 == 0
+            && !session.header_aborted_streams.contains(&stream_id)
+            && !session.pending_requests.contains_key(&stream_id)
+            && !session.active_cancellations.contains_key(&stream_id)
+        {
+            session
+                .header_deadlines
+                .entry(stream_id)
+                .or_insert_with(Instant::now);
+        }
     }
     if session.h3.is_none() && session.conn.is_established() {
         match quiche::h3::Connection::with_transport(&mut session.conn, h3_config) {
@@ -480,33 +1056,37 @@ fn handle_datagram(
             stream_id,
             request,
             guard,
-            over_capacity,
+            cancel_token,
         } = completed;
-        if over_capacity || guard.is_none() {
-            queue_response(
-                session,
-                stream_id,
-                HttpResponse::error(503, "server request capacity reached"),
-                guard,
-            );
-            continue;
-        }
         let mut tx = event_tx.clone();
         let app = app.clone();
         let connection_id = connection_id.clone();
         monoio::spawn(async move {
-            let response = app.dispatch(request).await;
-            if tx
-                .send(ServerEvent::Response {
-                    connection_id,
-                    stream_id,
-                    response,
-                    guard,
-                })
-                .await
-                .is_err()
-            {
-                debug!(%peer, stream_id, "response discarded because QUIC event loop stopped");
+            let response_work = Box::pin(app.dispatch(request));
+            let cancellation = Box::pin(wait_for_cancel(cancel_token.clone()));
+            match select(response_work, cancellation).await {
+                Either::Left((response, _cancellation)) => {
+                    if cancel_token.get() {
+                        app.record_client_abort();
+                        return;
+                    }
+                    if tx
+                        .send(ServerEvent::Response {
+                            connection_id,
+                            stream_id,
+                            response,
+                            guard: Some(guard),
+                        })
+                        .await
+                        .is_err()
+                    {
+                        debug!(%peer, stream_id, "response discarded because QUIC event loop stopped");
+                    }
+                }
+                Either::Right(((), _response_work)) => {
+                    app.record_client_abort();
+                    drop(guard);
+                }
             }
         });
     }
@@ -531,47 +1111,75 @@ fn drain_h3_events(session: &mut Session, app: &AppRuntime) -> Vec<CompletedRequ
         };
         match event {
             quiche::h3::Event::Headers { list, .. } => {
+                session.header_deadlines.remove(&stream_id);
                 // A later HEADERS event on the same stream is a trailer block; do not
                 // replace the original request or double-count its request guard.
                 if session.pending_requests.contains_key(&stream_id) {
                     continue;
                 }
-                let guard = app.acquire_request();
-                let over_capacity = guard.is_none();
-                let mut request = PendingRequest {
-                    method: String::new(),
-                    authority: String::new(),
-                    path: "/".to_owned(),
-                    query: None,
-                    headers: HashMap::new(),
-                    body: Vec::new(),
-                    body_too_large: false,
-                    over_capacity,
-                    guard,
-                };
+
+                let mut method = String::new();
+                let mut authority = String::new();
+                let mut path = "/".to_owned();
+                let mut query = None;
+                let mut headers = HashMap::new();
                 for header in list {
                     let name = String::from_utf8_lossy(header.name()).to_ascii_lowercase();
                     let value = String::from_utf8_lossy(header.value()).into_owned();
                     match name.as_str() {
-                        ":method" => request.method = value,
-                        ":authority" => request.authority = value,
+                        ":method" => method = value,
+                        ":authority" => authority = value,
                         ":path" => {
-                            let (path, query) = value
+                            let (request_path, request_query) = value
                                 .split_once('?')
                                 .map(|(path, query)| (path, Some(query.to_owned())))
                                 .unwrap_or((value.as_str(), None));
-                            request.path = path.to_owned();
-                            request.query = query;
+                            path = request_path.to_owned();
+                            query = request_query;
                         }
                         name if !name.starts_with(':') => {
-                            request.headers.insert(name.to_owned(), value);
+                            headers.insert(name.to_owned(), value);
                         }
                         _ => {}
                     }
                 }
-                if request.authority.is_empty() {
-                    request.authority = request.headers.get("host").cloned().unwrap_or_default();
+                if authority.is_empty() {
+                    authority = headers.get("host").cloned().unwrap_or_default();
                 }
+                let guard = match app.acquire_request(session.peer.ip(), &authority) {
+                    Ok(guard) => guard,
+                    Err(rejection) => {
+                        session
+                            .conn
+                            .stream_shutdown(stream_id, quiche::Shutdown::Read, 0x10)
+                            .ok();
+                        queue_response(
+                            session,
+                            stream_id,
+                            rejection.response(),
+                            None,
+                            Duration::from_millis(app.timeout_ms("response_write")),
+                        );
+                        continue;
+                    }
+                };
+                let cancel_token = Rc::new(Cell::new(false));
+                session
+                    .active_cancellations
+                    .insert(stream_id, cancel_token.clone());
+                let mut request = PendingRequest {
+                    method,
+                    authority,
+                    path,
+                    query,
+                    headers,
+                    body: Vec::new(),
+                    body_too_large: false,
+                    body_deadline: Instant::now()
+                        + Duration::from_millis(app.timeout_ms("request_body")),
+                    cancel_token,
+                    guard,
+                };
                 if let Some(content_length) = request
                     .headers
                     .get("content-length")
@@ -582,9 +1190,31 @@ fn drain_h3_events(session: &mut Session, app: &AppRuntime) -> Vec<CompletedRequ
                     }
                 }
                 session.pending_requests.insert(stream_id, request);
+                if session
+                    .pending_requests
+                    .get(&stream_id)
+                    .is_some_and(|request| request.body_too_large)
+                {
+                    if let Some(request) = session.pending_requests.remove(&stream_id) {
+                        request.cancel_token.set(true);
+                        session.active_cancellations.remove(&stream_id);
+                        session
+                            .conn
+                            .stream_shutdown(stream_id, quiche::Shutdown::Read, 0x10)
+                            .ok();
+                        queue_response(
+                            session,
+                            stream_id,
+                            HttpResponse::error(413, "request body exceeds configured limit"),
+                            Some(request.guard),
+                            Duration::from_millis(app.timeout_ms("response_write")),
+                        );
+                    }
+                }
             }
             quiche::h3::Event::Data => {
                 let mut buffer = vec![0u8; 16 * 1024];
+                let mut oversized = false;
                 loop {
                     let read_result = match session.h3.as_mut() {
                         Some(h3) => h3.recv_body(&mut session.conn, stream_id, &mut buffer),
@@ -594,12 +1224,14 @@ fn drain_h3_events(session: &mut Session, app: &AppRuntime) -> Vec<CompletedRequ
                         Ok(0) | Err(quiche::h3::Error::Done) => break,
                         Ok(read) => {
                             if let Some(request) = session.pending_requests.get_mut(&stream_id) {
-                                if !request.body_too_large && !request.over_capacity {
+                                if !request.body_too_large {
                                     if request.body.len().saturating_add(read)
                                         > app.config.max_request_body_bytes
                                     {
                                         request.body_too_large = true;
                                         request.body.clear();
+                                        oversized = true;
+                                        break;
                                     } else {
                                         request.body.extend_from_slice(&buffer[..read]);
                                     }
@@ -615,20 +1247,43 @@ fn drain_h3_events(session: &mut Session, app: &AppRuntime) -> Vec<CompletedRequ
                         }
                     }
                 }
+                if oversized {
+                    if let Some(request) = session.pending_requests.remove(&stream_id) {
+                        request.cancel_token.set(true);
+                        session.active_cancellations.remove(&stream_id);
+                        session
+                            .conn
+                            .stream_shutdown(stream_id, quiche::Shutdown::Read, 0x10)
+                            .ok();
+                        queue_response(
+                            session,
+                            stream_id,
+                            HttpResponse::error(413, "request body exceeds configured limit"),
+                            Some(request.guard),
+                            Duration::from_millis(app.timeout_ms("response_write")),
+                        );
+                    }
+                }
             }
             quiche::h3::Event::Finished => {
+                session.header_deadlines.remove(&stream_id);
                 if let Some(request) = session.pending_requests.remove(&stream_id) {
-                    let (request, guard, over_capacity) = request.into_parts();
+                    let (request, guard, cancel_token) = request.into_parts();
                     completed.push(CompletedRequest {
                         stream_id,
                         request,
                         guard,
-                        over_capacity,
+                        cancel_token,
                     });
                 }
             }
             quiche::h3::Event::Reset(_) => {
+                session.header_deadlines.remove(&stream_id);
                 session.pending_requests.remove(&stream_id);
+                if let Some(cancel) = session.active_cancellations.remove(&stream_id) {
+                    cancel.set(true);
+                }
+                app.record_client_abort();
             }
             _ => {}
         }
@@ -641,6 +1296,7 @@ fn queue_response(
     stream_id: u64,
     response: HttpResponse,
     guard: Option<RequestGuard>,
+    response_timeout: Duration,
 ) {
     // Keep the response until both headers and body have been accepted by quiche.
     // In particular, a StreamBlocked result for headers must be retried on a later tick,
@@ -654,6 +1310,7 @@ fn queue_response(
         offset: 0,
         head_only: response.head_only,
         headers_sent: false,
+        deadline: Instant::now() + response_timeout,
         _guard: guard,
     });
 }
@@ -790,8 +1447,94 @@ fn rotate_outgoing(session: &mut Session) {
     }
 }
 
-fn tick_sessions(sessions: &mut HashMap<Vec<u8>, Session>, h3_config: &quiche::h3::Config) {
+async fn wait_for_cancel(token: Rc<Cell<bool>>) {
+    while !token.get() {
+        monoio::time::sleep(Duration::from_millis(5)).await;
+    }
+}
+
+fn tick_sessions(
+    sessions: &mut HashMap<Vec<u8>, Session>,
+    h3_config: &quiche::h3::Config,
+    app: &AppRuntime,
+) {
+    let now = Instant::now();
     for session in sessions.values_mut() {
+        let finished_aborted_streams = session
+            .header_aborted_streams
+            .iter()
+            .copied()
+            .filter(|stream_id| session.conn.stream_finished(*stream_id))
+            .collect::<Vec<_>>();
+        for stream_id in finished_aborted_streams {
+            session.header_aborted_streams.remove(&stream_id);
+        }
+        let expired_headers = session
+            .header_deadlines
+            .iter()
+            .filter_map(|(stream_id, started)| {
+                (now.duration_since(*started)
+                    >= Duration::from_millis(app.timeout_ms("request_headers")))
+                .then_some(*stream_id)
+            })
+            .collect::<Vec<_>>();
+        for stream_id in expired_headers {
+            session.header_deadlines.remove(&stream_id);
+            session.header_aborted_streams.insert(stream_id);
+            session
+                .conn
+                .stream_shutdown(stream_id, quiche::Shutdown::Read, 0x10)
+                .ok();
+            session
+                .conn
+                .stream_shutdown(stream_id, quiche::Shutdown::Write, 0x10)
+                .ok();
+            app.record_timeout("request_headers");
+            warn!(stream_id, client = %session.peer, "HTTP/3 request headers deadline exceeded; stream aborted");
+        }
+
+        let expired = session
+            .pending_requests
+            .iter()
+            .filter_map(|(stream_id, request)| (now >= request.body_deadline).then_some(*stream_id))
+            .collect::<Vec<_>>();
+        for stream_id in expired {
+            if let Some(request) = session.pending_requests.remove(&stream_id) {
+                app.record_timeout("request_body");
+                request.cancel_token.set(true);
+                session.active_cancellations.remove(&stream_id);
+                // Stop buffering request data, then try to return 408 on the write side.
+                session
+                    .conn
+                    .stream_shutdown(stream_id, quiche::Shutdown::Read, 0x10)
+                    .ok();
+                queue_response(
+                    session,
+                    stream_id,
+                    HttpResponse::error(408, "request body deadline exceeded"),
+                    Some(request.guard),
+                    Duration::from_millis(app.timeout_ms("response_write")),
+                );
+                warn!(stream_id, client = %session.peer, "HTTP/3 request body deadline exceeded; stream read side aborted");
+            }
+        }
+        let queued = session.outgoing.len();
+        for _ in 0..queued {
+            let Some(response) = session.outgoing.pop_front() else {
+                break;
+            };
+            if now >= response.deadline {
+                session
+                    .conn
+                    .stream_shutdown(response.stream_id, quiche::Shutdown::Write, 0x10)
+                    .ok();
+                app.record_timeout("response_write");
+                warn!(stream_id = response.stream_id, client = %session.peer, "HTTP/3 response deadline exceeded; stream write side aborted");
+                // Dropping the response releases its request admission guard.
+            } else {
+                session.outgoing.push_back(response);
+            }
+        }
         if session
             .conn
             .timeout()
@@ -859,7 +1602,43 @@ pub fn install_shutdown_handler() -> Result<Arc<AtomicBool>> {
 
 #[cfg(test)]
 mod tests {
-    use super::PendingRequest;
+    use super::{take_rate_limit_token, PendingRequest};
+    use std::time::{Duration, Instant};
+
+    #[test]
+    fn token_bucket_enforces_burst_and_refills() {
+        let start = Instant::now();
+        let mut tokens = 2.0;
+        let mut last_refill = start;
+        assert!(take_rate_limit_token(
+            &mut tokens,
+            &mut last_refill,
+            start,
+            1,
+            2
+        ));
+        assert!(take_rate_limit_token(
+            &mut tokens,
+            &mut last_refill,
+            start,
+            1,
+            2
+        ));
+        assert!(!take_rate_limit_token(
+            &mut tokens,
+            &mut last_refill,
+            start,
+            1,
+            2
+        ));
+        assert!(take_rate_limit_token(
+            &mut tokens,
+            &mut last_refill,
+            start + Duration::from_secs(1),
+            1,
+            2
+        ));
+    }
 
     #[test]
     fn request_builder_keeps_host_and_query_separate() {
@@ -871,8 +1650,16 @@ mod tests {
             headers: Default::default(),
             body: vec![],
             body_too_large: false,
-            over_capacity: false,
-            guard: None,
+            body_deadline: Instant::now() + Duration::from_secs(1),
+            cancel_token: Rc::new(Cell::new(false)),
+            guard: RequestGuard {
+                protection: Rc::new(RefCell::new(ProtectionState::new(
+                    &crate::config::RateLimitConfig::default(),
+                ))),
+                client_ip: "127.0.0.1".parse().unwrap(),
+                host_key: "example.com".to_owned(),
+                workload: WorkloadClass::Static,
+            },
         }
         .into_parts()
         .0;

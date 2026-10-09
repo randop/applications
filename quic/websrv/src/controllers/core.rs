@@ -9,6 +9,7 @@ pub async fn handle(
     request: HttpRequest,
     _params: HashMap<String, String>,
     max_body_bytes: usize,
+    metrics: Value,
 ) -> HttpResponse {
     match action {
         "health" => HttpResponse::json(200, json!({ "status": "ok" })),
@@ -20,6 +21,7 @@ pub async fn handle(
                 "protocols": ["https/3", "http/1.1", "https/1.1", "http/2", "https/2"]
             }),
         ),
+        "metrics" => HttpResponse::json(200, metrics),
         "echo" => echo(request, max_body_bytes).await,
         _ => HttpResponse::error(404, "unknown controller action"),
     }

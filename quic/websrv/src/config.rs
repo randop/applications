@@ -38,6 +38,12 @@ struct RawConfig {
     max_request_body_bytes: usize,
     #[serde(default = "default_static_limit")]
     max_static_file_bytes: usize,
+    #[serde(default)]
+    timeouts: TimeoutConfig,
+    #[serde(default)]
+    limits: LimitConfig,
+    #[serde(default)]
+    rate_limit: RateLimitConfig,
     #[serde(default = "default_log_filter")]
     log_filter: String,
     #[serde(default)]
@@ -61,10 +67,100 @@ pub struct Config {
     pub key_path: PathBuf,
     pub max_request_body_bytes: usize,
     pub max_static_file_bytes: usize,
+    pub timeouts: TimeoutConfig,
+    pub limits: LimitConfig,
+    pub rate_limit: RateLimitConfig,
     pub log_filter: String,
     pub default_host: Option<String>,
     pub virtual_hosts: Vec<VirtualHostConfig>,
     pub controllers: std::collections::BTreeMap<String, ControllerConfig>,
+}
+
+/// Deadlines in milliseconds. These are request/phase budgets, not a global
+/// wall-clock timer for an entire keep-alive connection.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct TimeoutConfig {
+    pub tls_handshake_ms: u64,
+    pub request_headers_ms: u64,
+    pub request_body_ms: u64,
+    pub request_process_ms: u64,
+    pub response_write_ms: u64,
+    pub keep_alive_idle_ms: u64,
+}
+
+impl Default for TimeoutConfig {
+    fn default() -> Self {
+        Self {
+            tls_handshake_ms: 5_000,
+            request_headers_ms: 5_000,
+            request_body_ms: 10_000,
+            request_process_ms: 5_000,
+            response_write_ms: 10_000,
+            keep_alive_idle_ms: 15_000,
+        }
+    }
+}
+
+/// Resource bounds shared across all enabled transports.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct LimitConfig {
+    pub max_inflight_requests: usize,
+    pub max_inflight_requests_per_ip: usize,
+    pub max_inflight_requests_per_host: usize,
+    pub max_inflight_static_requests: usize,
+    pub max_inflight_controller_requests: usize,
+    pub max_concurrent_streams_per_connection: u32,
+    pub max_header_bytes: usize,
+    pub max_tcp_connections: usize,
+    pub max_tcp_connections_per_ip: usize,
+    pub max_quic_connections: usize,
+    pub max_quic_connections_per_ip: usize,
+    pub max_tracked_client_ips: usize,
+}
+
+impl Default for LimitConfig {
+    fn default() -> Self {
+        Self {
+            max_inflight_requests: 256,
+            max_inflight_requests_per_ip: 32,
+            max_inflight_requests_per_host: 128,
+            max_inflight_static_requests: 16,
+            max_inflight_controller_requests: 128,
+            max_concurrent_streams_per_connection: 128,
+            max_header_bytes: 64 * 1024,
+            max_tcp_connections: 256,
+            max_tcp_connections_per_ip: 32,
+            max_quic_connections: 512,
+            max_quic_connections_per_ip: 64,
+            max_tracked_client_ips: 65_536,
+        }
+    }
+}
+
+/// Per-source token-bucket limits. IP state is bounded and inactive entries
+/// are expired, preventing random-source floods from growing it indefinitely.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct RateLimitConfig {
+    pub enabled: bool,
+    pub global_requests_per_second: u32,
+    pub global_burst: u32,
+    pub requests_per_second_per_ip: u32,
+    pub burst_per_ip: u32,
+}
+
+impl Default for RateLimitConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            global_requests_per_second: 1_000,
+            global_burst: 2_000,
+            requests_per_second_per_ip: 20,
+            burst_per_ip: 40,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -185,6 +281,9 @@ impl Config {
             raw.max_static_file_bytes > 0 && raw.max_static_file_bytes <= 32 * 1024 * 1024,
             "max_static_file_bytes must be between 1 byte and 32 MiB"
         );
+        validate_timeouts(&raw.timeouts)?;
+        validate_limits(&raw.limits)?;
+        validate_rate_limit(&raw.rate_limit)?;
         anyhow::ensure!(
             !raw.log_filter.trim().is_empty(),
             "log_filter must not be empty"
@@ -286,14 +385,8 @@ impl Config {
                     route.method
                 );
                 validate_route_pattern(&route.path)?;
-                anyhow::ensure!(
-                    matches!(
-                        route.handler.as_str(),
-                        "health" | "status" | "echo" | "items"
-                    ),
-                    "unknown handler {:?}; supported handlers are health, status, echo, items",
-                    route.handler
-                );
+                anyhow::ensure!(matches!(route.handler.as_str(), "health" | "status" | "metrics" | "echo" | "items"),
+                    "unknown handler {:?}; supported handlers are health, status, metrics, echo, items", route.handler);
                 anyhow::ensure!(
                     route_keys.insert((method, route.path.clone())),
                     "duplicate route {:?} {:?} in controller {controller_name:?}",
@@ -314,6 +407,9 @@ impl Config {
             key_path: raw.tls_key,
             max_request_body_bytes: raw.max_request_body_bytes,
             max_static_file_bytes: raw.max_static_file_bytes,
+            timeouts: raw.timeouts,
+            limits: raw.limits,
+            rate_limit: raw.rate_limit,
             log_filter: raw.log_filter,
             default_host: raw.default_host,
             virtual_hosts: raw.virtual_hosts,
@@ -346,6 +442,102 @@ impl Config {
             })
         })
     }
+}
+
+fn validate_rate_limit(rate_limit: &RateLimitConfig) -> Result<()> {
+    anyhow::ensure!(
+        rate_limit.global_requests_per_second > 0,
+        "rate_limit.global_requests_per_second must be greater than zero"
+    );
+    anyhow::ensure!(
+        rate_limit.global_burst > 0,
+        "rate_limit.global_burst must be greater than zero"
+    );
+    anyhow::ensure!(
+        rate_limit.requests_per_second_per_ip > 0,
+        "rate_limit.requests_per_second_per_ip must be greater than zero"
+    );
+    anyhow::ensure!(
+        rate_limit.burst_per_ip > 0,
+        "rate_limit.burst_per_ip must be greater than zero"
+    );
+    anyhow::ensure!(
+        rate_limit.global_requests_per_second <= 1_000_000
+            && rate_limit.global_burst <= 1_000_000
+            && rate_limit.requests_per_second_per_ip <= 1_000_000
+            && rate_limit.burst_per_ip <= 1_000_000,
+        "rate-limit values must not exceed 1,000,000"
+    );
+    Ok(())
+}
+
+fn validate_timeouts(timeouts: &TimeoutConfig) -> Result<()> {
+    for (name, value) in [
+        ("tls_handshake_ms", timeouts.tls_handshake_ms),
+        ("request_headers_ms", timeouts.request_headers_ms),
+        ("request_body_ms", timeouts.request_body_ms),
+        ("request_process_ms", timeouts.request_process_ms),
+        ("response_write_ms", timeouts.response_write_ms),
+        ("keep_alive_idle_ms", timeouts.keep_alive_idle_ms),
+    ] {
+        anyhow::ensure!(
+            (1..=300_000).contains(&value),
+            "timeouts.{name} must be between 1 and 300000 milliseconds"
+        );
+    }
+    Ok(())
+}
+
+fn validate_limits(limits: &LimitConfig) -> Result<()> {
+    anyhow::ensure!(
+        (1..=1_000_000).contains(&limits.max_inflight_requests),
+        "limits.max_inflight_requests must be between 1 and 1000000"
+    );
+    anyhow::ensure!(
+        (1..=1_000_000).contains(&limits.max_inflight_requests_per_ip),
+        "limits.max_inflight_requests_per_ip must be between 1 and 1000000"
+    );
+    anyhow::ensure!(
+        (1..=1_000_000).contains(&limits.max_inflight_requests_per_host),
+        "limits.max_inflight_requests_per_host must be between 1 and 1000000"
+    );
+    anyhow::ensure!(
+        (1..=1_000_000).contains(&limits.max_inflight_static_requests),
+        "limits.max_inflight_static_requests must be between 1 and 1000000"
+    );
+    anyhow::ensure!(
+        (1..=1_000_000).contains(&limits.max_inflight_controller_requests),
+        "limits.max_inflight_controller_requests must be between 1 and 1000000"
+    );
+    anyhow::ensure!(
+        (1..=65_535).contains(&limits.max_concurrent_streams_per_connection),
+        "limits.max_concurrent_streams_per_connection must be between 1 and 65535"
+    );
+    anyhow::ensure!(
+        (1..=1024 * 1024).contains(&limits.max_header_bytes),
+        "limits.max_header_bytes must be between 1 byte and 1 MiB"
+    );
+    anyhow::ensure!(
+        (1..=1_000_000).contains(&limits.max_tcp_connections),
+        "limits.max_tcp_connections must be between 1 and 1000000"
+    );
+    anyhow::ensure!(
+        (1..=1_000_000).contains(&limits.max_tcp_connections_per_ip),
+        "limits.max_tcp_connections_per_ip must be between 1 and 1000000"
+    );
+    anyhow::ensure!(
+        (1..=1_000_000).contains(&limits.max_quic_connections),
+        "limits.max_quic_connections must be between 1 and 1000000"
+    );
+    anyhow::ensure!(
+        (1..=1_000_000).contains(&limits.max_quic_connections_per_ip),
+        "limits.max_quic_connections_per_ip must be between 1 and 1000000"
+    );
+    anyhow::ensure!(
+        (1..=1_000_000).contains(&limits.max_tracked_client_ips),
+        "limits.max_tracked_client_ips must be between 1 and 1000000"
+    );
+    Ok(())
 }
 
 fn normalize_authority(authority: &str) -> String {
@@ -490,5 +682,35 @@ mod tests {
             "*.example.com",
             &normalize_authority("badexample.com")
         ));
+    }
+}
+
+#[cfg(test)]
+mod protection_config_tests {
+    use super::{
+        validate_limits, validate_rate_limit, validate_timeouts, LimitConfig, RateLimitConfig,
+        TimeoutConfig,
+    };
+
+    #[test]
+    fn default_protection_settings_are_valid() {
+        validate_timeouts(&TimeoutConfig::default()).unwrap();
+        validate_limits(&LimitConfig::default()).unwrap();
+        validate_rate_limit(&RateLimitConfig::default()).unwrap();
+    }
+
+    #[test]
+    fn timeout_and_limit_validation_rejects_zero_values() {
+        let mut timeouts = TimeoutConfig::default();
+        timeouts.request_process_ms = 0;
+        assert!(validate_timeouts(&timeouts).is_err());
+
+        let mut limits = LimitConfig::default();
+        limits.max_inflight_requests = 0;
+        assert!(validate_limits(&limits).is_err());
+
+        let mut rate_limit = RateLimitConfig::default();
+        rate_limit.global_burst = 0;
+        assert!(validate_rate_limit(&rate_limit).is_err());
     }
 }

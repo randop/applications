@@ -1,12 +1,12 @@
 //! TLS ALPN dispatch for secure HTTP/2 and HTTP/1.1, plus cleartext HTTP/1.1 and h2c on Monoio io_uring.
 use std::{
-    cell::Cell,
     collections::HashMap,
     fs::File,
     io::{self, BufReader, Cursor},
+    net::IpAddr,
     path::Path,
-    rc::Rc,
     sync::Arc,
+    time::{Duration, Instant},
 };
 
 use anyhow::{Context, Result};
@@ -20,11 +20,9 @@ use tracing::{debug, info, warn};
 
 use crate::{
     http_types::{HttpRequest, HttpResponse},
-    quic_server::{AppRuntime, RequestGuard},
+    quic_server::{AppRuntime, RequestGuard, TcpConnectionGuard},
 };
 
-const MAX_TCP_CONNECTIONS: usize = 128;
-const MAX_HEADER_BYTES: usize = 64 * 1024;
 const SOCKET_READ_BYTES: usize = 16 * 1024;
 
 pub fn make_tls_config(
@@ -84,7 +82,6 @@ pub async fn serve(
     quic_port: u16,
     http1_secure_enabled: bool,
 ) {
-    let active_connections = Rc::new(Cell::new(0usize));
     let acceptor = TlsAcceptor::from(tls_config);
     info!(
         protocol = "HTTPS (ALPN)",
@@ -95,20 +92,25 @@ pub async fn serve(
     loop {
         match listener.accept().await {
             Ok((stream, peer)) => {
-                if active_connections.get() >= MAX_TCP_CONNECTIONS {
-                    debug!(%peer, limit = MAX_TCP_CONNECTIONS, "TLS TCP connection limit reached");
+                let peer_ip = peer.ip();
+                let Some(connection_guard) = app.acquire_tcp_connection(peer_ip) else {
+                    debug!(%peer, "TLS TCP connection limit reached");
                     drop(stream);
                     continue;
-                }
-                active_connections.set(active_connections.get() + 1);
-                let guard = ConnectionGuard(active_connections.clone());
+                };
                 let app = app.clone();
                 let acceptor = acceptor.clone();
                 monoio::spawn(async move {
-                    let _connection_guard = guard;
-                    if let Err(error) =
-                        serve_tls_connection(stream, acceptor, app, quic_port, http1_secure_enabled)
-                            .await
+                    let _connection_guard = connection_guard;
+                    if let Err(error) = serve_tls_connection(
+                        stream,
+                        acceptor,
+                        app,
+                        quic_port,
+                        http1_secure_enabled,
+                        peer_ip,
+                    )
+                    .await
                     {
                         debug!(%peer, %error, "TLS connection ended");
                     }
@@ -128,24 +130,35 @@ async fn serve_tls_connection(
     app: AppRuntime,
     quic_port: u16,
     http1_secure_enabled: bool,
+    peer_ip: IpAddr,
 ) -> Result<()> {
-    let tls_stream = acceptor
-        .accept(stream)
-        .await
-        .context("TLS handshake failed")?;
+    let tls_stream = match monoio::time::timeout(
+        Duration::from_millis(app.timeout_ms("tls_handshake")),
+        acceptor.accept(stream),
+    )
+    .await
+    {
+        Ok(result) => result.context("TLS handshake failed")?,
+        Err(_) => {
+            app.record_timeout("tls_handshake");
+            anyhow::bail!("TLS handshake deadline exceeded");
+        }
+    };
     let negotiated = tls_stream.alpn_protocol();
     match negotiated.as_deref() {
-        Some(b"h2") => crate::h2_server::serve_connection(tls_stream, app, quic_port).await,
+        Some(b"h2") => {
+            crate::http2_server::serve_connection(tls_stream, app, quic_port, peer_ip).await
+        }
         Some(b"http/1.1") => {
             anyhow::ensure!(
                 http1_secure_enabled,
                 "client negotiated HTTP/1.1 but HTTP/1.1 over TLS is disabled"
             );
-            serve_http1_stream(tls_stream, app, quic_port).await?;
+            serve_http1_stream(tls_stream, app, quic_port, peer_ip).await?;
             Ok(())
         }
         None if http1_secure_enabled => {
-            serve_http1_stream(tls_stream, app, quic_port).await?;
+            serve_http1_stream(tls_stream, app, quic_port, peer_ip).await?;
             Ok(())
         }
         None => anyhow::bail!("client did not negotiate ALPN and HTTP/1.1 over TLS is disabled"),
@@ -163,7 +176,6 @@ pub async fn serve_plain(
     http1_plain_enabled: bool,
     http2_plain_enabled: bool,
 ) {
-    let active_connections = Rc::new(Cell::new(0usize));
     info!(
         protocol = "cleartext HTTP/1.1 and/or HTTP/2 prior-knowledge",
         http1_plain_enabled,
@@ -175,22 +187,22 @@ pub async fn serve_plain(
     loop {
         match listener.accept().await {
             Ok((stream, peer)) => {
-                if active_connections.get() >= MAX_TCP_CONNECTIONS {
-                    debug!(%peer, limit = MAX_TCP_CONNECTIONS, "cleartext TCP connection limit reached");
+                let peer_ip = peer.ip();
+                let Some(connection_guard) = app.acquire_tcp_connection(peer_ip) else {
+                    debug!(%peer, "cleartext TCP connection limit reached");
                     drop(stream);
                     continue;
-                }
-                active_connections.set(active_connections.get() + 1);
-                let guard = ConnectionGuard(active_connections.clone());
+                };
                 let app = app.clone();
                 monoio::spawn(async move {
-                    let _connection_guard = guard;
+                    let _connection_guard: TcpConnectionGuard = connection_guard;
                     if let Err(error) = serve_plain_connection(
                         stream,
                         app,
                         quic_port,
                         http1_plain_enabled,
                         http2_plain_enabled,
+                        peer_ip,
                     )
                     .await
                     {
@@ -214,38 +226,73 @@ async fn serve_plain_connection(
     quic_port: u16,
     http1_plain_enabled: bool,
     http2_plain_enabled: bool,
+    peer_ip: IpAddr,
 ) -> Result<()> {
     match (http1_plain_enabled, http2_plain_enabled) {
         (true, false) => {
-            serve_http1_stream(stream, app, quic_port).await?;
+            serve_http1_stream(stream, app, quic_port, peer_ip).await?;
             Ok(())
         }
-        (false, true) => crate::h2_server::serve_connection(stream, app, quic_port).await,
+        (false, true) => {
+            crate::http2_server::serve_connection(stream, app, quic_port, peer_ip).await
+        }
         (false, false) => Ok(()),
         (true, true) => {
             let mut initial = Vec::with_capacity(SOCKET_READ_BYTES);
+            let mut header_deadline: Option<Instant> = None;
             loop {
                 match classify_h2_preface(&initial) {
                     Some(true) => {
                         // PrefixedReadIo replays the full preface and any coalesced
                         // SETTINGS frame bytes to the HTTP/2 state machine.
                         let prefixed = PrefixedReadIo::new(stream, Cursor::new(initial));
-                        return crate::h2_server::serve_connection(prefixed, app, quic_port).await;
+                        return crate::http2_server::serve_connection(
+                            prefixed, app, quic_port, peer_ip,
+                        )
+                        .await;
                     }
                     Some(false) => {
                         // This is HTTP/1.1 (or another protocol); never discard the
                         // sniffed bytes before handing the connection to its parser.
                         let prefixed = PrefixedReadIo::new(stream, Cursor::new(initial));
-                        serve_http1_stream(prefixed, app, quic_port).await?;
+                        serve_http1_stream(prefixed, app, quic_port, peer_ip).await?;
                         return Ok(());
                     }
                     None => {}
                 }
 
-                let (result, buffer) = stream.read(vec![0u8; SOCKET_READ_BYTES]).await;
+                let read_result = if let Some(deadline) = header_deadline {
+                    monoio::time::timeout_at(
+                        deadline.into(),
+                        stream.read(vec![0u8; SOCKET_READ_BYTES]),
+                    )
+                    .await
+                    .map_err(|_| "request_headers")
+                } else {
+                    monoio::time::timeout(
+                        Duration::from_millis(app.timeout_ms("keep_alive_idle")),
+                        stream.read(vec![0u8; SOCKET_READ_BYTES]),
+                    )
+                    .await
+                    .map_err(|_| "keep_alive")
+                };
+                let (result, buffer) = match read_result {
+                    Ok(read) => read,
+                    Err(phase) => {
+                        app.record_timeout(phase);
+                        debug!(%peer_ip, phase, "cleartext protocol preface deadline exceeded");
+                        return Ok(());
+                    }
+                };
                 match result {
                     Ok(0) => return Ok(()),
-                    Ok(read) => initial.extend_from_slice(&buffer[..read]),
+                    Ok(read) => {
+                        initial.extend_from_slice(&buffer[..read]);
+                        header_deadline.get_or_insert_with(|| {
+                            Instant::now()
+                                + Duration::from_millis(app.timeout_ms("request_headers"))
+                        });
+                    }
                     Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
                     Err(error) => return Err(error.into()),
                 }
@@ -287,45 +334,72 @@ mod plain_protocol_tests {
     }
 }
 
-async fn serve_http1_stream<S>(mut stream: S, app: AppRuntime, quic_port: u16) -> io::Result<()>
+async fn serve_http1_stream<S>(
+    mut stream: S,
+    app: AppRuntime,
+    quic_port: u16,
+    peer_ip: IpAddr,
+) -> io::Result<()>
 where
     S: AsyncReadRent + AsyncWriteRentExt + Unpin,
 {
-    let mut socket_buffer = vec![0u8; SOCKET_READ_BYTES];
     let mut plaintext = Vec::<u8>::new();
-    let mut pending: Option<(RequestHead, RequestGuard)> = None;
+    let mut pending: Option<(RequestHead, RequestGuard, Instant)> = None;
+    let mut header_deadline: Option<Instant> = None;
 
     loop {
         loop {
             if pending.is_none() {
-                match parse_request_head(&plaintext, app.max_request_body_bytes()) {
+                match parse_request_head(
+                    &plaintext,
+                    app.max_request_body_bytes(),
+                    app.max_header_bytes(),
+                ) {
                     HeadParse::Incomplete => break,
                     HeadParse::Reject(status, message) => {
                         let response = HttpResponse::error(status, message);
-                        write_http1_response(&mut stream, &response, true, quic_port).await?;
+                        write_http1_response_with_timeout(
+                            &mut stream,
+                            &response,
+                            true,
+                            quic_port,
+                            &app,
+                        )
+                        .await?;
                         return Ok(());
                     }
                     HeadParse::Complete(head) => {
                         plaintext.drain(..head.header_len);
-                        let Some(guard) = app.acquire_request() else {
-                            let response =
-                                HttpResponse::error(503, "server request capacity reached");
-                            write_http1_response(&mut stream, &response, true, quic_port).await?;
-                            return Ok(());
+                        header_deadline = None;
+                        let guard = match app.acquire_request(peer_ip, &head.authority) {
+                            Ok(guard) => guard,
+                            Err(rejection) => {
+                                write_http1_response_with_timeout(
+                                    &mut stream,
+                                    &rejection.response(),
+                                    true,
+                                    quic_port,
+                                    &app,
+                                )
+                                .await?;
+                                return Ok(());
+                            }
                         };
-                        pending = Some((head, guard));
+                        let body_deadline =
+                            Instant::now() + Duration::from_millis(app.timeout_ms("request_body"));
+                        pending = Some((head, guard, body_deadline));
                     }
                 }
             }
 
-            let Some((head, _guard)) = pending.as_ref() else {
+            let Some((head, _, _)) = pending.as_ref() else {
                 continue;
             };
             if plaintext.len() < head.content_length {
                 break;
             }
 
-            let (head, guard) = pending.take().expect("pending request was checked above");
+            let (head, guard, _) = pending.take().expect("pending request was checked above");
             let body = plaintext.drain(..head.content_length).collect::<Vec<_>>();
             let request = HttpRequest {
                 method: head.method.clone(),
@@ -342,20 +416,117 @@ where
             if is_head {
                 response.head_only = true;
             }
-            write_http1_response(&mut stream, &response, close_after, quic_port).await?;
+            if let Err(error) = write_http1_response_with_timeout(
+                &mut stream,
+                &response,
+                close_after,
+                quic_port,
+                &app,
+            )
+            .await
+            {
+                if error.kind() != io::ErrorKind::TimedOut {
+                    app.record_client_abort();
+                }
+                drop(guard);
+                return Err(error);
+            }
             drop(guard);
             if close_after {
                 return Ok(());
             }
+            header_deadline = None;
         }
 
-        let (result, returned_buffer) = stream.read(socket_buffer).await;
-        socket_buffer = returned_buffer;
-        match result {
-            Ok(0) => return Ok(()),
-            Ok(amount) => plaintext.extend_from_slice(&socket_buffer[..amount]),
-            Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
-            Err(error) => return Err(error),
+        let body_deadline = pending.as_ref().map(|(_, _, deadline)| *deadline);
+        let header_deadline_for_read = if body_deadline.is_none() && !plaintext.is_empty() {
+            Some(*header_deadline.get_or_insert_with(|| {
+                Instant::now() + Duration::from_millis(app.timeout_ms("request_headers"))
+            }))
+        } else {
+            None
+        };
+        let read_result = if let Some(deadline) = body_deadline {
+            monoio::time::timeout_at(deadline.into(), stream.read(vec![0u8; SOCKET_READ_BYTES]))
+                .await
+                .map_err(|_| "request_body")
+        } else if let Some(deadline) = header_deadline_for_read {
+            monoio::time::timeout_at(deadline.into(), stream.read(vec![0u8; SOCKET_READ_BYTES]))
+                .await
+                .map_err(|_| "request_headers")
+        } else {
+            monoio::time::timeout(
+                Duration::from_millis(app.timeout_ms("keep_alive_idle")),
+                stream.read(vec![0u8; SOCKET_READ_BYTES]),
+            )
+            .await
+            .map_err(|_| "keep_alive")
+        };
+
+        match read_result {
+            Err("keep_alive") => {
+                app.record_timeout("keep_alive");
+                debug!(%peer_ip, "HTTP/1.1 keep-alive idle deadline exceeded");
+                return Ok(());
+            }
+            Err(phase @ ("request_headers" | "request_body")) => {
+                app.record_timeout(phase);
+                warn!(%peer_ip, phase, "HTTP/1.1 request deadline exceeded");
+                drop(pending.take()); // Drop any in-flight admission guard immediately.
+                let response = HttpResponse::error(408, "request deadline exceeded");
+                write_http1_response_with_timeout(&mut stream, &response, true, quic_port, &app)
+                    .await?;
+                return Ok(());
+            }
+            Err(_) => unreachable!("all timeout phases are enumerated above"),
+            Ok((Ok(0), _buffer)) => {
+                if pending.is_some() || !plaintext.is_empty() {
+                    app.record_client_abort();
+                }
+                return Ok(());
+            }
+            Ok((Ok(amount), buffer)) => {
+                plaintext.extend_from_slice(&buffer[..amount]);
+                if pending.is_none() && header_deadline.is_none() {
+                    header_deadline = Some(
+                        Instant::now() + Duration::from_millis(app.timeout_ms("request_headers")),
+                    );
+                }
+            }
+            Ok((Err(error), _buffer)) if error.kind() == io::ErrorKind::Interrupted => continue,
+            Ok((Err(error), _buffer)) => {
+                if pending.is_some() || !plaintext.is_empty() {
+                    app.record_client_abort();
+                }
+                return Err(error);
+            }
+        }
+    }
+}
+
+async fn write_http1_response_with_timeout<S>(
+    stream: &mut S,
+    response: &HttpResponse,
+    close_after: bool,
+    quic_port: u16,
+    app: &AppRuntime,
+) -> io::Result<()>
+where
+    S: AsyncWriteRentExt + Unpin,
+{
+    match monoio::time::timeout(
+        Duration::from_millis(app.timeout_ms("response_write")),
+        write_http1_response(stream, response, close_after, quic_port),
+    )
+    .await
+    {
+        Ok(result) => result,
+        Err(_) => {
+            app.record_timeout("response_write");
+            Err(io::Error::new(
+                io::ErrorKind::TimedOut,
+                "HTTP/1.1 response write deadline exceeded",
+            ))
         }
     }
 }
@@ -409,13 +580,6 @@ where
     result.map(|_| ())
 }
 
-struct ConnectionGuard(Rc<Cell<usize>>);
-impl Drop for ConnectionGuard {
-    fn drop(&mut self) {
-        self.0.set(self.0.get().saturating_sub(1));
-    }
-}
-
 struct RequestHead {
     method: String,
     authority: String,
@@ -433,16 +597,16 @@ enum HeadParse {
     Reject(u16, &'static str),
 }
 
-fn parse_request_head(bytes: &[u8], max_body_bytes: usize) -> HeadParse {
+fn parse_request_head(bytes: &[u8], max_body_bytes: usize, max_header_bytes: usize) -> HeadParse {
     let Some(separator) = bytes.windows(4).position(|window| window == b"\r\n\r\n") else {
-        return if bytes.len() > MAX_HEADER_BYTES {
+        return if bytes.len() > max_header_bytes {
             HeadParse::Reject(431, "request headers too large")
         } else {
             HeadParse::Incomplete
         };
     };
     let header_len = separator + 4;
-    if header_len > MAX_HEADER_BYTES {
+    if header_len > max_header_bytes {
         return HeadParse::Reject(431, "request headers too large");
     }
     let text = match std::str::from_utf8(&bytes[..separator]) {
