@@ -24,4 +24,5 @@ RUN mkdir -p /run/secrets
 USER 10001:10001
 EXPOSE 8443/udp
 EXPOSE 8443/tcp
+EXPOSE 8080/tcp
 ENTRYPOINT ["/app/websrv"]

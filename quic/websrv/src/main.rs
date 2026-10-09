@@ -7,6 +7,7 @@ compile_error!(
 
 mod config;
 mod controllers;
+mod h2_server;
 mod http1_server;
 mod http_types;
 mod quic_server;

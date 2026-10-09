@@ -17,7 +17,7 @@ pub async fn handle(
             json!({
                 "service": "websrv",
                 "version": env!("CARGO_PKG_VERSION"),
-                "protocols": ["h3", "http/1.1 (configurable)"],
+                "protocols": ["h3", "h2 (TLS ALPN, configurable)", "http/1.1 over TLS (ALPN)", "http/1.1 cleartext (configurable)"],
                 "runtime": "monoio/io_uring",
                 "io_uring_fallback": false
             }),

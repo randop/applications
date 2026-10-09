@@ -1,5 +1,5 @@
 [Unit]
-Description=websrv io_uring HTTP/3 and HTTP/1.1 server
+Description=websrv io_uring HTTP/3, HTTP/2, HTTPS/1.1, and cleartext HTTP/1.1 server
 After=network-online.target
 Wants=network-online.target
 

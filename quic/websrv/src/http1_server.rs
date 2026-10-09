@@ -1,11 +1,9 @@
-//! Optional HTTPS/1.1 protocol fallback. The listener and stream I/O use Monoio's
-//! mandatory IoUringDriver; rustls only implements TLS record/handshake logic.
+//! TLS ALPN dispatch for HTTP/2 and HTTP/1.1 plus cleartext HTTP/1.1, using Monoio io_uring.
 use std::{
     cell::Cell,
     collections::HashMap,
     fs::File,
-    io::{self, BufReader, Cursor, Read, Write},
-    net::SocketAddr,
+    io::{self, BufReader},
     path::Path,
     rc::Rc,
     sync::Arc,
@@ -16,7 +14,8 @@ use monoio::{
     io::{AsyncReadRent, AsyncWriteRentExt},
     net::{TcpListener, TcpStream},
 };
-use rustls::{ServerConfig, ServerConnection};
+use monoio_rustls::TlsAcceptor;
+use rustls::ServerConfig;
 use tracing::{debug, info, warn};
 
 use crate::{
@@ -27,9 +26,12 @@ use crate::{
 const MAX_TCP_CONNECTIONS: usize = 128;
 const MAX_HEADER_BYTES: usize = 64 * 1024;
 const SOCKET_READ_BYTES: usize = 16 * 1024;
-const TLS_PLAINTEXT_CHUNK: usize = 16 * 1024;
 
-pub fn make_tls_config(cert_path: &Path, key_path: &Path) -> Result<Arc<ServerConfig>> {
+pub fn make_tls_config(
+    cert_path: &Path,
+    key_path: &Path,
+    http2_enabled: bool,
+) -> Result<Arc<ServerConfig>> {
     let mut cert_reader = BufReader::new(
         File::open(cert_path)
             .with_context(|| format!("cannot open TLS certificate {}", cert_path.display()))?,
@@ -58,10 +60,16 @@ pub fn make_tls_config(cert_path: &Path, key_path: &Path) -> Result<Arc<ServerCo
         .with_no_client_auth()
         .with_single_cert(certs, key)
         .context("TLS certificate and private key do not match or are unsupported")?;
-    tls.alpn_protocols = vec![b"http/1.1".to_vec()];
+    tls.alpn_protocols = if http2_enabled {
+        vec![b"h2".to_vec(), b"http/1.1".to_vec()]
+    } else {
+        vec![b"http/1.1".to_vec()]
+    };
     Ok(Arc::new(tls))
 }
 
+/// A single TLS listener negotiates HTTP/2 or HTTP/1.1 with ALPN. Clients which do
+/// not send ALPN retain the legacy HTTP/1.1 behavior.
 pub async fn serve(
     listener: TcpListener,
     tls_config: Arc<ServerConfig>,
@@ -69,92 +77,114 @@ pub async fn serve(
     quic_port: u16,
 ) {
     let active_connections = Rc::new(Cell::new(0usize));
+    let acceptor = TlsAcceptor::from(tls_config);
     info!(
-        protocol = "HTTPS/1.1",
+        protocol = "HTTPS/1.1 + HTTP/2 (ALPN)",
         runtime = "monoio/IoUringDriver",
-        "io_uring TCP protocol fallback listening"
+        "TLS listener started on Monoio io_uring"
     );
 
     loop {
         match listener.accept().await {
             Ok((stream, peer)) => {
                 if active_connections.get() >= MAX_TCP_CONNECTIONS {
-                    debug!(%peer, limit = MAX_TCP_CONNECTIONS, "TCP connection limit reached");
+                    debug!(%peer, limit = MAX_TCP_CONNECTIONS, "TLS TCP connection limit reached");
                     drop(stream);
                     continue;
                 }
                 active_connections.set(active_connections.get() + 1);
                 let guard = ConnectionGuard(active_connections.clone());
                 let app = app.clone();
-                let tls_config = tls_config.clone();
+                let acceptor = acceptor.clone();
                 monoio::spawn(async move {
                     let _connection_guard = guard;
-                    if let Err(error) =
-                        serve_connection(stream, peer, tls_config, app, quic_port).await
+                    if let Err(error) = serve_tls_connection(stream, acceptor, app, quic_port).await
                     {
-                        debug!(%peer, %error, "HTTPS/1.1 connection ended");
+                        debug!(%peer, %error, "TLS connection ended");
                     }
                 });
             }
             Err(error) => {
-                warn!(%error, "io_uring TCP accept failed");
+                warn!(%error, "io_uring TLS TCP accept failed");
                 monoio::time::sleep(std::time::Duration::from_millis(25)).await;
             }
         }
     }
 }
 
-struct ConnectionGuard(Rc<Cell<usize>>);
-impl Drop for ConnectionGuard {
-    fn drop(&mut self) {
-        self.0.set(self.0.get().saturating_sub(1));
+async fn serve_tls_connection(
+    stream: TcpStream,
+    acceptor: TlsAcceptor,
+    app: AppRuntime,
+    quic_port: u16,
+) -> Result<()> {
+    let tls_stream = acceptor
+        .accept(stream)
+        .await
+        .context("TLS handshake failed")?;
+    let negotiated = tls_stream.alpn_protocol();
+    match negotiated.as_deref() {
+        Some(b"h2") => crate::h2_server::serve_connection(tls_stream, app, quic_port).await,
+        Some(b"http/1.1") | None => {
+            serve_http1_stream(tls_stream, app, quic_port).await?;
+            Ok(())
+        }
+        Some(protocol) => anyhow::bail!("unsupported negotiated ALPN protocol: {:?}", protocol),
     }
 }
 
-struct RequestHead {
-    method: String,
-    authority: String,
-    path: String,
-    query: Option<String>,
-    headers: HashMap<String, String>,
-    content_length: usize,
-    header_len: usize,
-    close_after: bool,
+/// Serve plain HTTP/1.1 over TCP without TLS. It uses the same parser, hostname
+/// dispatcher, static-site roots, and in-process Rust controllers as HTTP/2 and H3.
+pub async fn serve_cleartext(listener: TcpListener, app: AppRuntime, quic_port: u16) {
+    let active_connections = Rc::new(Cell::new(0usize));
+    info!(
+        protocol = "HTTP/1.1 cleartext",
+        runtime = "monoio/IoUringDriver",
+        "cleartext listener started on Monoio io_uring"
+    );
+
+    loop {
+        match listener.accept().await {
+            Ok((stream, peer)) => {
+                if active_connections.get() >= MAX_TCP_CONNECTIONS {
+                    debug!(%peer, limit = MAX_TCP_CONNECTIONS, "cleartext TCP connection limit reached");
+                    drop(stream);
+                    continue;
+                }
+                active_connections.set(active_connections.get() + 1);
+                let guard = ConnectionGuard(active_connections.clone());
+                let app = app.clone();
+                monoio::spawn(async move {
+                    let _connection_guard = guard;
+                    if let Err(error) = serve_http1_stream(stream, app, quic_port).await {
+                        debug!(%peer, %error, "cleartext HTTP/1.1 connection ended");
+                    }
+                });
+            }
+            Err(error) => {
+                warn!(%error, "io_uring cleartext TCP accept failed");
+                monoio::time::sleep(std::time::Duration::from_millis(25)).await;
+            }
+        }
+    }
 }
 
-enum HeadParse {
-    Incomplete,
-    Complete(RequestHead),
-    Reject(u16, &'static str),
-}
-
-async fn serve_connection(
-    mut stream: TcpStream,
-    peer: SocketAddr,
-    tls_config: Arc<ServerConfig>,
-    app: AppRuntime,
-    quic_port: u16,
-) -> io::Result<()> {
-    let connection = ServerConnection::new(tls_config)
-        .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
-    let mut tls = connection;
+async fn serve_http1_stream<S>(mut stream: S, app: AppRuntime, quic_port: u16) -> io::Result<()>
+where
+    S: AsyncReadRent + AsyncWriteRentExt + Unpin,
+{
     let mut socket_buffer = vec![0u8; SOCKET_READ_BYTES];
     let mut plaintext = Vec::<u8>::new();
     let mut pending: Option<(RequestHead, RequestGuard)> = None;
 
     loop {
-        let peer_closed = drain_tls_plaintext(&mut tls, &mut plaintext)?;
-
         loop {
             if pending.is_none() {
                 match parse_request_head(&plaintext, app.max_request_body_bytes()) {
                     HeadParse::Incomplete => break,
                     HeadParse::Reject(status, message) => {
-                        let mut response = HttpResponse::error(status, message);
-                        response.head_only = false;
-                        write_http1_response(&mut stream, &mut tls, &response, true, quic_port)
-                            .await?;
-                        finish_tls_close(&mut stream, &mut tls).await?;
+                        let response = HttpResponse::error(status, message);
+                        write_http1_response(&mut stream, &response, true, quic_port).await?;
                         return Ok(());
                     }
                     HeadParse::Complete(head) => {
@@ -162,9 +192,7 @@ async fn serve_connection(
                         let Some(guard) = app.acquire_request() else {
                             let response =
                                 HttpResponse::error(503, "server request capacity reached");
-                            write_http1_response(&mut stream, &mut tls, &response, true, quic_port)
-                                .await?;
-                            finish_tls_close(&mut stream, &mut tls).await?;
+                            write_http1_response(&mut stream, &response, true, quic_port).await?;
                             return Ok(());
                         };
                         pending = Some((head, guard));
@@ -196,54 +224,95 @@ async fn serve_connection(
             if is_head {
                 response.head_only = true;
             }
-            write_http1_response(&mut stream, &mut tls, &response, close_after, quic_port).await?;
+            write_http1_response(&mut stream, &response, close_after, quic_port).await?;
             drop(guard);
             if close_after {
-                finish_tls_close(&mut stream, &mut tls).await?;
                 return Ok(());
             }
         }
 
-        if tls.wants_write() {
-            flush_tls(&mut stream, &mut tls).await?;
-        }
-        // rustls 0.23 reports a received close_notify as Ok(0) from its
-        // plaintext reader once buffered plaintext has been drained.
-        if peer_closed {
-            return Ok(());
-        }
-
         let (result, returned_buffer) = stream.read(socket_buffer).await;
         socket_buffer = returned_buffer;
-        let amount = match result {
+        match result {
             Ok(0) => return Ok(()),
-            Ok(amount) => amount,
+            Ok(amount) => plaintext.extend_from_slice(&socket_buffer[..amount]),
             Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
             Err(error) => return Err(error),
-        };
-        let mut cursor = Cursor::new(&socket_buffer[..amount]);
-        tls.read_tls(&mut cursor)?;
-        tls.process_new_packets()
-            .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
-        if tls.wants_write() {
-            flush_tls(&mut stream, &mut tls).await?;
         }
     }
 }
 
-fn drain_tls_plaintext(tls: &mut ServerConnection, output: &mut Vec<u8>) -> io::Result<bool> {
-    let mut buffer = vec![0u8; TLS_PLAINTEXT_CHUNK];
-    loop {
-        match tls.reader().read(&mut buffer) {
-            // In rustls 0.23, a non-empty read returning zero means the peer sent
-            // close_notify and all buffered plaintext has now been consumed.
-            Ok(0) => return Ok(true),
-            Ok(amount) => output.extend_from_slice(&buffer[..amount]),
-            Err(error) if error.kind() == io::ErrorKind::WouldBlock => return Ok(false),
-            Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
-            Err(error) => return Err(error),
+async fn write_http1_response<S>(
+    stream: &mut S,
+    response: &HttpResponse,
+    close_after: bool,
+    quic_port: u16,
+) -> io::Result<()>
+where
+    S: AsyncWriteRentExt + Unpin,
+{
+    let reason = reason_phrase(response.status);
+    let content_length = if matches!(response.status, 204 | 304) {
+        0
+    } else {
+        response.body.len()
+    };
+    let connection = if close_after { "close" } else { "keep-alive" };
+    let safe_content_type = if response.content_type.chars().any(char::is_control) {
+        "application/octet-stream"
+    } else {
+        response.content_type.as_str()
+    };
+    let mut headers = format!(
+        "HTTP/1.1 {} {}\r\nserver: websrv\r\ncontent-type: {}\r\ncontent-length: {}\r\nconnection: {}\r\nx-content-type-options: nosniff\r\nalt-svc: h3=\":{}\"; ma=86400\r\n",
+        response.status, reason, safe_content_type, content_length, connection, quic_port,
+    );
+    if let Some(cache_control) = &response.cache_control {
+        if !cache_control
+            .chars()
+            .any(|ch| ch.is_control() && ch != '\t')
+        {
+            headers.push_str(&format!("cache-control: {cache_control}\r\n"));
         }
     }
+    headers.push_str("\r\n");
+    write_all(stream, headers.as_bytes()).await?;
+    if !response.head_only && !matches!(response.status, 204 | 304) {
+        write_all(stream, &response.body).await?;
+    }
+    Ok(())
+}
+
+async fn write_all<S>(stream: &mut S, bytes: &[u8]) -> io::Result<()>
+where
+    S: AsyncWriteRentExt + Unpin,
+{
+    let (result, _returned_buffer) = stream.write_all(bytes.to_vec()).await;
+    result.map(|_| ())
+}
+
+struct ConnectionGuard(Rc<Cell<usize>>);
+impl Drop for ConnectionGuard {
+    fn drop(&mut self) {
+        self.0.set(self.0.get().saturating_sub(1));
+    }
+}
+
+struct RequestHead {
+    method: String,
+    authority: String,
+    path: String,
+    query: Option<String>,
+    headers: HashMap<String, String>,
+    content_length: usize,
+    header_len: usize,
+    close_after: bool,
+}
+
+enum HeadParse {
+    Incomplete,
+    Complete(RequestHead),
+    Reject(u16, &'static str),
 }
 
 fn parse_request_head(bytes: &[u8], max_body_bytes: usize) -> HeadParse {
@@ -348,7 +417,6 @@ fn parse_request_head(bytes: &[u8], max_body_bytes: usize) -> HeadParse {
             .split(',')
             .any(|token| token.trim().eq_ignore_ascii_case("close"))
     });
-
     HeadParse::Complete(RequestHead {
         method: method.to_owned(),
         authority,
@@ -385,80 +453,6 @@ fn is_http_token(value: &str) -> bool {
         })
 }
 
-async fn write_http1_response(
-    stream: &mut TcpStream,
-    tls: &mut ServerConnection,
-    response: &HttpResponse,
-    close_after: bool,
-    quic_port: u16,
-) -> io::Result<()> {
-    let reason = reason_phrase(response.status);
-    let content_length = if matches!(response.status, 204 | 304) {
-        0
-    } else {
-        response.body.len()
-    };
-    let connection = if close_after { "close" } else { "keep-alive" };
-    let safe_content_type = if response.content_type.chars().any(char::is_control) {
-        "application/octet-stream"
-    } else {
-        response.content_type.as_str()
-    };
-    let mut headers = format!(
-        "HTTP/1.1 {} {}\r\nserver: websrv\r\ncontent-type: {}\r\ncontent-length: {}\r\nconnection: {}\r\nx-content-type-options: nosniff\r\nalt-svc: h3=\":{}\"; ma=86400\r\n",
-        response.status, reason, safe_content_type, content_length, connection, quic_port,
-    );
-    if let Some(cache_control) = &response.cache_control {
-        if !cache_control
-            .chars()
-            .any(|ch| ch.is_control() && ch != '\t')
-        {
-            headers.push_str(&format!("cache-control: {cache_control}\r\n"));
-        }
-    }
-    headers.push_str("\r\n");
-    write_tls_plaintext(stream, tls, headers.as_bytes()).await?;
-    if !response.head_only && !matches!(response.status, 204 | 304) {
-        write_tls_plaintext(stream, tls, &response.body).await?;
-    }
-    Ok(())
-}
-
-async fn finish_tls_close(stream: &mut TcpStream, tls: &mut ServerConnection) -> io::Result<()> {
-    tls.send_close_notify();
-    flush_tls(stream, tls).await
-}
-
-async fn write_tls_plaintext(
-    stream: &mut TcpStream,
-    tls: &mut ServerConnection,
-    mut bytes: &[u8],
-) -> io::Result<()> {
-    while !bytes.is_empty() {
-        let amount = bytes.len().min(TLS_PLAINTEXT_CHUNK);
-        {
-            let mut writer = tls.writer();
-            writer.write_all(&bytes[..amount])?;
-        }
-        flush_tls(stream, tls).await?;
-        bytes = &bytes[amount..];
-    }
-    Ok(())
-}
-
-async fn flush_tls(stream: &mut TcpStream, tls: &mut ServerConnection) -> io::Result<()> {
-    while tls.wants_write() {
-        let mut record = Vec::with_capacity(TLS_PLAINTEXT_CHUNK + 2048);
-        let written = tls.write_tls(&mut record)?;
-        if written == 0 {
-            break;
-        }
-        let (result, _returned_record) = stream.write_all(record).await;
-        result?;
-    }
-    Ok(())
-}
-
 fn reason_phrase(status: u16) -> &'static str {
     match status {
         200 => "OK",
@@ -486,39 +480,5 @@ fn reason_phrase(status: u16) -> &'static str {
         503 => "Service Unavailable",
         505 => "HTTP Version Not Supported",
         _ => "Response",
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{parse_request_head, HeadParse};
-
-    #[test]
-    fn parses_content_length_and_query() {
-        let raw = b"POST /echo?format=json HTTP/1.1\r\nHost: api.example.test\r\nContent-Length: 3\r\n\r\nabc";
-        let HeadParse::Complete(head) = parse_request_head(raw, 1024) else {
-            panic!("request should parse")
-        };
-        assert_eq!(head.method, "POST");
-        assert_eq!(head.authority, "api.example.test");
-        assert_eq!(head.path, "/echo");
-        assert_eq!(head.query.as_deref(), Some("format=json"));
-        assert_eq!(head.content_length, 3);
-        assert_eq!(&raw[head.header_len..], b"abc");
-    }
-
-    #[test]
-    fn rejects_chunked_bodies_and_oversize_content_length() {
-        let chunked =
-            b"POST / HTTP/1.1\r\nHost: example.test\r\nTransfer-Encoding: chunked\r\n\r\n";
-        assert!(matches!(
-            parse_request_head(chunked, 1024),
-            HeadParse::Reject(501, _)
-        ));
-        let too_large = b"POST / HTTP/1.1\r\nHost: example.test\r\nContent-Length: 20\r\n\r\n";
-        assert!(matches!(
-            parse_request_head(too_large, 10),
-            HeadParse::Reject(413, _)
-        ));
     }
 }

@@ -215,7 +215,9 @@ pub async fn serve(
     let h3_config = quiche::h3::Config::new().context("could not create HTTP/3 configuration")?;
     let controllers = ControllerRuntime::new(&config.controllers, config.max_request_body_bytes)?;
     let tcp_http1_enabled = config.tcp_http1_enabled;
+    let http1_cleartext_enabled = config.http1_cleartext_enabled;
     let tcp_listen = config.listen;
+    let cleartext_listen = config.http1_cleartext_listen;
     let app = AppRuntime {
         config: Rc::new(config),
         controllers,
@@ -223,15 +225,30 @@ pub async fn serve(
     };
 
     if tcp_http1_enabled {
-        let tls_config =
-            crate::http1_server::make_tls_config(&app.config.cert_path, &app.config.key_path)?;
+        let tls_config = crate::http1_server::make_tls_config(
+            &app.config.cert_path,
+            &app.config.key_path,
+            app.config.http2_enabled,
+        )?;
         let listener = monoio::net::TcpListener::bind(tcp_listen).with_context(|| {
-            format!("could not bind io_uring HTTP/1.1 listener at {tcp_listen}")
+            format!("could not bind io_uring HTTPS/1.1 listener at {tcp_listen}")
         })?;
-        info!(listen = %tcp_listen, protocol = "HTTP/1.1 over TLS", "TCP fallback enabled on Monoio io_uring");
+        info!(listen = %tcp_listen, protocol = "HTTPS/1.1 + HTTP/2", http2_enabled = app.config.http2_enabled, "TLS HTTP listener started on Monoio io_uring with ALPN");
         monoio::spawn(crate::http1_server::serve(
             listener,
             tls_config,
+            app.clone(),
+            tcp_listen.port(),
+        ));
+    }
+
+    if http1_cleartext_enabled {
+        let listener = monoio::net::TcpListener::bind(cleartext_listen).with_context(|| {
+            format!("could not bind io_uring cleartext HTTP/1.1 listener at {cleartext_listen}")
+        })?;
+        info!(listen = %cleartext_listen, protocol = "HTTP/1.1 cleartext", "plain HTTP/1.1 listener started on Monoio io_uring");
+        monoio::spawn(crate::http1_server::serve_cleartext(
+            listener,
             app.clone(),
             tcp_listen.port(),
         ));
@@ -287,7 +304,7 @@ pub async fn serve(
     // Initial packets use a client-chosen original destination CID until the server's
     // source CID is observed. Keep that original CID as an alias for Initial retries.
     let mut cid_aliases: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();
-    info!(listen = %local_addr, runtime = "monoio/IoUringDriver", protocol = "HTTP/3", tcp_http1_enabled = tcp_http1_enabled, "websrv started; no fallback driver is configured");
+    info!(listen = %local_addr, runtime = "monoio/IoUringDriver", protocol = "HTTP/3", tcp_https_http1_enabled = tcp_http1_enabled, tcp_cleartext_http1_enabled = http1_cleartext_enabled, cleartext_listen = %cleartext_listen, "websrv started; no fallback driver is configured");
 
     while let Some(event) = event_rx.next().await {
         match event {
@@ -630,7 +647,6 @@ fn pump_outgoing(session: &mut Session) {
             content_type,
             cache_control,
             body_len,
-            offset,
             head_only,
             headers_sent,
         )) = session.outgoing.front().map(|front| {
@@ -640,7 +656,6 @@ fn pump_outgoing(session: &mut Session) {
                 front.content_type.clone(),
                 front.cache_control.clone(),
                 front.body.len(),
-                front.offset,
                 front.head_only,
                 front.headers_sent,
             )

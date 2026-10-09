@@ -1,13 +1,17 @@
 [package]
 name = "websrv"
-version = "0.1.0"
+version = "0.3.1"
 edition = "2021"
 rust-version = "1.82"
 license = "MIT"
-description = "Linux-only HTTP/3 server using a mandatory io_uring runtime, host-based static sites, and modular in-process REST controllers"
+description = "Linux-only HTTP/3, HTTP/2, and HTTP/1.1 server using a mandatory io_uring runtime, host-based static sites, and modular in-process REST controllers"
 
 [dependencies]
 anyhow = "1"
+bytes = "1"
+http = "1"
+monoio-http = "0.3.12"
+monoio-rustls = "0.4.0"
 signal-hook = "0.3"
 futures = "0.3"
 mime_guess = "2"

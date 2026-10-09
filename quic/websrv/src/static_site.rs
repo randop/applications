@@ -91,8 +91,6 @@ enum ReadError {
 }
 
 async fn read_bounded_file(path: &Path, max_file_bytes: usize) -> Result<Vec<u8>, ReadError> {
-    use monoio::io::AsyncReadRent;
-
     let file = monoio::fs::File::open(path)
         .await
         .map_err(|_| ReadError::NotFound)?;

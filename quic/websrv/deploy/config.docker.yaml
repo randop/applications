@@ -1,6 +1,9 @@
 # Example container config; TLS files must be mounted at the paths below.
-listen: "0.0.0.0:8443" # UDP/QUIC and TCP/HTTP1.1 share the port number.
+listen: "0.0.0.0:8443" # UDP/QUIC and HTTPS (HTTP/2 or HTTP/1.1 via ALPN) share the port number.
 tcp_http1_enabled: true
+http2_enabled: true
+http1_cleartext_enabled: true
+http1_cleartext_listen: "0.0.0.0:8080"
 tls_cert: "/run/secrets/tls_cert"
 tls_key: "/run/secrets/tls_key"
 max_request_body_bytes: 1048576

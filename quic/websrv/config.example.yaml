@@ -1,16 +1,17 @@
-# Use as configuration template for config.yaml
-# TODO:
-# `cp config.example.yaml config.yaml`
+# Every setting is read from this YAML file. There is no .env loader or env override.
 # Relative paths are resolved against the directory containing config.yaml.
-listen: "0.0.0.0:8443" # UDP/QUIC and TCP/HTTP1.1 share the port number.
+listen: "0.0.0.0:8443" # UDP/QUIC and HTTPS (HTTP/2 or HTTP/1.1 via ALPN) share the port number; cleartext HTTP/1.1 uses port 8080.
 tcp_http1_enabled: true
+http2_enabled: true
+http1_cleartext_enabled: true
+http1_cleartext_listen: "0.0.0.0:8080"
 tls_cert: "certs/fullchain.pem"
 tls_key: "certs/privkey.pem"
 max_request_body_bytes: 1048576
 max_static_file_bytes: 16777216
 log_filter: "info,websrv=debug"
 
-# Requests are routed by HTTP/3 :authority / Host. Exact names are checked before wildcards.
+# Requests on HTTP/3, HTTP/2, and both HTTP/1.1 listeners are routed by :authority / Host. Exact names are checked before wildcards.
 default_host: "example.test"
 virtual_hosts:
   - host: "example.test"
@@ -23,7 +24,7 @@ virtual_hosts:
 
   - host: "*.tenant.example.test"
     static:
-      root: "sites/tenant"
+      root: "sites"
       index: "index.html"
       spa_fallback: true
       cache_control: "public, max-age=300"

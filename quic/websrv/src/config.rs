@@ -18,6 +18,15 @@ struct RawConfig {
     listen: String,
     #[serde(default = "default_tcp_http1_enabled")]
     tcp_http1_enabled: bool,
+    /// Enables HTTP/2 over TLS ALPN on the existing HTTPS TCP listener.
+    #[serde(default = "default_http2_enabled")]
+    http2_enabled: bool,
+    /// Plain HTTP/1.1 listener. Disabled by default for existing user configs;
+    /// the shipped example configs explicitly enable it on port 8080.
+    #[serde(default)]
+    http1_cleartext_enabled: bool,
+    #[serde(default = "default_http1_cleartext_listen")]
+    http1_cleartext_listen: String,
     #[serde(default = "default_cert_path")]
     tls_cert: PathBuf,
     #[serde(default = "default_key_path")]
@@ -37,9 +46,12 @@ struct RawConfig {
 
 #[derive(Debug, Clone)]
 pub struct Config {
-    /// Address used for the QUIC/HTTP3 UDP socket and, when enabled, HTTP/1.1 TCP.
+    /// Address used for the QUIC/HTTP/3 UDP socket and, when enabled, HTTPS/1.1 + HTTP/2 TCP.
     pub listen: SocketAddr,
     pub tcp_http1_enabled: bool,
+    pub http2_enabled: bool,
+    pub http1_cleartext_enabled: bool,
+    pub http1_cleartext_listen: SocketAddr,
     pub cert_path: PathBuf,
     pub key_path: PathBuf,
     pub max_request_body_bytes: usize,
@@ -96,6 +108,12 @@ fn default_listen() -> String {
 fn default_tcp_http1_enabled() -> bool {
     true
 }
+fn default_http2_enabled() -> bool {
+    true
+}
+fn default_http1_cleartext_listen() -> String {
+    "0.0.0.0:8080".to_owned()
+}
 fn default_cert_path() -> PathBuf {
     PathBuf::from("certs/fullchain.pem")
 }
@@ -139,7 +157,20 @@ impl Config {
             .listen
             .parse::<SocketAddr>()
             .context("listen must be a socket address such as 0.0.0.0:8443")?;
-        anyhow::ensure!(listen.port() != 0, "listen port must be non-zero so the TCP and UDP listeners share the same configured port");
+        let http1_cleartext_listen = raw
+            .http1_cleartext_listen
+            .parse::<SocketAddr>()
+            .context("http1_cleartext_listen must be a socket address such as 0.0.0.0:8080")?;
+        anyhow::ensure!(listen.port() != 0, "listen port must be non-zero so the TLS TCP and UDP listeners can share the configured port");
+        anyhow::ensure!(
+            http1_cleartext_listen.port() != 0,
+            "http1_cleartext_listen port must be non-zero"
+        );
+        anyhow::ensure!(
+            !(raw.http1_cleartext_enabled && raw.tcp_http1_enabled
+                && http1_cleartext_listen.port() == listen.port()),
+            "http1_cleartext_listen must use a different TCP port from listen when tcp_http1_enabled is true",
+        );
         anyhow::ensure!(
             raw.max_request_body_bytes > 0 && raw.max_request_body_bytes <= 16 * 1024 * 1024,
             "max_request_body_bytes must be between 1 byte and 16 MiB"
@@ -269,6 +300,9 @@ impl Config {
         Ok(Self {
             listen,
             tcp_http1_enabled: raw.tcp_http1_enabled,
+            http2_enabled: raw.http2_enabled,
+            http1_cleartext_enabled: raw.http1_cleartext_enabled,
+            http1_cleartext_listen,
             cert_path: raw.tls_cert,
             key_path: raw.tls_key,
             max_request_body_bytes: raw.max_request_body_bytes,
