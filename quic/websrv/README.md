@@ -217,6 +217,10 @@ The systemd unit runs as an unprivileged `websrv` user. Install it and the binar
 - Audit controller handlers before enabling mutating API routes. The sample item store is in-memory and has no authentication or authorization built in.
 - Set resource limits, benchmark under representative traffic, and test overload behavior before production deployment.
 
+## Version 0.4.1
+
+Simplifies the `/status` response by removing the `runtime` and `io_uring_fallback` fields, and normalizes its `protocols` array to `https/3`, `http/1.1`, `https/1.1`, `http/2`, and `https/2`. The package patch version is bumped to `0.4.1`; all server protocols and mandatory `io_uring` behavior remain unchanged.
+
 ## Version 0.4.0
 
 Adds independent enable flags for secure and cleartext HTTP/1.1 and HTTP/2, consolidates cleartext protocols on `plain_listen`, and implements cleartext HTTP/2 prior-knowledge (h2c). When both plain protocols are enabled, the server detects the HTTP/2 connection preface and replays all sniffed bytes to the selected parser. The startup log uses the concise `websrv started` message. The mandatory Monoio `IoUringDriver`, QUIC/HTTP/3, TLS ALPN, virtual hosting, and Rust controllers remain intact.
