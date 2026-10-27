@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<anime>
+    <title>
+        The Strongest Job Is Apparently Not a Hero or a Sage,
+        but an Appraiser (Provisional)!
+    </title>
+
+    <originalTitle>
+        最強の職業は勇者でも賢者でもなく鑑定士（仮）らしいですよ？
+    </originalTitle>
+
+    <alternativeTitle>
+        Saikyou no Shokugyou wa Yuusha demo Kenja demo Naku
+        Kanteishi (Kari) Rashii desu yo
+    </alternativeTitle>
+
+    <releaseDate>2026-04-04</releaseDate>
+
+    <genres>
+        <genre>Isekai</genre>
+        <genre>Fantasy</genre>
+        <genre>Adventure</genre>
+        <genre>Comedy</genre>
+    </genres>
+
+    <images>
+        <image id="cover" type="key-visual">
+            <url>https://anime.xotaku.com/stella/webp/cover/312439/nb6zf9msey/s1las.webp</url>
+            <alt>Anime cover featuring the main characters</alt>
+        </image>
+
+        <image id="promo-poster" type="promotional-poster">
+            <url>https://pbs.twimg.com/media/G3vhKaLWMAAe2jL.jpg</url>
+            <alt>Promotional poster featuring Hibiki</alt>
+        </image>
+    </images>
+
+    <synopsis>
+        High school student Hibiki Manabe is transported to a
+        fantasy world where he receives the job of Appraiser.
+        He begins an adventure with new companions and discovers
+        the potential of his unusual ability.
+    </synopsis>
+</anime>
