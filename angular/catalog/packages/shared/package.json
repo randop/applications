@@ -4,7 +4,11 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./anime-schema": "./src/anime-schema.ts"
+    "./anime-schema": {
+      "types": "./dist/anime-schema.d.ts",
+      "import": "./dist/anime-schema.js",
+      "require": "./dist/anime-schema.js"
+    }
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { MongoService } from '../database/mongo.service.js';
-import type { AnimeRecord } from '../../../../packages/shared/src/anime-schema.js';
+import type { AnimeRecord } from '@anime-catalog/shared/anime-schema';
 
 @Injectable()
 export class AnimeService {

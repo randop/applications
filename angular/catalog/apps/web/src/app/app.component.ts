@@ -33,9 +33,6 @@ interface AnimeListResponse { items: Anime[]; total: number; limit: number; skip
 
       <main>
         <section class="hero">
-          <div class="eyebrow">YOUR UNIVERSE, ORGANIZED</div>
-          <h1>Every story.<br><span>One collection.</span></h1>
-          <p class="hero-copy">Build your personal anime library. Import a title from a website and let AI organize the metadata for you.</p>
           <form class="import-panel" (ngSubmit)="importAnime()">
             <div class="field-label">IMPORT FROM WEBSITE</div>
             <div class="import-row">

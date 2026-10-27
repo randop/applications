@@ -2,7 +2,7 @@ import { BadRequestException, ConflictException, Injectable, ServiceUnavailableE
 import { ConfigService } from '@nestjs/config';
 import { v7 as uuidv7 } from 'uuid';
 import { XMLParser, XMLValidator } from 'fast-xml-parser';
-import { AnimeMetadataSchema, type AnimeMetadata, type AnimeRecord } from '../../../../packages/shared/src/anime-schema.js';
+import { AnimeMetadataSchema, type AnimeMetadata, type AnimeRecord } from '@anime-catalog/shared/anime-schema';
 import { MongoService } from '../database/mongo.service.js';
 import { AiExtractionService } from './ai-extraction.service.js';
 import { ImageStorageService } from '../images/image-storage.service.js';

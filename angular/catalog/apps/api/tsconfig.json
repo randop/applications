@@ -4,7 +4,6 @@
     "moduleResolution": "NodeNext",
     "target": "ES2022",
     "outDir": "./dist",
-    "baseUrl": ".",
     "strict": true,
     "skipLibCheck": true,
     "esModuleInterop": true,
@@ -12,7 +11,10 @@
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
     "declaration": true,
-    "sourceMap": true
+    "sourceMap": true,
+    "rootDir": "./src"
   },
-  "include": ["src/**/*.ts"]
+  "include": [
+    "src/**/*.ts"
+  ]
 }

@@ -3,10 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "nest start --watch",
-    "build": "nest build",
+    "dev": "pnpm --filter @anime-catalog/shared build && nest start --watch",
+    "build": "pnpm --filter @anime-catalog/shared build && nest build",
     "start": "node dist/main.js",
-    "lint": "tsc --noEmit -p tsconfig.json"
+    "lint": "pnpm --filter @anime-catalog/shared build && tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.0",
@@ -21,7 +21,8 @@
     "zod": "^4.0.0",
     "fast-xml-parser": "^5.0.0",
     "ipaddr.js": "^2.2.0",
-    "express": "^5.0.0"
+    "express": "^5.0.0",
+    "@anime-catalog/shared": "workspace:*"
   },
   "devDependencies": {
     "@nestjs/cli": "^11.0.0",

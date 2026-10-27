@@ -2,7 +2,7 @@ import { Body, Controller, Get, Param, Post, Query, BadRequestException, NotFoun
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AnimeService } from './anime.service.js';
 import { ImportService } from '../import/import.service.js';
-import { CreateAnimeFromUrlSchema } from '../../../../packages/shared/src/anime-schema.js';
+import { CreateAnimeFromUrlSchema } from '@anime-catalog/shared/anime-schema';
 import { z } from 'zod';
 
 @ApiTags('anime')
