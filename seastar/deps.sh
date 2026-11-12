@@ -308,6 +308,30 @@ if [ ! -f "${LOCAL_PKGCONFIG}/liburing.pc" ]; then
 fi
 export CMAKE_PREFIX_PATH="${OPT_PREFIX}/liburing/current:${CMAKE_PREFIX_PATH}"
 
+LTTNGUST_VERSION=2.15.2
+LTTNGUST_TAG=v2.15.2
+if [ ! -f "${OPT_PREFIX}/lttngust/current/lib/liblttng-ust.la" ]; then
+  echo "Compiling lttng-ust ${LTTNGUST_VERSION}"
+  mkdir -p ${OPT_PREFIX}/lttngust/current
+  rm -rf ${OPT_PREFIX}/lttngust/current/*
+  rm -rf ${OPT_PREFIX}/lttngust/${LIBURING_VERSION}
+  git clone -b ${LTTNGUST_TAG} https://github.com/lttng/lttng-ust ${OPT_PREFIX}/lttngust/${LTTNGUST_VERSION}
+  rm -rf ${OPT_PREFIX}/lttngust/${LTTNGUST_VERSION}/.git
+  rm -rf ${OPT_PREFIX}/lttngust/${LTTNGUST_VERSION}/.github
+  cd ${OPT_PREFIX}/lttngust/${LTTNGUST_VERSION}
+  ./bootstrap
+  ./configure --disable-man-pages --prefix=${OPT_PREFIX}/lttngust/current
+  make -j$(nproc)
+  make install
+  rm -fv ${LOCAL_PKGCONFIG}/lttng-ust.pc
+else
+  echo "lttngust: OK"
+fi
+if [ ! -f "${LOCAL_PKGCONFIG}/lttng-ust.pc" ]; then
+  ln -sv ${OPT_PREFIX}/lttngust/current/lib/pkgconfig/lttng-ust.pc ${LOCAL_PKGCONFIG}/lttng-ust.pc
+fi
+export CMAKE_PREFIX_PATH="${OPT_PREFIX}/lttngust/current:${CMAKE_PREFIX_PATH}"
+
 detect_ubuntu_jammy() {
   if [ -f /etc/os-release ]; then
     . /etc/os-release
@@ -331,8 +355,8 @@ detect_ubuntu_jammy() {
   return 2
 }
 
-SEASTAR_VERSION=v25.05.0
-SEASTAR_TAG=seastar-25.05.0
+SEASTAR_VERSION=6771f05c7fac7b921ab035d7b3d3daec9dfa8951
+SEASTAR_TAG=master
 SEASTAR_PKG_VERSION=
 if [ -f "${HOME}/.local/lib/pkgconfig/seastar.pc" ]; then
   SEASTAR_PKG_VERSION=$(pkg-config --modversion seastar 2>/dev/null)
@@ -414,11 +438,11 @@ if [ -z "$SEASTAR_PKG_VERSION" ]; then
   else
     ./configure.py \
       --mode=release \
+      --c++-standard=23 \
       --without-tests \
       --without-apps \
       --without-demos \
       --enable-io_uring \
-      --cflags="${SEASTAR_COMPILER_FLAGS} -I${OPT_PREFIX}/hwloc/current/include" \
       --prefix=${OPT_PREFIX}/seastar/current
   fi
   ninja -C build/release install -j $SEASTAR_COMPILER_NCPU
