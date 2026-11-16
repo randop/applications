@@ -249,15 +249,17 @@ int main(int ac, char **av) {
       seastar::sharded<echoserver> server;
       server.start(verbose, idle_timeout).get();
 
-      applog.info("shards: {}", seastar::smp::count);
+      applog.info("shards: {}", seastar::this_smp_shard_count());
 
       try {
         // Start listen on ALL shards and keep the futures alive via the
         // returned future
         server.invoke_on_all(&echoserver::listen, sa).get();
+      } catch (const std::exception &e) {
+        std::cerr << "Failed to start server: " << e.what() << std::endl;
+        return 1;
       } catch (...) {
-        std::cerr << "Failed to start server: " << std::current_exception()
-                  << std::endl;
+        std::cerr << "Failed to start server: unknown exception" << std::endl;
         return 1;
       }
 

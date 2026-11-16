@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(seastar-tcp-echo LANGUAGES CXX)
+project(seastar-applications LANGUAGES CXX)
 
 # Suppress Boost-related CMake warnings
 cmake_policy(SET CMP0144 NEW)   # BOOST_ROOT env var casing
@@ -11,6 +11,14 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# Warnings for ALL targets by default
+add_compile_options(-Wall -Wextra -Werror)
+
+# -O3 optimization setting
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Release)
+endif()
+
 find_package(Seastar REQUIRED)
 
 add_executable(tcp-echo main.cc)
@@ -19,7 +27,7 @@ target_compile_options(tcp-echo PRIVATE
     -Wall -Wextra -O3
 )
 
-add_executable(shard-demo sharded-parameter-demo.cc)
+add_executable(shard-demo sharded_parameter_demo.cc)
 target_link_libraries(shard-demo PRIVATE Seastar::seastar)
 target_compile_options(shard-demo PRIVATE
     -Wall -Wextra -O3

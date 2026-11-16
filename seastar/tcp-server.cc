@@ -174,7 +174,7 @@ seastar::future<> serve(uint16_t port, seastar::abort_source &as,
       connection_count++;
       (void)handle_connection(std::move(ar.connection), addr, timeout_seconds,
                               gate, as)
-          .handle_exception([=](std::exception_ptr ep) {
+          .handle_exception([=]([[maybe_unused]] std::exception_ptr ep) {
             applog.warn("Error closing connections");
           })
           .finally([&gate, &connection_count] {

@@ -27,7 +27,6 @@
 #include <seastar/core/thread.hh>
 #include <seastar/util/assert.hh>
 #include <seastar/util/closeable.hh>
-#include <iostream>
 
 // This is some service that we wish to run on all shards.
 class service_one {
@@ -41,7 +40,7 @@ public:
 class service_two {
     int _resource_allocation;
 public:
-    service_two(service_one& s1, int resource_allocation) : _resource_allocation(resource_allocation) {}
+    service_two([[maybe_unused]] service_one& s1, int resource_allocation) : _resource_allocation(resource_allocation) {}
     int get_resource_allocation() const { return _resource_allocation; }
 };
 
@@ -74,8 +73,6 @@ int main(int ac, char** av) {
             s2.invoke_on_all([] (service_two& s2) {
                 SEASTAR_ASSERT(s2.get_resource_allocation() == 3);
             }).get();
-
-            std::cout << "OK" << std::endl;
         });
     });
 }

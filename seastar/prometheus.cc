@@ -135,7 +135,7 @@ sharded<tcp_service> tcp_svc;
 future<uint64_t> aggregate_total_connections() {
   uint64_t sum = 0;
   co_await coroutine::parallel_for_each(
-      boost::irange<unsigned>(0, smp::count),
+      boost::irange<unsigned>(0, seastar::this_smp_shard_count()),
       [&sum](unsigned shard) -> future<> {
         foreign_ptr<shared_ptr<uint64_t>> val =
             co_await tcp_svc.invoke_on(shard, [](tcp_service &svc) {

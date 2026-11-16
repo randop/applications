@@ -145,17 +145,19 @@ future<> demo_with_file_close_on_failure() {
         // `make_file_output_stream` returns an error. Otherwise, in the error-free path,
         // the opened file is moved to `file_output_stream` that in-turn closes it
         // when the stream is closed.
-        output_stream<char> o = make_output_stream(meta_filename).get();
-
-        write_to_stream(o, wbuf).get();
+        {
+          output_stream<char> o = make_output_stream(meta_filename).get();
+          write_to_stream(o, wbuf).get();
+        }
 
         // now write some random data into data_filename
         fmt::print("  writing random data into {}\n", data_filename);
         std::generate(wbuf.get_write(), wbuf.get_write() + aligned_size, [&dist, &rnd] { return dist(rnd); });
 
-        o = make_output_stream(data_filename).get();
-
-        write_to_stream(o, wbuf).get();
+        {
+          output_stream<char> o = make_output_stream(data_filename).get();
+          write_to_stream(o, wbuf).get();
+        }
 
         // verify the data via meta_filename
         fmt::print("  verifying data...\n");

@@ -107,15 +107,14 @@ int main(int argc, char **argv) {
           gate writer_gate;
 
           writer_gate.enter();
-          file_writer(file_ptr, data_queue)
+          (void)file_writer(file_ptr, data_queue)
               .then_wrapped([&writer_gate](auto f) {
                 try {
                   f.get();
                 } catch (...) {
                 }
                 writer_gate.leave();
-              })
-              .discard_result();
+              });
 
           try {
             while (true) {

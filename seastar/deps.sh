@@ -355,7 +355,8 @@ detect_ubuntu_jammy() {
   return 2
 }
 
-SEASTAR_VERSION=6771f05c7fac7b921ab035d7b3d3daec9dfa8951
+# seastar commit date: 2026-11-10T22:50:55Z
+SEASTAR_VERSION=04b1c04dcd056d9d9b276ea5c42c9687bc834493
 SEASTAR_TAG=master
 SEASTAR_PKG_VERSION=
 if [ -f "${HOME}/.local/lib/pkgconfig/seastar.pc" ]; then
@@ -418,7 +419,7 @@ if [ -z "$SEASTAR_PKG_VERSION" ]; then
   mkdir -p ${OPT_PREFIX}/seastar/current
   rm -rf ${OPT_PREFIX}/seastar/current/*
   rm -rf ${OPT_PREFIX}/seastar/${SEASTAR_VERSION}
-  git clone -b ${SEASTAR_TAG} https://github.com/scylladb/seastar.git ${OPT_PREFIX}/seastar/${SEASTAR_VERSION}
+  git clone --revision=${SEASTAR_VERSION} https://github.com/scylladb/seastar.git ${OPT_PREFIX}/seastar/${SEASTAR_VERSION}
   rm -rf ${OPT_PREFIX}/seastar/${SEASTAR_VERSION}/.git
   cd ${OPT_PREFIX}/seastar/${SEASTAR_VERSION}
   if detect_ubuntu_jammy; then

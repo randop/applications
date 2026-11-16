@@ -60,12 +60,12 @@ int main(int argc, char **argv) {
                     .handle_exception([](std::exception_ptr ep) {
                       try {
                         std::rethrow_exception(ep);
+                      } catch (const seastar::sleep_aborted &e) {
+                        std::cout << "   → Abort succeeded (sleep_aborted): "
+                                  << e.what() << "\n";
                       } catch (const seastar::abort_requested_exception &e) {
                         std::cout << "   → Abort succeeded "
                                      "(abort_requested_exception): "
-                                  << e.what() << "\n";
-                      } catch (const seastar::sleep_aborted &e) {
-                        std::cout << "   → Abort succeeded (sleep_aborted): "
                                   << e.what() << "\n";
                       } catch (...) {
                         std::cout

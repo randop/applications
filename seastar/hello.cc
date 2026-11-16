@@ -17,7 +17,7 @@ logger applog("app");
 int main(int argc, char **argv) {
   app_template app;
   app.run(argc, argv, []() -> future<> {
-    compute_something_asynchronously()
+    return compute_something_asynchronously()
         .then([](sstring who) {
           // function callback
           applog.info("hello, {}", who);

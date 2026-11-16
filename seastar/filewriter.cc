@@ -64,7 +64,7 @@ seastar::future<> run() {
              smp::submit_to(1, [=] { return write_file(1); }),
              smp::submit_to(2, [=] { return write_file(2); }),
              smp::submit_to(3, [=] { return write_file(3); }))
-      .then([](std::tuple<> _t) {
+      .then([]([[maybe_unused]] std::tuple<> _t) {
         applog.info("all file writes completed");
         return seastar::make_ready_future<>();
       });
