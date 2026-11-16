@@ -308,6 +308,30 @@ if [ ! -f "${LOCAL_PKGCONFIG}/liburing.pc" ]; then
 fi
 export CMAKE_PREFIX_PATH="${OPT_PREFIX}/liburing/current:${CMAKE_PREFIX_PATH}"
 
+LIBNUMA_VERSION=2.0.19
+LIBNUMA_TAG=v2.0.19
+if [ ! -f "${OPT_PREFIX}/libnuma/current/lib/libnuma.la" ]; then
+  echo "Compiling libnuma ${LIBNUMA_VERSION}"
+  mkdir -p ${OPT_PREFIX}/libnuma/current
+  rm -rf ${OPT_PREFIX}/libnuma/current/*
+  rm -rf ${OPT_PREFIX}/libnuma/${LIBNUMA_VERSION}
+  git clone -b ${LIBNUMA_TAG} https://github.com/numactl/numactl.git ${OPT_PREFIX}/libnuma/${LIBNUMA_VERSION}
+  rm -rf ${OPT_PREFIX}/libnuma/${LIBNUMA_VERSION}/.git
+  rm -rf ${OPT_PREFIX}/libnuma/${LIBNUMA_VERSION}/.github
+  cd ${OPT_PREFIX}/libnuma/${LIBNUMA_VERSION}
+  ./autogen.sh
+  ./configure --prefix=${OPT_PREFIX}/libnuma/current
+  make -j$(nproc)
+  make install
+  rm -fv ${LOCAL_PKGCONFIG}/numa.pc
+else
+  echo "libnuma: OK"
+fi
+if [ ! -f "${LOCAL_PKGCONFIG}/numa.pc" ]; then
+  ln -sv ${OPT_PREFIX}/libnuma/current/lib/pkgconfig/numa.pc ${LOCAL_PKGCONFIG}/numa.pc
+fi
+export CMAKE_PREFIX_PATH="${OPT_PREFIX}/libnuma/current:${CMAKE_PREFIX_PATH}"
+
 LTTNGUST_VERSION=2.15.2
 LTTNGUST_TAG=v2.15.2
 if [ ! -f "${OPT_PREFIX}/lttngust/current/lib/liblttng-ust.la" ]; then
