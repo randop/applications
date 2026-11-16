@@ -331,8 +331,8 @@ if [ ! -f "${LOCAL_PKGCONFIG}/valgrind.pc" ]; then
 fi
 export CMAKE_PREFIX_PATH="${OPT_PREFIX}/valgrind/current:${CMAKE_PREFIX_PATH}"
 
-DOXYGEN_VERSION=v1.61.1
-DOXYGEN_TAG=Release_1_16_1
+DOXYGEN_VERSION=v1.18.0
+DOXYGEN_TAG=Release_1_18_0
 if [ -f "$HOME/opt/doxygen/current/bin/doxygen" ]; then
   cp -v ${OPT_PREFIX}/doxygen/current/bin/doxygen $HOME/.local/bin/doxygen
 fi
