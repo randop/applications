@@ -1,5 +1,19 @@
 #!/bin/sh
 
+# Copyright 2010-2026 Randolph Ledesma
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 # exit on error, error on unset variables
 set -eu
 
@@ -164,8 +178,8 @@ if [ ! -f "${LOCAL_PKGCONFIG}/yaml-cpp.pc" ]; then
 fi
 export CMAKE_PREFIX_PATH="${OPT_PREFIX}/yamlcpp/current:${CMAKE_PREFIX_PATH}"
 
-FMT_VERSION=v11.2.0
-FMT_TAG=11.2.0
+FMT_VERSION=v12.2.1
+FMT_TAG=12.2.1
 if [ ! -f "${OPT_PREFIX}/fmt/current/lib/libfmt.a" ]; then
   echo "Compiling fmt ${FMT_VERSION} ..."
   mkdir -p ${OPT_PREFIX}/fmt/current
@@ -383,6 +397,30 @@ if [ ! -f "${LOCAL_PKGCONFIG}/numa.pc" ]; then
 fi
 export CMAKE_PREFIX_PATH="${OPT_PREFIX}/libnuma/current:${CMAKE_PREFIX_PATH}"
 
+LIBURCU_VERSION=v0.15.7
+LIBURCU_TAG=v0.15.7
+if [ ! -f "${OPT_PREFIX}/liburcu/current/lib/liburcu.a" ]; then
+  echo "Compiling liburcu ${LIBURCU_VERSION}"
+  mkdir -p ${OPT_PREFIX}/liburcu/current
+  rm -rf ${OPT_PREFIX}/liburcu/current/*
+  rm -rf ${OPT_PREFIX}/liburcu/${LIBURCU_VERSION}
+  git clone -b ${LIBURCU_TAG} https://github.com/urcu/userspace-rcu.git ${OPT_PREFIX}/liburcu/${LIBURCU_VERSION}
+  rm -rf ${OPT_PREFIX}/liburcu/${LIBURCU_VERSION}/.git
+  rm -rf ${OPT_PREFIX}/liburcu/${LIBURCU_VERSION}/.github
+  cd ${OPT_PREFIX}/liburcu/${LIBURCU_VERSION}
+  ./bootstrap
+  ./configure --prefix=${OPT_PREFIX}/liburcu/current
+  make -j$(nproc)
+  make install
+  rm -fv ${LOCAL_PKGCONFIG}/liburcu.pc
+else
+  echo "liburcu: OK"
+fi
+if [ ! -f "${LOCAL_PKGCONFIG}/liburcu.pc" ]; then
+  ln -sv ${OPT_PREFIX}/liburcu/current/lib/pkgconfig/liburcu.pc ${LOCAL_PKGCONFIG}/liburcu.pc
+fi
+export CMAKE_PREFIX_PATH="${OPT_PREFIX}/liburcu/current:${CMAKE_PREFIX_PATH}"
+
 LTTNGUST_VERSION=2.15.2
 LTTNGUST_TAG=v2.15.2
 if [ ! -f "${OPT_PREFIX}/lttngust/current/lib/liblttng-ust.la" ]; then
@@ -395,7 +433,9 @@ if [ ! -f "${OPT_PREFIX}/lttngust/current/lib/liblttng-ust.la" ]; then
   rm -rf ${OPT_PREFIX}/lttngust/${LTTNGUST_VERSION}/.github
   cd ${OPT_PREFIX}/lttngust/${LTTNGUST_VERSION}
   ./bootstrap
-  ./configure --disable-man-pages --prefix=${OPT_PREFIX}/lttngust/current
+  CPPFLAGS="-I$OPT_PREFIX/libnuma/current/include${CPPFLAGS:+ $CPPFLAGS}" \
+    LDFLAGS="-L$OPT_PREFIX/libnuma/current/lib${LDFLAGS:+ $LDFLAGS}" \
+    ./configure --disable-man-pages --prefix=${OPT_PREFIX}/lttngust/current
   make -j$(nproc)
   make install
   rm -fv ${LOCAL_PKGCONFIG}/lttng-ust.pc
