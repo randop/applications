@@ -161,7 +161,7 @@ if [ ! -f "${LOCAL_PKGCONFIG}/hwloc.pc" ]; then
 fi
 export CMAKE_PREFIX_PATH="${OPT_PREFIX}/hwloc/current:${CMAKE_PREFIX_PATH}"
 
-PROTOBUF_VERSION=v25.9
+PROTOBUF_VERSION=v36.2
 if [ ! -f "${OPT_PREFIX}/protobuf/current/lib/libprotobuf.a" ]; then
   echo "Compiling protobuf ${PROTOBUF_VERSION} ..."
   mkdir -p ${OPT_PREFIX}/protobuf/current
