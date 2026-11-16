@@ -138,8 +138,8 @@ if [ ! -f "${LOCAL_PKGCONFIG}/fmt.pc" ]; then
 fi
 export CMAKE_PREFIX_PATH="${OPT_PREFIX}/fmt/current:${CMAKE_PREFIX_PATH}"
 
-HWLOC_VERSION=v2.14.0
-HWLOC_TAG=hwloc-2.14.0
+HWLOC_VERSION=v2.15.0
+HWLOC_TAG=hwloc-2.15.0
 if [ ! -f "${OPT_PREFIX}/hwloc/current/lib/libhwloc.la" ]; then
   echo "Compiling hwloc ${HWLOC_VERSION} ..."
   mkdir -p ${OPT_PREFIX}/hwloc/current
