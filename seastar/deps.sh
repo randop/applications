@@ -66,7 +66,7 @@ else
   echo "boost: OK"
 fi
 
-CARES_VERSION=v1.34.8
+CARES_VERSION=v1.34.9
 if [ ! -f "${OPT_PREFIX}/c-ares/current/lib/libcares.a" ]; then
   echo "Compiling c-ares..."
   mkdir -p ${OPT_PREFIX}/c-ares/current
