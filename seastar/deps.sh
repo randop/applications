@@ -298,7 +298,7 @@ else
 fi
 export CMAKE_PREFIX_PATH="${OPT_PREFIX}/colm-suite/current:${CMAKE_PREFIX_PATH}"
 
-VALGRIND_VERSION=3.27.1
+VALGRIND_VERSION=3.28.0
 mkdir -p ${OPT_PREFIX}/valgrind/current
 cd ${OPT_PREFIX}/valgrind
 mkdir -p ${OPT_PREFIX}/valgrind/${VALGRIND_VERSION}
@@ -313,6 +313,7 @@ if [ ! -f "${OPT_PREFIX}/valgrind/${VALGRIND_VERSION}/valgrind-${VALGRIND_VERSIO
 fi
 
 # TODO: Ehnance valgrid library detection
+# NOTE: generated build is architecture dependent (libcoregrind-amd64-linux.a)
 if [ ! -d "${OPT_PREFIX}/valgrind/current/lib/valgrind" ]; then
   echo "Compiling valgrind ${VALGRIND_VERSION} ..."
   cd ${OPT_PREFIX}/valgrind/${VALGRIND_VERSION}/valgrind-${VALGRIND_VERSION}
