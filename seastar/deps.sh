@@ -314,7 +314,7 @@ if [ ! -f "${OPT_PREFIX}/lttngust/current/lib/liblttng-ust.la" ]; then
   echo "Compiling lttng-ust ${LTTNGUST_VERSION}"
   mkdir -p ${OPT_PREFIX}/lttngust/current
   rm -rf ${OPT_PREFIX}/lttngust/current/*
-  rm -rf ${OPT_PREFIX}/lttngust/${LIBURING_VERSION}
+  rm -rf ${OPT_PREFIX}/lttngust/${LTTNGUST_VERSION}
   git clone -b ${LTTNGUST_TAG} https://github.com/lttng/lttng-ust ${OPT_PREFIX}/lttngust/${LTTNGUST_VERSION}
   rm -rf ${OPT_PREFIX}/lttngust/${LTTNGUST_VERSION}/.git
   rm -rf ${OPT_PREFIX}/lttngust/${LTTNGUST_VERSION}/.github
