@@ -276,9 +276,9 @@ if [ ! -f "${LOCAL_PKGCONFIG}/libsctp.pc" ]; then
 fi
 export CMAKE_PREFIX_PATH="${OPT_PREFIX}/lksctp/current:${CMAKE_PREFIX_PATH}"
 
-RAGEL_VERSION=v7.0.4
+RAGEL_VERSION=v7.1.0
 COLM_SUITE_VERSION=main
-COLM_SUITE_TAG=8841e56
+COLM_SUITE_TAG=79e64b8
 if [ ! -f "${OPT_PREFIX}/colm-suite/current/lib/libragel.a" ]; then
   echo "Compiling colm suite ..."
   mkdir -p ${OPT_PREFIX}/colm-suite/current
