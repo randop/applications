@@ -24,6 +24,57 @@ if [ ! -d "${LOCAL_BIN}" ]; then
   mkdir -p ${LOCAL_BIN}
 fi
 
+if [ "${1:-}" = "--wipe" ]; then
+  echo "Wiping installed libraries ..."
+  rm -rf \
+    ${OPT_PREFIX}/boost/current \
+    ${OPT_PREFIX}/c-ares/current \
+    ${OPT_PREFIX}/yamlcpp/current \
+    ${OPT_PREFIX}/fmt/current \
+    ${OPT_PREFIX}/hwloc/current \
+    ${OPT_PREFIX}/protobuf/current \
+    ${OPT_PREFIX}/lksctp/current \
+    ${OPT_PREFIX}/colm-suite/current \
+    ${OPT_PREFIX}/valgrind/current \
+    ${OPT_PREFIX}/liburing/current \
+    ${OPT_PREFIX}/libnuma/current \
+    ${OPT_PREFIX}/lttngust/current \
+    ${OPT_PREFIX}/seastar/current
+  rm -f \
+    ${LOCAL_PKGCONFIG}/libcares.pc \
+    ${LOCAL_PKGCONFIG}/yaml-cpp.pc \
+    ${LOCAL_PKGCONFIG}/fmt.pc \
+    ${LOCAL_PKGCONFIG}/hwloc.pc \
+    ${LOCAL_PKGCONFIG}/protobuf.pc \
+    ${LOCAL_PKGCONFIG}/libsctp.pc \
+    ${LOCAL_PKGCONFIG}/valgrind.pc \
+    ${LOCAL_PKGCONFIG}/liburing.pc \
+    ${LOCAL_PKGCONFIG}/numa.pc \
+    ${LOCAL_PKGCONFIG}/lttng-ust.pc \
+    ${LOCAL_PKGCONFIG}/seastar.pc
+fi
+
+if [ "${1:-}" = "--clean" ]; then
+  if [ -z "${2:-}" ]; then
+    echo "Missing library name for --clean" >&2
+    exit 1
+  fi
+  case "${2}" in
+  boost | c-ares | yamlcpp | fmt | hwloc | protobuf | lksctp | colm-suite | valgrind | liburing | libnuma | lttngust | seastar)
+    echo "Cleaning ${2} build files ..."
+    for path in ${OPT_PREFIX}/${2}/*; do
+      echo "Deleting ${path} ..."
+      rm -rf ${path}
+    done
+    ;;
+  *)
+    echo "Unknown library: ${2}" >&2
+    echo "Expected one of: boost c-ares yamlcpp fmt hwloc protobuf lksctp colm-suite valgrind liburing libnuma lttngust seastar" >&2
+    exit 1
+    ;;
+  esac
+fi
+
 if [ -n "${PKG_CONFIG_PATH+set}" ]; then
   export PKG_CONFIG_PATH="${LOCAL_PKGCONFIG}:${PKG_CONFIG_PATH}"
 else
@@ -438,7 +489,7 @@ fi
 SEASTAR_COMPILER_FLAGS="-Wno-unused-but-set-variable"
 SEASTAR_COMPILER_NCPU=$(calc_cores)
 
-if [ -z "$SEASTAR_PKG_VERSION" ]; then
+if [ ! -f "${OPT_PREFIX}/seastar/current/lib/libseastar.a" ]; then
   echo "Compiling seastar ${SEASTAR_VERSION} ..."
   mkdir -p ${OPT_PREFIX}/seastar/current
   rm -rf ${OPT_PREFIX}/seastar/current/*
