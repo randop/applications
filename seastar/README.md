@@ -27,5 +27,6 @@ sudo apt install build-essential \
   libisl-dev \
   texinfo \
   libzstd-dev \
-  zlib1g-dev
+  zlib1g-dev \
+  libnuma-dev
 ```
