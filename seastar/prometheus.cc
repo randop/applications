@@ -1,5 +1,6 @@
 #include <boost/range/irange.hpp>
 #include <csignal>
+#include <exception>
 #include <seastar/core/abort_source.hh>
 #include <seastar/core/app-template.hh>
 #include <seastar/core/condition-variable.hh>
@@ -17,6 +18,7 @@
 #include <seastar/net/api.hh>
 #include <seastar/net/inet_address.hh>
 #include <seastar/util/log.hh>
+#include <typeinfo>
 
 using namespace seastar;
 namespace bpo = boost::program_options;
@@ -87,8 +89,10 @@ class tcp_service {
         co_await out.write(std::move(buf));
         co_await out.flush();
       }
+    } catch (const std::exception &e) {
+      applog.warn("Connection error [{}]: {}", typeid(e).name(), e.what());
     } catch (...) {
-      applog.warn("connection error: {}", std::current_exception());
+      applog.warn("Connection error: unknown non-std exception");
     }
     co_await out.close();
     --_active_connections;
@@ -102,9 +106,14 @@ class tcp_service {
                         [this, sock = std::move(ar.connection)]() mutable {
                           return handle_connection(std::move(sock));
                         });
+      } catch (const std::exception &e) {
+        if (!_abort.abort_requested()) {
+          applog.warn("Accept failed [{}]: {}", typeid(e).name(), e.what());
+        }
+        break;
       } catch (...) {
         if (!_abort.abort_requested()) {
-          applog.warn("accept failed: {}", std::current_exception());
+          applog.warn("Accept failed: unknown non-std exception");
         }
         break;
       }

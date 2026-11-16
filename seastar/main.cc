@@ -19,6 +19,7 @@ limitations under the License.
 *****************************************************************************/
 
 #include <chrono>
+#include <exception>
 #include <iostream>
 #include <seastar/core/app-template.hh>
 #include <seastar/core/do_with.hh>
@@ -175,7 +176,13 @@ public:
             })
             .handle_exception([this](auto ep) {
               if (!_stopped) {
-                applog.error("Accept error: {}", ep);
+                try {
+                  std::rethrow_exception(ep);
+                } catch (const std::exception &e) {
+                  applog.error("Accept error: {}", e.what());
+                } catch (...) {
+                  applog.error("Accept error: unknown exception");
+                }
               }
             })
             .then([this] {
