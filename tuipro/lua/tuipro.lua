@@ -23,6 +23,12 @@ M.container = require("tuipro.container")
 M.ui = require("tuipro.ui")
 M.plugins = require("tuipro.plugins")
 M.App = require("tuipro.app")
+M.http = require("tuipro.http")
+M.fetch = M.http.fetch
+M.json = M.http.json
+
+-- Fetch is also available as a global, mirroring browsers and Node.
+_G.fetch = M.fetch
 
 -- Create an application.  opts are passed to App.new; opts.setup, if present,
 -- is called with the new app before it starts.
@@ -54,6 +60,18 @@ function M.demo(opts)
     return demo(opts)
   end
   error("tuipro.demo has no run() entry point")
+end
+
+-- Run the bundled HTTP/fetch demo.
+function M.demo_api(opts)
+  local demo = require("tuipro.demo_api")
+  if type(demo) == "table" and demo.run then
+    return demo.run(opts)
+  end
+  if type(demo) == "function" then
+    return demo(opts)
+  end
+  error("tuipro.demo_api has no run() entry point")
 end
 
 -- Run the bundled opencode-style coding demo.

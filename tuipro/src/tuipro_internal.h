@@ -47,6 +47,11 @@ struct tp_term {
   struct sigaction old_pipe;
   bool signals_saved;
 
+  /* Self-pipe written from the signal handler so a libuv poll wakes up even
+   * when epoll_wait() is restarted after EINTR. */
+  int sig_pipe[2];
+  bool sig_pipe_ready;
+
   tp_grid grid;
 
   /* clipping */

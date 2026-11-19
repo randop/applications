@@ -1,4 +1,5 @@
 #include "tuipro_internal.h"
+#include "http.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -30,6 +31,43 @@ static void signal_handler(int sig)
     g_term->sig_exit = 1;
     g_term->sig_number = sig;
   }
+  if (g_term->sig_pipe[1] >= 0) {
+    unsigned char b = (unsigned char)sig;
+    ssize_t n = write(g_term->sig_pipe[1], &b, 1);
+    (void)n;
+  }
+}
+
+static void close_signal_pipe(tp_term *t)
+{
+  int r = t->sig_pipe[0];
+  int w = t->sig_pipe[1];
+  t->sig_pipe[0] = -1;
+  t->sig_pipe[1] = -1;
+  t->sig_pipe_ready = false;
+  if (r >= 0)
+    close(r);
+  if (w >= 0)
+    close(w);
+}
+
+static int open_signal_pipe(tp_term *t)
+{
+  t->sig_pipe[0] = -1;
+  t->sig_pipe[1] = -1;
+  t->sig_pipe_ready = false;
+  if (pipe(t->sig_pipe) < 0)
+    return -1;
+  for (int i = 0; i < 2; i++) {
+    int flags = fcntl(t->sig_pipe[i], F_GETFL, 0);
+    if (flags >= 0)
+      fcntl(t->sig_pipe[i], F_SETFL, flags | O_NONBLOCK);
+    flags = fcntl(t->sig_pipe[i], F_GETFD, 0);
+    if (flags >= 0)
+      fcntl(t->sig_pipe[i], F_SETFD, flags | FD_CLOEXEC);
+  }
+  t->sig_pipe_ready = true;
+  return 0;
 }
 
 static const char *signame(int sig)
@@ -406,6 +444,7 @@ void tp_term_shutdown(tp_term *t)
       t->signals_saved = false;
     }
   }
+  close_signal_pipe(t);
   t->active = false;
   t->out_len = 0;
   t->out_x = -1;
@@ -450,6 +489,9 @@ int tp_term_init(tp_term *t, bool headless, int width, int height, int truecolor
   t->sig_exit = 0;
   t->sig_number = 0;
   t->eof = false;
+  t->sig_pipe[0] = -1;
+  t->sig_pipe[1] = -1;
+  t->sig_pipe_ready = false;
   t->headless = headless;
   t->in_fd = STDIN_FILENO;
   t->out_fd = STDOUT_FILENO;
@@ -493,6 +535,7 @@ int tp_term_init(tp_term *t, bool headless, int width, int height, int truecolor
   if (make_raw(t) < 0)
     return -1;
 
+  open_signal_pipe(t);
   g_term = t;
   save_signal(SIGWINCH, &t->old_winch);
   save_signal(SIGINT, &t->old_int);
@@ -670,8 +713,11 @@ int tp_term_poll(tp_term *t, int timeout_ms, tp_event *ev)
   memset(ev, 0, sizeof(*ev));
   if (!t->active)
     return -1;
-  if (t->headless)
+  if (t->headless) {
+    /* Scripts and headless apps still need the network loop to make progress. */
+    tp_http_wait(-1, -1, timeout_ms);
     return 0;
+  }
 
   double start = tp_now_ms();
   bool infinite = timeout_ms < 0;
@@ -708,21 +754,10 @@ int tp_term_poll(tp_term *t, int timeout_ms, tp_event *ev)
         wait_ms = (int)rem;
     }
 
-    struct pollfd pfd;
-    pfd.fd = t->in_fd;
-    pfd.events = POLLIN;
-    pfd.revents = 0;
-    int rc = poll(&pfd, 1, wait_ms);
-    if (rc < 0) {
-      if (errno == EINTR)
-        continue;
-      snprintf(t->error, sizeof(t->error), "poll: %s", strerror(errno));
-      return -1;
-    }
-    if (rc == 0)
-      continue;
-
-    if (pfd.revents & POLLIN) {
+    int flags = tp_http_wait(t->in_fd,
+                             t->sig_pipe_ready ? t->sig_pipe[0] : -1,
+                             wait_ms);
+    if (flags & 1) {
       unsigned char buf[4096];
       ssize_t n = read(t->in_fd, buf, sizeof(buf));
       if (n > 0) {
@@ -732,8 +767,10 @@ int tp_term_poll(tp_term *t, int timeout_ms, tp_event *ev)
       } else if (errno != EINTR && errno != EAGAIN && errno != EWOULDBLOCK) {
         t->eof = true;
       }
-    } else if (pfd.revents & (POLLHUP | POLLERR | POLLNVAL)) {
-      t->eof = true;
+    }
+    if (flags & 2) {
+      /* The self-pipe was drained by the libuv callback.  Re-check the
+       * sig_winch/sig_exit flags at the top of the loop. */
     }
   }
 }

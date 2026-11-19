@@ -1,3 +1,4 @@
+#include "http.h"
 #include "lua_core.h"
 #include "tuipro.h"
 
@@ -34,6 +35,7 @@ typedef struct {
   const char *eval;
   bool demo;
   bool demo_coding;
+  bool demo_api;
   int arg_start;
 } cli_options;
 
@@ -50,12 +52,14 @@ static void usage(FILE *out)
     "  tuipro --plugin plugins/hello\n"
     "  tuipro --demo\n"
     "  tuipro --demo-coding\n"
+    "  tuipro --demo-api\n"
     "\n"
     "Options:\n"
     "  -h, --help             show this help\n"
     "  -v, --version          show version\n"
     "      --demo             run the built-in dashboard demo\n"
     "      --demo-coding      run the built-in coding demo (opencode-style)\n"
+    "      --demo-api         run the HTTP client demo (libuv fetch)\n"
     "      --plugin PATH      run a plugin (directory with init.lua, or a file)\n"
     "  -l, --load MODULE      require a Lua module and run its entry point\n"
     "  -e, --eval CODE        evaluate Lua code\n"
@@ -132,9 +136,15 @@ static int parse_args(int argc, char **argv, cli_options *opts)
     } else if (strcmp(a, "--demo") == 0) {
       opts->demo = true;
       opts->demo_coding = false;
+      opts->demo_api = false;
     } else if (strcmp(a, "--demo-coding") == 0) {
       opts->demo_coding = true;
       opts->demo = false;
+      opts->demo_api = false;
+    } else if (strcmp(a, "--demo-api") == 0) {
+      opts->demo_api = true;
+      opts->demo = false;
+      opts->demo_coding = false;
     } else if (strcmp(a, "--headless") == 0) {
       opts->headless = true;
     } else if (strcmp(a, "--truecolor") == 0) {
@@ -400,6 +410,12 @@ static void set_cli_table(lua_State *L, const cli_options *opts,
   lua_setfield(L, -2, "mouse");
   lua_pushboolean(L, opts->paste);
   lua_setfield(L, -2, "paste");
+  lua_pushboolean(L, opts->demo);
+  lua_setfield(L, -2, "demo");
+  lua_pushboolean(L, opts->demo_coding);
+  lua_setfield(L, -2, "demo_coding");
+  lua_pushboolean(L, opts->demo_api);
+  lua_setfield(L, -2, "demo_api");
   if (opts->plugin) {
     lua_pushstring(L, opts->plugin);
     lua_setfield(L, -2, "plugin");
@@ -563,6 +579,8 @@ int main(int argc, char **argv)
   lua_getfield(L, -1, "preload");
   lua_pushcfunction(L, luaopen_tuipro_core);
   lua_setfield(L, -2, "tuipro.core");
+  lua_pushcfunction(L, luaopen_tuipro_http);
+  lua_setfield(L, -2, "tuipro.http_native");
   lua_pop(L, 2);
 
   setup_package_path(L);
@@ -574,8 +592,10 @@ int main(int argc, char **argv)
   lua_pushliteral(L, "tuipro");
   if (push_protected_call(L, 1, "load tuipro") < 0) {
     tuipro_core_force_shutdown();
+    tp_http_shutdown(L);
     lua_close(L);
     tuipro_core_free();
+    tp_http_free();
     return 1;
   }
   lua_setglobal(L, "tuipro");
@@ -614,13 +634,20 @@ int main(int argc, char **argv)
       rc = 1;
     }
   } else {
-    require_entry(L, opts.demo_coding ? "tuipro.demo_coding" : "tuipro.demo");
+    const char *demo = "tuipro.demo";
+    if (opts.demo_coding)
+      demo = "tuipro.demo_coding";
+    else if (opts.demo_api)
+      demo = "tuipro.demo_api";
+    require_entry(L, demo);
   }
 
   if (g_lua_error && rc == 0)
     rc = 1;
   tuipro_core_force_shutdown();
+  tp_http_shutdown(L);
   lua_close(L);
   tuipro_core_free();
+  tp_http_free();
   return rc;
 }

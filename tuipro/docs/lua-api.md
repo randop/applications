@@ -39,8 +39,12 @@ return 0 -- success
 | `tuipro.util` | UTF-8, width, wrapping, path and generic helpers. |
 | `tuipro.cli` | Command-line options exposed by the launcher. |
 | `tuipro.plugins` | Plugin discovery and installation. |
+| `tuipro.http` | `fetch`, `Promise`, `Headers`, `AbortController`, `AbortSignal`. |
+| `tuipro.http_native` | Low-level libuv/OpenSSL request binding. |
+| `tuipro.json` | Small dependency-free JSON encoder/decoder. |
 | `tuipro.demo` | Built-in dashboard (`tuipro --demo`). |
 | `tuipro.demo_coding` | Built-in coding demo (`tuipro --demo-coding`). |
+| `tuipro.demo_api` | Built-in HTTP client demo (`tuipro --demo-api`). |
 
 ## `require("tuipro")`
 
@@ -59,6 +63,9 @@ return 0 -- success
 | `keys` | Key helpers. |
 | `util` | Utility helpers. |
 | `plugins` | Plugin loader. |
+| `http` | HTTP client module (`fetch`, `Promise`, ...). |
+| `json` | JSON codec (`tuipro.http.json` is the same table). |
+| `fetch` | Global-style `fetch(url, opts)` shorthand for `http.fetch`. |
 
 Convenience functions:
 
@@ -69,6 +76,8 @@ Convenience functions:
 | `tuipro.run(opts)` | Create an app, run it and return it. |
 | `tuipro.demo(opts)` | Run the built-in dashboard. |
 | `tuipro.demo_coding(opts)` | Run the built-in coding demo. |
+| `tuipro.demo_api(opts)` | Run the built-in HTTP client demo. |
+| `tuipro.fetch(url, opts)` | Start an HTTP(S) request; returns a `Promise`. |
 | `tuipro.info()` | `core.info()` when initialized, otherwise `{}`. |
 | `tuipro.quit()` | Request exit from the core event loop. |
 
@@ -326,6 +335,141 @@ coordinates. Shapes are `"block"`, `"underline"` / `"under"` and `"bar"` /
 `"line"`. Widgets should use `Widget:set_cursor()` with coordinates relative to
 the window; it adds nothing automatically, so pass absolute screen cells.
 `App:render()` clears the cursor request at the start of each frame.
+
+## HTTP client (`fetch`)
+
+The native client uses libuv for DNS and TCP and OpenSSL for TLS. It speaks
+HTTP/1.1 over HTTP or HTTPS, follows redirects, decodes chunked and
+connection-close bodies, and decompresses gzip/deflate when zlib is available.
+Requests and response bodies are buffered in memory, so this API targets API
+calls and small-to-medium payloads rather than streaming downloads.
+
+```lua
+local tuipro = require("tuipro")
+
+local res = tuipro.fetch("https://httpbin.org/json"):await()
+print(res.status, res.ok, res.headers:get("content-type"))
+print(res:text():await())
+
+local data = tuipro.fetch("https://httpbin.org/json"):await():json():await()
+print(data.slideshow.title)
+```
+
+`fetch` is also installed as a global, matching browsers and Node.js. In an
+application the event loop drives requests automatically, so callbacks are the
+natural style:
+
+```lua
+fetch(url)
+  :then_(function(res) return res:json() end)
+  :then_(function(data)
+    app:set_message(data.title)
+    app:invalidate()
+  end)
+  :catch(function(err)
+    app:error(tostring(err))
+  end)
+```
+
+Nothing blocks the UI: the terminal poll and the network loop share the same
+libuv wait, and promise callbacks run from the normal app loop.
+
+### `fetch(url, opts)`
+
+Returns a `Promise` that resolves to a `Response`. The URL must use `http://`
+or `https://`.
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `method` | `"GET"` | HTTP method. |
+| `headers` | `nil` | Table, `Headers`, or array of `{ name, value }` pairs. |
+| `body` | `nil` | String request body; rejected for GET and HEAD. |
+| `redirect` | `"follow"` | `"follow"`, `"manual"` or `"error"`. |
+| `max_redirects` | `32` | Redirect limit (`0` disables following). |
+| `timeout_ms` | `30000` | Whole-request timeout; `0` disables it. |
+| `reject_unauthorized` | `true` | Verify TLS certificates. `rejectUnauthorized` is accepted too. |
+| `decompress` | `true` | Decode `Content-Encoding: gzip`/`deflate`. |
+| `signal` | `nil` | An `AbortSignal` that cancels the request. |
+
+The client adds `Host`, `User-Agent: tuipro/0.1.0`, `Accept: */*`,
+`Accept-Encoding: gzip, deflate`, `Connection: close` and `Content-Length`
+unless the caller supplied them. Redirects to a different origin drop
+`Authorization`, `Cookie`, `Proxy-Authorization` and `Host` headers. The
+timeout covers the entire redirect chain.
+
+### Promises
+
+| Method | Description |
+| --- | --- |
+| `then_(on_fulfilled, on_rejected)` | Chain a handler; returns a new promise. |
+| `catch(on_rejected)` | Shorthand for `then_(nil, fn)`. |
+| `finally(fn)` | Run `fn` on either outcome. |
+| `next(timeout_ms)` | Pump the native loop until settled. Returns `state, value` (`"pending"` on timeout). |
+| `await(timeout_ms)` | Pump until settled, then return the value or raise the rejection. |
+| `abort()` | Abort the underlying request, if any. |
+| `Promise.resolve(v)`, `Promise.reject(e)`, `Promise.all(list)` | Standard helpers. |
+
+`await()` is convenient in scripts and tests. Do not call it from inside a
+fetch callback: the loop is already running. Use `then_` there instead.
+
+### `Response`
+
+| Field / method | Description |
+| --- | --- |
+| `status`, `statusText`, `ok` | HTTP status information. |
+| `url`, `redirected`, `type` | Final URL and redirect state. |
+| `headers` | A `Headers` object. |
+| `header(name)` | Shorthand for `headers:get(name)`. |
+| `text()` | Promise for the decoded body string. |
+| `json()` | Promise for the body decoded with `tuipro.json`. |
+| `arrayBuffer()`, `bytes()` | Promise for the binary-safe body string. |
+
+### `Headers`
+
+`Headers.new(init)` accepts a table, another `Headers`, or an array of
+`{ name, value }` pairs. Names are case-insensitive.
+
+| Method | Description |
+| --- | --- |
+| `get(name)` | Joined value (`", "`), or `nil`. |
+| `getAll(name)` | Array of values. |
+| `has(name)` | Boolean. |
+| `append(name, value)` | Add a value without replacing existing ones. |
+| `set(name, value)` | Replace all values for a name. |
+| `delete(name)` | Remove a name. |
+| `entries()` / `each()` | Iterator over `name, value` pairs. |
+| `keys()`, `values()` | Iterators over names or values. |
+| `forEach(fn)` | Call `fn(value, name, headers)`. |
+| `to_table()` | Plain table with joined values. |
+
+Invalid names or values (control characters, newlines) raise an error.
+
+### `AbortController`
+
+```lua
+local controller = require("tuipro.http").AbortController.new()
+local promise = fetch(url, { signal = controller.signal })
+controller:abort()          -- rejects with AbortError
+```
+
+`signal.aborted` and `signal.reason` are available; `addEventListener`,
+`removeEventListener` and the `onabort` field are supported.
+
+### Errors
+
+Failures reject with a `FetchError` carrying `name`, `message` and `code`.
+Names include `TypeError` (network/protocol/validation failures),
+`AbortError` and `TimeoutError`. `tostring(err)` yields
+`"Name: message"`.
+
+### JSON
+
+`tuipro.json` provides `encode(value)`, `decode(text)` and the `null` sentinel.
+Encoding sorts object keys and rejects cycles, non-string keys and non-finite
+numbers. Arrays are detected from consecutive integer keys; an empty table
+encodes as `[]`. Decoding rejects trailing data and malformed escapes, and
+represents JSON `null` with `json.null` (object members set to null are
+omitted, array slots keep the sentinel).
 
 ## Core (`tuipro.core`)
 
@@ -643,6 +787,7 @@ their clip immediately before each write.
 | `truecolor` | `nil` auto, `false` or `true`. |
 | `mouse`, `paste` | Input features. |
 | `plugin`, `script` | Selected entry point. |
+| `demo`, `demo_coding`, `demo_api` | Built-in demo selection. |
 | `args` | Script arguments after the entry point. |
 | `is_headless()` | Boolean helper. |
 

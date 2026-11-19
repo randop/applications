@@ -50,6 +50,25 @@ if(NOT LUAJIT_FOUND)
 endif()
 
 # ---------------------------------------------------------------------------
+# Native networking: libuv + OpenSSL (+ optional zlib for compressed bodies)
+# ---------------------------------------------------------------------------
+if(PkgConfig_FOUND)
+  pkg_check_modules(LIBUV QUIET libuv)
+endif()
+if(NOT LIBUV_FOUND)
+  find_path(LIBUV_INCLUDE_DIR uv.h)
+  find_library(LIBUV_LIBRARY NAMES uv libuv)
+  if(NOT LIBUV_INCLUDE_DIR OR NOT LIBUV_LIBRARY)
+    message(FATAL_ERROR "libuv not found (install libuv development files)")
+  endif()
+  set(LIBUV_INCLUDE_DIRS ${LIBUV_INCLUDE_DIR})
+  set(LIBUV_LIBRARIES ${LIBUV_LIBRARY})
+endif()
+
+find_package(OpenSSL REQUIRED)
+find_package(ZLIB QUIET)
+
+# ---------------------------------------------------------------------------
 # Executable
 # ---------------------------------------------------------------------------
 add_executable(tuipro
@@ -58,13 +77,20 @@ add_executable(tuipro
   src/grid.c
   src/input.c
   src/lua_core.c
+  src/http.c
 )
 
 target_include_directories(tuipro PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/include
   ${CMAKE_CURRENT_SOURCE_DIR}/src
   ${LUAJIT_INCLUDE_DIRS}
+  ${LIBUV_INCLUDE_DIRS}
 )
+
+if(ZLIB_FOUND)
+  target_compile_definitions(tuipro PRIVATE TUIPRO_HAVE_ZLIB)
+  target_include_directories(tuipro PRIVATE ${ZLIB_INCLUDE_DIRS})
+endif()
 
 target_compile_definitions(tuipro PRIVATE
   _GNU_SOURCE
@@ -78,7 +104,16 @@ target_compile_options(tuipro PRIVATE
   $<$<CONFIG:Debug>:-g3>
 )
 
-target_link_libraries(tuipro PRIVATE ${LUAJIT_LIBRARIES} m)
+target_link_libraries(tuipro PRIVATE
+  ${LUAJIT_LIBRARIES}
+  ${LIBUV_LIBRARIES}
+  OpenSSL::SSL
+  OpenSSL::Crypto
+  m
+)
+if(ZLIB_FOUND)
+  target_link_libraries(tuipro PRIVATE ZLIB::ZLIB)
+endif()
 
 set_target_properties(tuipro PROPERTIES
   RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"

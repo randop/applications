@@ -17,6 +17,8 @@ applications, layouts, widgets, plugins and scripts on top.
   bundled demos enable this by default.
 - Focus traversal, window-style directional focus, modal popups, command line,
   timers, key bindings and commands.
+- Native HTTP/HTTPS client (`fetch`) built on libuv and OpenSSL, with promises,
+  redirects, abort support and gzip/deflate decoding.
 - Headless mode for snapshots, scripts and CI.
 - LuaJIT 2.1 / Lua 5.1 API only (no Lua 5.3 syntax).
 
@@ -41,7 +43,10 @@ cmake --build build -j
   cmake --build build -j
   ```
 
-- Python 3 is optional; it is used only by the PTY smoke test.
+- libuv development files and OpenSSL headers/libraries.
+- zlib is optional; when found, gzip and deflate response bodies are decoded.
+- Python 3 is optional; it is used by the PTY smoke test and as the local
+  HTTP/HTTPS fixture server for the fetch tests.
 
 ## Building and installing
 
@@ -69,6 +74,7 @@ tuipro [options] [script.lua | module] [args...]
 tuipro --plugin plugins/hello
 tuipro --demo
 tuipro --demo-coding
+tuipro --demo-api
 ```
 
 Common options:
@@ -77,6 +83,7 @@ Common options:
 | --- | --- |
 | `--demo` | Run the built-in dashboard demo. |
 | `--demo-coding` | Run the built-in opencode-style coding demo. |
+| `--demo-api` | Run the built-in HTTP client (`fetch`) demo. |
 | `--plugin PATH` | Run a plugin directory, `init.lua`, or plugin name. |
 | `-l, --load MODULE` | Require a module and call its entry point. |
 | `-e, --eval CODE` | Evaluate Lua code. |
@@ -100,6 +107,33 @@ submits a prompt and plays a simulated reply, `Ctrl-S` toggles the sidebar,
 `Ctrl-P` opens a command palette and `Ctrl-O` starts a new session. Both demos
 use terminal transparency by default.
 
+`--demo-api` is a third demo for the native HTTP client. It starts with a
+built-in response so it can be rendered without network access; press `Enter`
+or click **Send** to fetch the URL in the input field. The response panel shows
+the status, headers and body, while the history panel keeps recent requests.
+**Abort** cancels an in-flight request. The client is built on libuv and
+OpenSSL, supports HTTP and HTTPS, redirects, gzip/deflate and does not block
+the UI.
+
+The Lua API is a Node.js-style `fetch`:
+
+```lua
+local res = fetch("https://example.com"):await()
+print(res.status, res.headers:get("content-type"))
+print(res:text():await())
+
+-- Inside an App, promise callbacks run from the normal event loop:
+fetch(url):then_(function(r) return r:json() end)
+          :then_(function(data) app:set_message(data.title) end)
+          :catch(function(err) app:error(tostring(err)) end)
+```
+
+`fetch` returns a `Promise`; responses expose `status`, `statusText`, `ok`,
+`url`, `redirected`, `headers`, `text()`, `json()` and `arrayBuffer()`.
+`AbortController`/`AbortSignal`, `Promise.all`, timeouts and
+`reject_unauthorized = false` are supported. See
+[docs/lua-api.md](docs/lua-api.md#http-client-fetch) for the full reference.
+
 Useful environment variables:
 
 | Variable | Meaning |
@@ -114,6 +148,7 @@ The demo and the plugin can be smoke-tested without a terminal:
 ```sh
 ./build/tuipro --headless --size 80x24 --frames 1 --demo
 ./build/tuipro --headless --size 80x24 --frames 1 --demo-coding
+./build/tuipro --headless --size 80x24 --frames 1 --demo-api
 ./build/tuipro --headless --size 80x24 --frames 1 --plugin plugins/hello
 ```
 
