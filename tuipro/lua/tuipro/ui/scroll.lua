@@ -1,4 +1,6 @@
 -- Scrolling and scrollbar helpers shared by List, Menu and Table.
+local hl = require("tuipro.hl")
+
 local M = {}
 
 function M.clamp_offset(offset, total, visible)
@@ -69,8 +71,12 @@ function M.draw(canvas, x, y, length, total, visible, offset, opts)
   if opts.focused then
     thumb_hl = opts.thumb_focus_hl or "ScrollbarThumbFocus"
   end
-  local track_ch = opts.track or (vertical and "│" or "─")
-  local thumb_ch = opts.thumb or (vertical and "┃" or "━")
+  local track_ch = opts.track or (vertical
+      and hl.glyph("scrollbar", "vertical_track", "│")
+      or hl.glyph("scrollbar", "horizontal_track", "─"))
+  local thumb_ch = opts.thumb or (vertical
+      and hl.glyph("scrollbar", "vertical_thumb", "┃")
+      or hl.glyph("scrollbar", "horizontal_thumb", "━"))
   if vertical then
     canvas:vline(x, y, length, track_ch, track_hl)
   else

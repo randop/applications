@@ -2,16 +2,17 @@
 -- while the widget is attached to a running application.
 local Widget = require("tuipro.widget")
 local util = require("tuipro.util")
+local hl = require("tuipro.hl")
 
 local Spinner = Widget:extend("Spinner")
 
-local default_frames = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏" }
+local fallback_frames = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏" }
 
 function Spinner.new(opts)
   opts = opts or {}
   local self = setmetatable({}, Spinner)
   Widget.init(self, opts)
-  self.frames = opts.frames or default_frames
+  self.frames = opts.frames
   self.interval = opts.interval or 80
   self.label = opts.label
   self.active = opts.active ~= false
@@ -19,8 +20,8 @@ function Spinner.new(opts)
   self.label_hl = opts.label_hl or "SpinnerLabel"
   self.done_style = opts.done_hl or "Success"
   self.error_style = opts.error_hl or "Error"
-  self.done_text = opts.done_text or "✔"
-  self.error_text = opts.error_text or "✖"
+  self.done_text = opts.done_text
+  self.error_text = opts.error_text
   self.done_label = opts.done_label
   self.error_label = opts.error_label
   self.state = "running"
@@ -84,13 +85,14 @@ function Spinner:stop(success, label)
 end
 
 function Spinner:frame()
-  local count = #self.frames
+  local frames = self.frames or hl.glyph("spinner", "frames", fallback_frames)
+  local count = #frames
   if count == 0 then
     return ""
   end
   local elapsed = math.max(0, util.now() - self.started)
   local idx = math.floor(elapsed / self.interval) % count + 1
-  return self.frames[idx]
+  return frames[idx]
 end
 
 function Spinner:get_label()
@@ -102,11 +104,11 @@ function Spinner:text_and_style()
   local label = rawget(self, "label")
   if not self.active then
     if self.state == "error" then
-      return self.error_text, self.error_style,
-          self.error_label or label or ""
+      return self.error_text or hl.glyph("spinner", "error", "✖"),
+          self.error_style, self.error_label or label or ""
     end
-    return self.done_text, self.done_style,
-        self.done_label or label or ""
+    return self.done_text or hl.glyph("spinner", "done", "✔"),
+        self.done_style, self.done_label or label or ""
   end
   return self:frame(), self.style, label or ""
 end

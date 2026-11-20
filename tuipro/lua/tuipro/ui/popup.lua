@@ -9,15 +9,11 @@ local Widget = require("tuipro.widget")
 local util = require("tuipro.util")
 local Button = require("tuipro.ui.button")
 local Text = require("tuipro.ui.text")
+local hl = require("tuipro.hl")
 
 local Popup = Container:extend("Popup")
 
-local border_chars = {
-  rounded = { tl = "╭", tr = "╮", bl = "╰", br = "╯", h = "─", v = "│" },
-  single = { tl = "┌", tr = "┐", bl = "└", br = "┘", h = "─", v = "│" },
-  double = { tl = "╔", tr = "╗", bl = "╚", br = "╝", h = "═", v = "║" },
-  heavy = { tl = "┏", tr = "┓", bl = "┗", br = "┛", h = "━", v = "┃" },
-}
+local fallback_border = { tl = "╭", tr = "╮", bl = "╰", br = "╯", h = "─", v = "│" }
 
 function Popup.new(opts)
   opts = opts or {}
@@ -27,7 +23,7 @@ function Popup.new(opts)
   self.title = opts.title
   self.border = opts.border ~= false
   self.border_style = opts.border_style or "rounded"
-  self.chars = opts.chars or border_chars[self.border_style] or border_chars.rounded
+  self.chars = opts.chars
   self.border_hl = opts.border_hl or "PopupBorder"
   self.title_hl = opts.title_hl or "PopupTitle"
   self.fill = opts.fill or "Popup"
@@ -73,6 +69,7 @@ function Popup.new(opts)
           width = def.width,
           brackets = def.brackets,
           focusable = def.focusable,
+          styles = def.styles or opts.button_styles,
           on_press = function()
             if callback then
               callback(self)
@@ -205,7 +202,8 @@ function Popup:render(canvas)
     return
   end
   canvas:fill(0, 0, self.w, self.h, " ", self.fill)
-  local c = self.chars
+  local c = self.chars or hl.glyph("border", self.border_style,
+      hl.glyph("border", "rounded", fallback_border))
   if self.border and self.w >= 2 and self.h >= 2 then
     canvas:put(0, 0, c.tl, self.border_hl)
     canvas:put(self.w - 1, 0, c.tr, self.border_hl)
@@ -220,7 +218,8 @@ function Popup:render(canvas)
       canvas:vline(self.w - 1, 1, self.h - 2, c.v, self.border_hl)
     end
     if self.title and self.title ~= "" and self.w > 4 then
-      local title = util.truncate(" " .. tostring(self.title) .. " ", self.w - 4)
+      local title = util.truncate(" " .. tostring(self.title) .. " ", self.w - 4,
+          hl.glyph("text", "ellipsis", "…"))
       canvas:put(2, 0, title, self.title_hl)
     end
   end

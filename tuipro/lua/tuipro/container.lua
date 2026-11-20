@@ -2,6 +2,7 @@
 local Widget = require("tuipro.widget")
 local Canvas = require("tuipro.canvas")
 local util = require("tuipro.util")
+local hl = require("tuipro.hl")
 
 local Container = Widget:extend("Container")
 
@@ -482,9 +483,11 @@ function Split:render(canvas)
     local lx = s.x - self.x
     local ly = s.y - self.y
     if s.vertical then
-      canvas:vline(lx, 0, self.h, "│", self.separator_style)
+      canvas:vline(lx, 0, self.h, hl.glyph("separator", "vertical", "│"),
+          self.separator_style)
     else
-      canvas:hline(0, ly, self.w, "─", self.separator_style)
+      canvas:hline(0, ly, self.w, hl.glyph("separator", "single", "─"),
+          self.separator_style)
     end
   end
 end

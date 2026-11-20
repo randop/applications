@@ -18,7 +18,9 @@ local M = {}
 
 M.DEFAULT = -1
 M.palette = theme.colors
-M.theme = theme.name
+M.glyphs = theme.glyphs
+M.theme = theme.default_name
+M.theme_def = theme.get(theme.default_name)
 
 M.attr = {
   bold = 1,
@@ -40,6 +42,7 @@ M.attr_names = {
 M.transparent = false
 
 local groups = {}
+local overrides = {}
 local string_cache = {}
 local table_cache = setmetatable({}, { __mode = "k" })
 local warned = {}
@@ -57,7 +60,7 @@ local function parse_color(v)
   if type(v) == "table" then
     return parse_color(v.color or v[1])
   end
-  local p = theme.colors[v]
+  local p = M.palette[v]
   if p ~= nil then
     v = p
   end
@@ -87,10 +90,14 @@ local neutral_names = {
   bg = true, surface = true, surface2 = true, panel = true, shadow = true,
 }
 local neutral_bg = {}
-for name in pairs(neutral_names) do
-  local color = parse_color(theme.colors[name])
-  if color ~= nil then
-    neutral_bg[color] = true
+
+local function rebuild_neutral()
+  neutral_bg = {}
+  for name in pairs(neutral_names) do
+    local color = parse_color(M.palette[name])
+    if color ~= nil then
+      neutral_bg[color] = true
+    end
   end
 end
 
@@ -139,8 +146,13 @@ local function normalize(spec)
 end
 
 function M.define(name, spec)
-  groups[name] = normalize(spec or {})
+  local raw = spec or {}
+  groups[name] = normalize(raw)
+  if M.theme_def then
+    overrides[name] = raw
+  end
   string_cache = {}
+  table_cache = setmetatable({}, { __mode = "k" })
   return groups[name]
 end
 
@@ -157,6 +169,67 @@ function M.names()
   end
   table.sort(out)
   return out
+end
+
+-- Return a themed glyph such as hl.glyph("list", "marker", "›").
+-- Glyphs are looked up at call time so live theme changes update widgets.
+function M.glyph(section, name, fallback)
+  local s = M.glyphs and M.glyphs[section]
+  local value = s and s[name]
+  if value == nil then
+    return fallback
+  end
+  return value
+end
+
+local function reset_caches()
+  string_cache = {}
+  table_cache = setmetatable({}, { __mode = "k" })
+end
+
+local function rebuild_groups(def)
+  groups = {}
+  warned = {}
+  for name, spec in pairs(def.groups or {}) do
+    groups[name] = normalize(spec)
+  end
+  for name, spec in pairs(overrides) do
+    groups[name] = normalize(spec)
+  end
+end
+
+local function load_theme(def, opts)
+  opts = opts or {}
+  M.palette = def.colors or {}
+  M.glyphs = def.glyphs or theme.glyphs
+  M.theme = def.name
+  M.theme_def = def
+  if opts.clear_overrides then
+    overrides = {}
+  end
+  if opts.transparent ~= nil then
+    M.transparent = opts.transparent and true or false
+  end
+  rebuild_neutral()
+  rebuild_groups(def)
+  reset_caches()
+  return def
+end
+
+-- Switch to a registered theme (name or definition table).  Highlight groups
+-- and glyphs resolve lazily, so existing widgets update on the next frame.
+-- Custom groups defined with hl.define() are preserved across switches.
+-- opts.transparent can force transparency on/off in the same call.
+function M.set_theme(name, opts)
+  local def = theme.get(name)
+  if not def then
+    return nil, "unknown theme: " .. tostring(name)
+  end
+  return load_theme(def, opts)
+end
+
+function M.current_theme()
+  return M.theme_def
 end
 
 local function apply(res, spec, seen)
@@ -336,16 +409,15 @@ end
 
 M.inherit = M.derive
 
+-- Discard custom groups and restore the default theme.
 function M.reset()
-  groups = {}
-  string_cache = {}
-  table_cache = setmetatable({}, { __mode = "k" })
-  M.transparent = false
+  overrides = {}
+  local def = theme.get(theme.default_name)
+  load_theme(def, { transparent = false })
+  return M
 end
 
 -- Load the default theme.
-for name, spec in pairs(theme.groups) do
-  groups[name] = normalize(spec)
-end
+load_theme(theme.get(theme.default_name), { transparent = false })
 
 return M

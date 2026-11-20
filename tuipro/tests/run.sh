@@ -136,9 +136,23 @@ echo "== CLI smoke checks"
 run_cli "demo --frames 1" 0 "$BIN" --headless --size 80x24 --frames 1 --demo
 run_cli "demo-coding --frames 1" 0 "$BIN" --headless --size 80x24 --frames 1 --demo-coding
 run_cli "demo-api --frames 1" 0 "$BIN" --headless --size 80x24 --frames 1 --demo-api
+run_cli "demo-theme --frames 1" 0 "$BIN" --headless --size 80x24 --frames 1 --demo-theme
 run_cli "plugin --frames 1" 0 "$BIN" --headless --size 80x24 --frames 1 --plugin plugins/hello
+run_cli "theme plugin --frames 1" 0 "$BIN" --headless --size 80x24 --frames 1 --plugin plugins/aurora
+run_cli "opencode plugin --frames 1" 0 "$BIN" --headless --size 80x24 --frames 1 --plugin plugins/opencode
+run_cli "tokyo-night plugin --frames 1" 0 "$BIN" --headless --size 80x24 --frames 1 --plugin plugins/tokyo-night
 run_cli "eval nonzero exit" 3 "$BIN" --headless -e "return 3"
 run_cli "missing script" 1 "$BIN" --headless /no/such/tuipro-script.lua
+run_cli "theme option" 0 "$BIN" --headless --size 80x24 --frames 1 --theme tuipro-light --demo
+run_cli "theme option (plugin theme)" 0 \
+  "$BIN" --headless --size 80x24 --frames 1 --theme tokyo-night --demo-theme
+run_cli "theme option (opencode)" 0 \
+  "$BIN" --headless --size 80x24 --frames 1 --theme opencode --demo-theme
+run_cli "theme option (--theme=NAME)" 0 \
+  "$BIN" --headless --size 80x24 --frames 1 --theme=tuipro-light --demo
+run_cli "unknown theme still runs" 0 \
+  "$BIN" --headless --size 80x24 --frames 1 --theme not-a-theme --demo
+run_cli "theme option needs a name" 2 "$BIN" --headless --theme
 
 for example in "$ROOT"/examples/*.lua; do
   [ -e "$example" ] || continue

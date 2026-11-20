@@ -1,6 +1,7 @@
 -- Static (or dynamic) text block with optional word wrapping and alignment.
 local Widget = require("tuipro.widget")
 local util = require("tuipro.util")
+local hl = require("tuipro.hl")
 
 local Text = Widget:extend("Text")
 
@@ -83,7 +84,8 @@ function Text:render(canvas)
       break
     end
     if i == limit and i < #lines and self.ellipsis ~= false then
-      line = util.truncate(line, width, self.ellipsis or "…")
+      line = util.truncate(line, width,
+          self.ellipsis or hl.glyph("text", "ellipsis", "…"))
     end
     canvas:text(pad, y, line, width, self.hl, self.align)
     y = y + 1

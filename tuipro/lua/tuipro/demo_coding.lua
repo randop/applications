@@ -28,34 +28,36 @@ M.VERSION = t.version or "0.1.0"
 -- background.  Accents and diff colors keep their own backgrounds.
 -- ---------------------------------------------------------------------------
 
+-- Roles are resolved from the active theme palette, so the coding demo
+-- follows hl.set_theme() just like the rest of the toolkit.
 local C = {
-  bg = "#0a0a0a",
-  panel = "#141414",
-  raised = "#1e1e1e",
-  border = "#484848",
-  text = "#eeeeee",
-  strong = "#ffffff",
-  muted = "#808080",
-  faint = "#606060",
-  accent = "#fab283",
-  blue = "#5c9cf5",
-  purple = "#9d7cd8",
-  green = "#7fd88f",
-  red = "#e06c75",
-  orange = "#f5a742",
-  cyan = "#56b6c2",
-  yellow = "#e5c07b",
-  code = "#c8c8c8",
-  selection = "#2b211b",
-  selection_detail = "#c98a58",
-  add_bg = "#15251a",
-  del_bg = "#2a1618",
-  add_text = "#a8e6b4",
-  add_num = "#5d9a6b",
-  del_text = "#f0b0b5",
-  del_num = "#a5656b",
-  todo_done = "#6f6f6f",
-  pill_text = "#1a1208",
+  bg = "bg",
+  panel = "panel",
+  raised = "raised",
+  border = "border",
+  text = "text",
+  strong = "strong",
+  muted = "muted",
+  faint = "faint",
+  accent = "accent",
+  blue = "blue",
+  purple = "purple",
+  green = "green",
+  red = "red",
+  orange = "orange",
+  cyan = "cyan",
+  yellow = "yellow",
+  code = "code",
+  selection = "selection",
+  selection_detail = "selection_detail",
+  add_bg = "add_bg",
+  del_bg = "del_bg",
+  add_text = "add_text",
+  add_num = "add_num",
+  del_text = "del_text",
+  del_num = "del_num",
+  todo_done = "todo_done",
+  pill_text = "pill_text",
 }
 
 local function define_highlights()
@@ -104,7 +106,7 @@ local function define_highlights()
     CodingSessionThumb = { fg = C.muted, bg = "surface" },
     CodingSessionThumbFocus = { fg = C.accent, bg = "surface" },
     CodingProgressFill = { fg = C.green, bg = "surface" },
-    CodingProgressTrack = { fg = "#3a3a3a", bg = "surface" },
+    CodingProgressTrack = { fg = C.border, bg = "surface" },
     CodingProgressLabel = { fg = C.muted, bg = "surface" },
     CodingProgressPercent = { fg = C.text, bg = "surface" },
 
@@ -141,7 +143,7 @@ local function define_highlights()
     CodingInputBorderFocus = { fg = C.accent, bg = "panel", bold = true },
 
     -- Transcript scrollbar (the viewport sits on the main background).
-    CodingScrollTrack = { fg = "#3a3a3a", bg = "bg" },
+    CodingScrollTrack = { fg = C.border, bg = "bg" },
     CodingScrollThumb = { fg = C.faint, bg = "bg" },
     CodingScrollThumbFocus = { fg = C.accent, bg = "bg" },
 
@@ -178,7 +180,7 @@ local function define_highlights()
     CodingPaletteSelected = { fg = C.pill_text, bg = C.accent, bold = true },
     CodingPaletteSelectedInactive = { fg = C.accent, bg = "panel" },
     CodingPaletteDetail = { fg = C.muted, bg = "panel" },
-    CodingPaletteDetailSelected = { fg = "#4a2a10", bg = C.accent },
+    CodingPaletteDetailSelected = { fg = C.pill_text, bg = C.accent },
     CodingPaletteMarker = { fg = C.accent, bg = "panel", bold = true },
     CodingPaletteMarkerSelected = { fg = C.pill_text, bg = C.accent },
     CodingPaletteTrack = { fg = C.border, bg = "panel" },
@@ -200,7 +202,7 @@ end
 
 local Transcript = Widget:extend("Transcript")
 
-local spinner_frames = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏" }
+local fallback_spinner_frames = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏" }
 
 function Transcript.new(opts)
   opts = opts or {}
@@ -266,7 +268,9 @@ end
 local function add_assistant(self, b, out, width)
   blank(out)
   local pending = b.pending == true
-  local frame = pending and spinner_frames[(self.phase % #spinner_frames) + 1] or "◍"
+  local frames = hl.glyph("spinner", "frames", fallback_spinner_frames)
+  local frame = pending and frames[(self.phase % #frames) + 1] or
+      hl.glyph("spinner", "idle", "◍")
   local parts = {
     { text = "  ", hl = "CodingText" },
     { text = frame .. " ", hl = pending and "CodingYellow" or "CodingAccent" },
@@ -1217,8 +1221,6 @@ function M.run(opts)
   session_list = ui.list({
     items = {},
     flex = 1,
-    marker = "▍",
-    marker_unselected = " ",
     show_marker = true,
     show_scrollbar = true,
     detail_align = "right",
@@ -1431,8 +1433,6 @@ function M.run(opts)
         show_percent = false,
         smooth = true,
         height = 1,
-        fill_char = "━",
-        track_char = "─",
         fill_hl = "CodingProgressFill",
         track_hl = "CodingProgressTrack",
       }),

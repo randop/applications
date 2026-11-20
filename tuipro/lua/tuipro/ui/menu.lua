@@ -31,8 +31,9 @@ function Menu.new(opts)
   for k, v in pairs(opts.styles or {}) do
     self.styles[k] = v
   end
-  self.marker = opts.marker or "›"
-  self.marker_unselected = opts.marker_unselected or " "
+  self.marker = opts.marker
+  self.marker_unselected = opts.marker_unselected
+  self.glyph_section = "menu"
   self.show_marker = opts.show_marker ~= false
   self.show_index = false
   self.detail_align = "right"

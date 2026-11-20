@@ -33,9 +33,11 @@ typedef struct {
   const char *module;
   const char *plugin;
   const char *eval;
+  const char *theme;
   bool demo;
   bool demo_coding;
   bool demo_api;
+  bool demo_theme;
   int arg_start;
 } cli_options;
 
@@ -53,6 +55,7 @@ static void usage(FILE *out)
     "  tuipro --demo\n"
     "  tuipro --demo-coding\n"
     "  tuipro --demo-api\n"
+    "  tuipro --demo-theme\n"
     "\n"
     "Options:\n"
     "  -h, --help             show this help\n"
@@ -60,9 +63,11 @@ static void usage(FILE *out)
     "      --demo             run the built-in dashboard demo\n"
     "      --demo-coding      run the built-in coding demo (opencode-style)\n"
     "      --demo-api         run the HTTP client demo (libuv fetch)\n"
+    "      --demo-theme       run the theme showcase demo\n"
     "      --plugin PATH      run a plugin (directory with init.lua, or a file)\n"
     "  -l, --load MODULE      require a Lua module and run its entry point\n"
     "  -e, --eval CODE        evaluate Lua code\n"
+    "      --theme NAME       load a theme and start the UI with it\n"
     "      --headless         no terminal I/O (for tests and scripts)\n"
     "      --size WxH         initial size for headless mode (default 80x24)\n"
     "      --fps N            maximum redraw rate (default 60)\n"
@@ -137,14 +142,22 @@ static int parse_args(int argc, char **argv, cli_options *opts)
       opts->demo = true;
       opts->demo_coding = false;
       opts->demo_api = false;
+      opts->demo_theme = false;
     } else if (strcmp(a, "--demo-coding") == 0) {
       opts->demo_coding = true;
       opts->demo = false;
       opts->demo_api = false;
+      opts->demo_theme = false;
     } else if (strcmp(a, "--demo-api") == 0) {
       opts->demo_api = true;
       opts->demo = false;
       opts->demo_coding = false;
+      opts->demo_theme = false;
+    } else if (strcmp(a, "--demo-theme") == 0) {
+      opts->demo_theme = true;
+      opts->demo = false;
+      opts->demo_coding = false;
+      opts->demo_api = false;
     } else if (strcmp(a, "--headless") == 0) {
       opts->headless = true;
     } else if (strcmp(a, "--truecolor") == 0) {
@@ -207,6 +220,14 @@ static int parse_args(int argc, char **argv, cli_options *opts)
         return -1;
       }
       opts->eval = argv[i];
+    } else if (strcmp(a, "--theme") == 0) {
+      if (++i >= argc) {
+        fprintf(stderr, "%s: --theme expects a theme name\n", progname);
+        return -1;
+      }
+      opts->theme = argv[i];
+    } else if (strncmp(a, "--theme=", 8) == 0) {
+      opts->theme = a + 8;
     } else {
       fprintf(stderr, "%s: unknown option '%s' (try --help)\n", progname, a);
       return -1;
@@ -416,6 +437,8 @@ static void set_cli_table(lua_State *L, const cli_options *opts,
   lua_setfield(L, -2, "demo_coding");
   lua_pushboolean(L, opts->demo_api);
   lua_setfield(L, -2, "demo_api");
+  lua_pushboolean(L, opts->demo_theme);
+  lua_setfield(L, -2, "demo_theme");
   if (opts->plugin) {
     lua_pushstring(L, opts->plugin);
     lua_setfield(L, -2, "plugin");
@@ -423,6 +446,10 @@ static void set_cli_table(lua_State *L, const cli_options *opts,
   if (opts->script) {
     lua_pushstring(L, opts->script);
     lua_setfield(L, -2, "script");
+  }
+  if (opts->theme) {
+    lua_pushstring(L, opts->theme);
+    lua_setfield(L, -2, "theme");
   }
   lua_createtable(L, argc, 0);
   int n = 1;
@@ -639,6 +666,8 @@ int main(int argc, char **argv)
       demo = "tuipro.demo_coding";
     else if (opts.demo_api)
       demo = "tuipro.demo_api";
+    else if (opts.demo_theme)
+      demo = "tuipro.demo_theme";
     require_entry(L, demo);
   }
 

@@ -22,6 +22,28 @@ local function join(a, b)
   return a .. "/" .. b
 end
 
+-- Infer the installation root from this module's own path.  In a checkout
+-- that is the repository root; after `cmake --install` it is the directory
+-- containing `lua/` and `plugins/`.  This makes bundled plugins resolvable
+-- even when the process runs from an unrelated working directory.
+local function module_root()
+  local info = debug.getinfo(1, "S")
+  local source = info and info.source
+  if type(source) ~= "string" or source:sub(1, 1) ~= "@" then
+    return nil
+  end
+  local file = source:sub(2):gsub("\\", "/")
+  local dir = file:match("^(.*)/[^/]+$")
+  if not dir then
+    return nil
+  end
+  local root = dir:match("^(.*)/lua/tuipro$")
+  if root == "" then
+    return "."
+  end
+  return root
+end
+
 -- Return a Lua file path for a plugin name or path, or nil.
 function M.resolve(name)
   if not name or name == "" then
@@ -51,6 +73,10 @@ function M.resolve(name)
     for dir in extra:gmatch("[^:]+") do
       roots[#roots + 1] = dir
     end
+  end
+  local mod_root = module_root()
+  if mod_root then
+    roots[#roots + 1] = join(mod_root, "plugins")
   end
   for _, root in ipairs(roots) do
     local p = join(root, join(name, "init.lua"))

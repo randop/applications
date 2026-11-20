@@ -1,10 +1,11 @@
 -- One-line progress bar with label, track and percentage.
 local Widget = require("tuipro.widget")
 local util = require("tuipro.util")
+local hl = require("tuipro.hl")
 
 local Progress = Widget:extend("Progress")
 
-local partials = { "", "▏", "▎", "▍", "▌", "▋", "▊", "▉" }
+local fallback_partials = { "", "▏", "▎", "▍", "▌", "▋", "▊", "▉" }
 
 function Progress.new(opts)
   opts = opts or {}
@@ -20,8 +21,9 @@ function Progress.new(opts)
   self.track_hl = opts.track_hl or "ProgressTrack"
   self.label_hl = opts.label_hl or "ProgressLabel"
   self.percent_hl = opts.percent_hl or "ProgressPercent"
-  self.fill_char = opts.fill_char or "█"
-  self.track_char = opts.track_char or "░"
+  self.fill_char = opts.fill_char
+  self.track_char = opts.track_char
+  self.partials = opts.partials
   self.smooth = opts.smooth ~= false
   self.width = opts.width
   self.height = 1
@@ -75,6 +77,9 @@ function Progress:render(canvas)
     return
   end
   local ratio = self:ratio()
+  local fill_char = self.fill_char or hl.glyph("progress", "fill", "█")
+  local track_char = self.track_char or hl.glyph("progress", "track", "░")
+  local partials = self.partials or hl.glyph("progress", "partials", fallback_partials)
   local label = self.show_label and self:label_text() or ""
   local lw = util.width(label)
   local percent = ""
@@ -84,7 +89,8 @@ function Progress:render(canvas)
   local pw = util.width(percent)
   local x = 0
   if lw > 0 then
-    label = util.truncate(label, math.max(0, self.w - pw - 2))
+    label = util.truncate(label, math.max(0, self.w - pw - 2),
+        hl.glyph("text", "ellipsis", "…"))
     lw = util.width(label)
     canvas:put(0, 0, label, self.label_hl)
     x = lw + 1
@@ -106,15 +112,15 @@ function Progress:render(canvas)
       end
     end
     for i = 0, full - 1 do
-      canvas:put(x + i, 0, self.fill_char, self.fill_hl)
+      canvas:put(x + i, 0, fill_char, self.fill_hl)
     end
     local used = full
     if partial > 0 then
-      canvas:put(x + full, 0, partials[partial], self.fill_hl)
+      canvas:put(x + full, 0, partials[partial] or "", self.fill_hl)
       used = used + 1
     end
     for i = used, bar_w - 1 do
-      canvas:put(x + i, 0, self.track_char, self.track_hl)
+      canvas:put(x + i, 0, track_char, self.track_hl)
     end
   end
   if pw > 0 then

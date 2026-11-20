@@ -2,6 +2,7 @@
 local Widget = require("tuipro.widget")
 local util = require("tuipro.util")
 local keys = require("tuipro.keys")
+local hl = require("tuipro.hl")
 
 local Button = Widget:extend("Button")
 
@@ -33,12 +34,28 @@ function Button.new(opts)
   self.primary = opts.primary == true
   self.danger = opts.danger == true
   self.brackets = opts.brackets ~= false
+  self.bracket_left = opts.bracket_left
+  self.bracket_right = opts.bracket_right
   self.padding = opts.padding or 1
   self.align = opts.align or "center"
   self.disabled = opts.disabled == true
   self.pressed = false
   self.width = opts.width
   self.height = 1
+  self.styles = {
+    normal = opts.hl or "Button",
+    focus = opts.focus_hl or "ButtonFocus",
+    primary = opts.primary_hl or "ButtonPrimary",
+    primary_focus = opts.primary_focus_hl or "ButtonPrimaryFocus",
+    danger = opts.danger_hl or "ButtonDanger",
+    danger_focus = opts.danger_focus_hl or "ButtonDangerFocus",
+    disabled = opts.disabled_hl or "ButtonDisabled",
+    hotkey = opts.hotkey_hl or "ButtonHotkey",
+    hotkey_focus = opts.hotkey_focus_hl or "ButtonHotkeyFocus",
+  }
+  for k, v in pairs(opts.styles or {}) do
+    self.styles[k] = v
+  end
   self.focusable = not self.disabled and opts.focusable ~= false
   return self
 end
@@ -49,7 +66,9 @@ function Button:preferred_width(avail)
   end
   local w = util.width(self.label) + self.padding * 2
   if self.brackets then
-    w = w + 2
+    local left = self.bracket_left or hl.glyph("button", "left", "[")
+    local right = self.bracket_right or hl.glyph("button", "right", "]")
+    w = w + util.width(left) + util.width(right)
   end
   return math.min(avail or w, math.max(1, w))
 end
@@ -60,22 +79,22 @@ end
 
 function Button:style()
   if self.disabled then
-    return "ButtonDisabled"
+    return self.styles.disabled
   end
   if self.focused then
     if self.primary then
-      return "ButtonPrimaryFocus"
+      return self.styles.primary_focus
     elseif self.danger then
-      return "ButtonDangerFocus"
+      return self.styles.danger_focus
     end
-    return "ButtonFocus"
+    return self.styles.focus
   end
   if self.primary then
-    return "ButtonPrimary"
+    return self.styles.primary
   elseif self.danger then
-    return "ButtonDanger"
+    return self.styles.danger
   end
-  return "Button"
+  return self.styles.normal
 end
 
 function Button:press()
@@ -127,12 +146,14 @@ function Button:render(canvas)
     return
   end
   local style = self:style()
-  local hotkey_style = self.focused and "ButtonHotkeyFocus" or "ButtonHotkey"
+  local hotkey_style = self.focused and self.styles.hotkey_focus or self.styles.hotkey
   canvas:fill(0, 0, self.w, 1, " ", style)
 
+  local bleft = self.bracket_left or hl.glyph("button", "left", "[")
+  local bright = self.bracket_right or hl.glyph("button", "right", "]")
   local text = self.label
   local tw = util.width(text) + self.padding * 2
-  local total = tw + (self.brackets and 2 or 0)
+  local total = tw + (self.brackets and util.width(bleft) + util.width(bright) or 0)
   local x = 0
   if self.align == "center" then
     x = math.max(0, math.floor((self.w - total) / 2))
@@ -140,11 +161,12 @@ function Button:render(canvas)
     x = math.max(0, self.w - total)
   end
   if self.brackets then
-    canvas:put(x, 0, "[", style)
-    x = x + 1
+    canvas:put(x, 0, bleft, style)
+    x = x + util.width(bleft)
   end
   x = x + self.padding
-  local maxw = math.max(0, self.w - x - self.padding - (self.brackets and 1 or 0))
+  local right_w = util.width(bright)
+  local maxw = math.max(0, self.w - x - self.padding - (self.brackets and right_w or 0))
   local hotkey_lower = self.hotkey and self.hotkey:lower() or nil
   local placed = false
   for ch in util.chars(text) do
@@ -161,8 +183,8 @@ function Button:render(canvas)
     maxw = maxw - util.char_width(ch)
   end
   if self.brackets then
-    local bx = math.min(self.w - 1, x + self.padding)
-    canvas:put(bx, 0, "]", style)
+    local bx = math.min(self.w - right_w, x + self.padding)
+    canvas:put(bx, 0, bright, style)
   end
 end
 

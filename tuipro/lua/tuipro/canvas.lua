@@ -95,22 +95,23 @@ function Canvas:text(lx, ly, text, maxw, style, align)
   if maxw <= 0 or ly < 0 or ly >= self.h then
     return
   end
-  local clipped = util.fit(text or "", maxw, align)
+  local clipped = util.fit(text or "", maxw, align,
+      hl.glyph("text", "ellipsis", "…"))
   self:put(lx, ly, clipped, style)
 end
 
 function Canvas:hline(lx, ly, w, ch, style)
-  ch = ch or "─"
+  ch = ch or hl.glyph("canvas", "horizontal", "─")
   if ch == "" then
-    ch = "─"
+    ch = hl.glyph("canvas", "horizontal", "─")
   end
   self:fill(lx, ly, w, 1, ch, style)
 end
 
 function Canvas:vline(lx, ly, h, ch, style)
-  ch = ch or "│"
+  ch = ch or hl.glyph("canvas", "vertical", "│")
   if ch == "" then
-    ch = "│"
+    ch = hl.glyph("canvas", "vertical", "│")
   end
   self:fill(lx, ly, 1, h, ch, style)
 end
@@ -122,7 +123,7 @@ function Canvas:spans(lx, ly, spans, maxw, default_style)
     local text = span.text or ""
     local w = util.width(text)
     if x + w > limit then
-      text = util.truncate(text, limit - x)
+      text = util.truncate(text, limit - x, hl.glyph("text", "ellipsis", "…"))
       w = util.width(text)
     end
     if text ~= "" then

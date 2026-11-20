@@ -37,6 +37,7 @@ Every widget inherits these fields:
 | `focusable` | Some widgets default to `true` (List, Menu, Table, Input, Tabs, Button). |
 | `name` | Label used by the default statusline and help screens. |
 | `hl` | Default highlight group. |
+| `styles` | Per-widget semantic style map (List, Menu, Table and Button). |
 | `Tooltip`/`tooltip` | Metadata only; no built-in tooltip renderer. |
 
 A widget gets absolute 0-based `x`, `y`, `w`, `h` fields after layout. Call
@@ -180,7 +181,7 @@ ui.box({
   title_focus_hl = "Title",
   border = true,
   border_style = "rounded",     -- rounded | single | double | heavy | ascii
-  chars = nil,                  -- custom { tl, tr, bl, br, h, v }
+  chars = nil,                  -- override the theme's { tl, tr, bl, br, h, v }
   border_hl = "Border",
   border_focus_hl = "BorderFocus",
   fill = "NormalFloat",
@@ -208,7 +209,7 @@ ui.text({
   hl = "Normal",
   padding = 0,
   max_lines = nil,
-  ellipsis = nil,               -- default "…"; false disables the cut marker
+  ellipsis = nil,               -- theme text.ellipsis ("…"); false disables it
   height = nil,
 })
 ```
@@ -238,8 +239,8 @@ local list = ui.list({
     { label = "Toggle", checked = true },
   },
   selected = 1,
-  marker = "›",
-  marker_unselected = " ",
+  marker = nil,                 -- theme list.marker ("›")
+  marker_unselected = nil,      -- theme list.marker_unselected (" ")
   show_marker = true,
   show_index = false,
   index_width = nil,            -- default width of the item count
@@ -400,7 +401,8 @@ local input = ui.input({
   value = "",
   prompt = "Name: ",
   placeholder = "Ada Lovelace",
-  mask = nil,                   -- e.g. "•" or password = true for the default
+  mask = nil,                   -- theme input.mask ("•"); password = true
+  cursor_shape = nil,           -- theme input.cursor ("bar")
   readonly = false,
   max_length = nil,
   width = nil,
@@ -434,7 +436,7 @@ Keys: printable text inserts; `Enter` submits; `Esc` cancels; `Backspace`,
 `Tab` is not consumed, so focus moves. Control characters are stripped and
 newlines/tabs become spaces. Masking uses one mask character per input
 character. The widget is one row high, scrolls horizontally to keep the cursor
-visible, and shows a `bar` cursor when focused.
+visible, and shows the configured cursor shape (default `bar`) when focused.
 
 `on_change` receives `(text, self)`; `on_submit` and `on_cancel` receive
 `(text, self, app)`. The mouse places the cursor. Bracketed paste inserts into
@@ -487,9 +489,12 @@ ui.button({
   primary = false,
   danger = false,
   brackets = true,              -- draw [ label ]
+  bracket_left = nil,           -- theme button.left ("[")
+  bracket_right = nil,          -- theme button.right ("]")
   padding = 1,
   align = "center",             -- left | center | right
   disabled = false,
+  styles = { ... },             -- override any Button* group
   width = nil,
 })
 ```
@@ -512,7 +517,7 @@ right-aligned button row. Popups are opened through `App:open_popup`.
 local popup = ui.popup({
   title = "Confirm",
   border = true,
-  border_style = "rounded",     -- rounded | single | double | heavy
+  border_style = "rounded",     -- rounded | single | double | heavy | ascii
   border_hl = "PopupBorder",
   title_hl = "PopupTitle",
   fill = "Popup",
@@ -559,8 +564,8 @@ ui.progress({
   track_hl = "ProgressTrack",
   label_hl = "ProgressLabel",
   percent_hl = "ProgressPercent",
-  fill_char = "█",
-  track_char = "░",
+  fill_char = nil,              -- theme progress.fill ("█")
+  track_char = nil,             -- theme progress.track ("░")
   smooth = true,
   width = nil,
 })
@@ -577,7 +582,7 @@ An animated one-row spinner with an optional label.
 
 ```lua
 local spinner = ui.spinner({
-  frames = { "⠋", "⠙", ... },
+  frames = nil,                 -- theme spinner.frames
   interval = 80,                -- milliseconds
   label = "Indexing…",          -- string or function(self, app)
   active = true,
@@ -585,8 +590,8 @@ local spinner = ui.spinner({
   label_hl = "SpinnerLabel",
   done_hl = "Success",
   error_hl = "Error",
-  done_text = "✔",
-  error_text = "✖",
+  done_text = nil,              -- theme spinner.done ("✔")
+  error_text = nil,             -- theme spinner.error ("✖")
   done_label = nil,
   error_label = nil,
   width = nil,
@@ -616,8 +621,8 @@ ui.separator({ direction = "vertical", height = 10 })
 Options: `direction`/`orientation` (`"horizontal"` or `"vertical"`), `label` or
 `title`, `hl` (default `"Separator"`), `label_hl` (default `"Subtitle"`),
 `char`, `vchar`, `style` (`single`, `double`, `heavy`, `dashed`, `dotted`,
-`ascii`), and fixed `width`/`height`. A vertical separator defaults to one cell
-wide and draws `│`; a horizontal one defaults to one row high.
+`ascii`), and fixed `width`/`height`. Omitted characters come from the theme's
+`separator` glyphs (default vertical `│`, horizontal `─`).
 
 ## Scrollbar
 

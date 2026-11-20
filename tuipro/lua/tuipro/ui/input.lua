@@ -3,6 +3,7 @@
 local Widget = require("tuipro.widget")
 local util = require("tuipro.util")
 local keys = require("tuipro.keys")
+local hl = require("tuipro.hl")
 
 local Input = Widget:extend("Input")
 
@@ -39,6 +40,7 @@ function Input.new(opts)
   self.prompt = opts.prompt or ""
   self.placeholder = opts.placeholder or ""
   self.mask = opts.mask or opts.password
+  self.cursor_shape = opts.cursor_shape or opts.cursor
   self.readonly = opts.readonly == true
   self.max_length = opts.max_length
   self.on_change = opts.on_change
@@ -105,7 +107,7 @@ function Input:_mask_char()
   if type(mask) == "string" and mask ~= "" then
     return mask
   end
-  return "•"
+  return hl.glyph("input", "mask", "•")
 end
 
 function Input:_display()
@@ -336,7 +338,7 @@ function Input:render(canvas)
   local prompt = self.prompt or ""
   local pw = util.width(prompt)
   if pw > 0 then
-    prompt = util.truncate(prompt, self.w)
+    prompt = util.truncate(prompt, self.w, hl.glyph("text", "ellipsis", "…"))
     pw = util.width(prompt)
     canvas:put(0, 0, prompt, self.focused and self.prompt_focus_hl or self.prompt_hl)
   end
@@ -371,7 +373,8 @@ function Input:render(canvas)
     if cx >= self.w then
       cx = self.w - 1
     end
-    self:set_cursor(self.x + cx, self.y, "bar")
+    self:set_cursor(self.x + cx, self.y, self.cursor_shape or
+        hl.glyph("input", "cursor", "bar"))
   end
 end
 

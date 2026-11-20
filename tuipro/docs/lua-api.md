@@ -33,8 +33,8 @@ return 0 -- success
 | `tuipro.container` | `Container`, `VBox`, `HBox`, `Padding`, `Center`, `Stack`, `Split`. |
 | `tuipro.canvas` | Clipped drawing surface. |
 | `tuipro.ui` | Widget constructors (`ui.text`, `ui.list`, ...). |
-| `tuipro.hl` | Highlight groups and style resolution. |
-| `tuipro.theme` | Default color palette and group definitions. |
+| `tuipro.hl` | Highlight groups, style resolution, glyphs and theme switching. |
+| `tuipro.theme` | Theme registry, palettes, highlight groups and glyph definitions. |
 | `tuipro.keys` | Key notation parsing, normalization and pretty-printing. |
 | `tuipro.util` | UTF-8, width, wrapping, path and generic helpers. |
 | `tuipro.cli` | Command-line options exposed by the launcher. |
@@ -45,6 +45,7 @@ return 0 -- success
 | `tuipro.demo` | Built-in dashboard (`tuipro --demo`). |
 | `tuipro.demo_coding` | Built-in coding demo (`tuipro --demo-coding`). |
 | `tuipro.demo_api` | Built-in HTTP client demo (`tuipro --demo-api`). |
+| `tuipro.demo_theme` | Built-in theme showcase (`tuipro --demo-theme`). |
 
 ## `require("tuipro")`
 
@@ -58,8 +59,8 @@ return 0 -- success
 | `Widget`, `widget` | Base widget class. |
 | `container` | Container classes and `parse_padding`. |
 | `canvas` | Canvas class. |
-| `hl`, `highlight` | Highlight API. |
-| `theme` | Default theme. |
+| `hl`, `highlight` | Highlight API, glyph lookup and theme switching. |
+| `theme` | Theme registry and built-in themes. |
 | `keys` | Key helpers. |
 | `util` | Utility helpers. |
 | `plugins` | Plugin loader. |
@@ -77,6 +78,7 @@ Convenience functions:
 | `tuipro.demo(opts)` | Run the built-in dashboard. |
 | `tuipro.demo_coding(opts)` | Run the built-in coding demo. |
 | `tuipro.demo_api(opts)` | Run the built-in HTTP client demo. |
+| `tuipro.demo_theme(opts)` | Run the built-in theme showcase. |
 | `tuipro.fetch(url, opts)` | Start an HTTP(S) request; returns a `Promise`. |
 | `tuipro.info()` | `core.info()` when initialized, otherwise `{}`. |
 | `tuipro.quit()` | Request exit from the core event loop. |
@@ -103,6 +105,12 @@ local app = tuipro.App.new({
   tabline = nil,                    -- nil = hidden, or widget
   footer_hint = "? help   : command   C-q quit",
   command_prompt = ":",
+  cmd_cursor_shape = "bar",         -- command-line cursor shape
+  styles = {                        -- chrome highlight group overrides
+    status = { title = "AppTitle" },
+    cmdline = { fill = "AppCommandLine" },
+    messages = { error = "MessageError" },
+  },
   body = widget,                    -- initial root widget (default empty VBox)
   children = { ... },               -- appended to the root
   focus = widget,                   -- initial focus
@@ -114,7 +122,10 @@ local app = tuipro.App.new({
 `App.new` sets up a default statusline that displays mode, title, focused
 widget label and `footer_hint`. Pass `statusline = false` to hide it, or a
 widget to replace it. The command line is one row at the bottom; hide it with
-`cmdline = false`.
+`cmdline = false`. The default chrome uses `AppMode`, `AppTitle`, `AppInfo`,
+`AppCommandLine`, `AppCommandPrompt` and `Message*` groups. `styles` overrides
+any of these group names per application, and all of them resolve from the
+active theme.
 
 ### Structure
 
@@ -125,6 +136,7 @@ widget to replace it. The command line is one row at the bottom; hide it with
 | `app:set_statusline(widget)` | Set the statusline; `nil` restores the default, `false` hides it. |
 | `app:set_tabline(widget)` | Set the tabline; `false` hides it. |
 | `app:set_title(title)` | Update the terminal title. |
+| `app:set_theme(name[, opts])` | Switch the global theme and redraw; returns the resolved theme. |
 | `app.root`, `app.tabline`, `app.statusline` | Current widgets. |
 | `app.overlays` | Stack of open popups, bottom first. |
 | `app.focus` | Currently focused widget or `nil`. |
@@ -586,14 +598,68 @@ hl.get("Normal")        -- fg, bg, attrs
 hl.style(inline)        -- { fg = ..., bg = ..., attrs = ... }
 hl.attrs("Error")       -- attribute bitmask
 hl.names()              -- sorted group names
+hl.glyph("list", "marker") -- themed glyph, or nil
 ```
 
-`hl.define` caches nothing; `hl.get` caches resolved string and table styles, so
-reuse style tables rather than rebuilding them every frame when possible.
-`hl.DEFAULT` is `-1`. The default theme is `tuipro.theme`; override individual
-groups or replace `hl.palette` entries before defining groups to recolor the
-whole UI. Unknown group names warn once on stderr and resolve as the current
-base style.
+`hl.define` stores the specification and discards resolved-style caches;
+`hl.get` caches resolved string and table styles, so reuse style tables rather
+than rebuilding them every frame when possible. `hl.DEFAULT` is `-1`. Unknown
+group names warn once on stderr and resolve as the current base style.
+
+### Themes and glyphs
+
+Themes are plain tables registered with `tuipro.theme.register`:
+
+```lua
+local theme = require("tuipro.theme")
+local hl = require("tuipro.hl")
+
+theme.register({
+  name = "my-theme",
+  base = "tuipro-dark",        -- optional; inherit palette/groups/glyphs
+  description = "one line",
+  colors = { accent = "#ff8800", bg = "#111111" },
+  groups = { Normal = { fg = "text", bg = "bg" } },
+  glyphs = {
+    list = { marker = "»" },
+    button = { left = "<", right = ">" },
+  },
+  styling = { flat = true },   -- optional; showcase renders borderless panes
+})
+
+hl.set_theme("my-theme")                  -- switch live
+hl.set_theme("tuipro-light", { transparent = true })
+hl.current_theme()                        -- resolved definition
+
+theme.names()                             -- sorted theme names
+theme.list()                              -- resolved definitions
+theme.get("tuipro-light")
+theme.unregister("my-theme")
+```
+
+`hl.set_theme` rebuilds every group from the theme, re-applies groups added
+with `hl.define`, and resets style caches. Widgets resolve styles lazily, so an
+app redraw picks up the new theme without rebuilding the widget tree.
+`App:set_theme(name, opts)` does the same and invalidates layout and drawing.
+
+Glyph defaults are available through `hl.glyph(section, name, fallback)`.
+Every built-in widget uses this lookup at draw time for borders, separators,
+scrollbars, progress bars, spinner frames, list/menu markers, table rules,
+input masks/cursors and ellipsis text. Applications can override them per
+widget (`border_style`, `chars`, `marker`, `fill_char`, ...) or globally in a
+theme. Theme switching re-resolves glyphs, so existing widgets change on the
+next frame.
+
+The bundled `plugins/aurora` plugin is a complete example: palette, groups and
+glyphs. `plugins/opencode` ports the dark OpenCode export, mapping its orange
+interactive actions to tuipro's primary accent and retaining its purple accents,
+neutral surfaces and diff colors. `plugins/tokyo-night` uses the upstream
+TokyoNight Night palette, the resolved `PmenuSel`, `TabLineSel`, `FloatBorder`,
+`Visual` and `Diff*` colors, and lualine's statusline sections. It also sets
+`styling = { flat = true }`, so the showcase drops the framed pane borders and
+paints normal panes with the Night `Normal` background like Neovim splits. All
+three register their theme, and `tuipro --demo-theme` exercises switching
+between them, `tuipro-dark` and `tuipro-light`.
 
 ### Transparency
 
@@ -609,9 +675,12 @@ hl.set_transparent(false)  -- restore the opaque theme
 
 Colored backgrounds are kept, so focus rings, selected rows, active tabs and
 badges stay visible. The setting also affects named and inline styles and can
-be toggled at any time; resolved-style caches are discarded. The bundled demos
-call `hl.set_transparent(true)` by default; pass `{ transparent = false }` to
-`tuipro.demo.run()` or `tuipro.demo_coding.run()` for the opaque look.
+be toggled at any time; resolved-style caches are discarded. Neutral roles are
+read from the active theme, so custom themes work the same way. The dashboard,
+coding and HTTP demos call `hl.set_transparent(true)` by default; pass
+`{ transparent = false }` to `tuipro.demo.run()` or
+`tuipro.demo_coding.run()` for the opaque look. The theme showcase starts
+opaque and toggles transparency with `x`.
 Individually, a widget background can be made transparent with `bg = false`
 (or `"default"` / `"none"`).
 
@@ -665,7 +734,9 @@ Resolution order for a name:
 2. `plugins/<name>` relative to the current directory.
 3. `$TUIPRO_RUNTIME/plugins/<name>` and `$TUIPRO_RUNTIME/<name>`.
 4. Each directory in `$TUIPRO_PLUGIN_PATH` (colon-separated).
-5. `require(name)` as a final fallback.
+5. The `plugins/` directory beside the loaded Lua tree, so bundled plugins work
+   from an installed prefix regardless of the current directory.
+6. `require(name)` as a final fallback.
 
 The `--plugin` launcher resolves direct paths and directories plus the same
 development and installed plugin roots, and adds the plugin's directory to
@@ -787,7 +858,8 @@ their clip immediately before each write.
 | `truecolor` | `nil` auto, `false` or `true`. |
 | `mouse`, `paste` | Input features. |
 | `plugin`, `script` | Selected entry point. |
-| `demo`, `demo_coding`, `demo_api` | Built-in demo selection. |
+| `theme` | `--theme NAME`; applied by `App.new` before the first frame. |
+| `demo`, `demo_coding`, `demo_api`, `demo_theme` | Built-in demo selection. |
 | `args` | Script arguments after the entry point. |
 | `is_headless()` | Boolean helper. |
 

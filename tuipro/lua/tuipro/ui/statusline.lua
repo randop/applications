@@ -1,6 +1,7 @@
 -- Status line widget with left/center/right sections.
 local Widget = require("tuipro.widget")
 local util = require("tuipro.util")
+local hl = require("tuipro.hl")
 
 local Statusline = Widget:extend("Statusline")
 
@@ -106,7 +107,8 @@ function Statusline:render(canvas)
       break
     end
     local text = s.text or ""
-    text = util.truncate(text, left_limit - left_used)
+    text = util.truncate(text, left_limit - left_used,
+        hl.glyph("text", "ellipsis", "…"))
     if text ~= "" then
       canvas:put(x, 0, text, s.hl)
       local tw = util.width(text)
@@ -127,7 +129,7 @@ function Statusline:render(canvas)
     end
     local text = s.text or ""
     local maxw = self.w - p - rx
-    text = util.truncate(text, maxw)
+    text = util.truncate(text, maxw, hl.glyph("text", "ellipsis", "…"))
     canvas:put(rx, 0, text, s.hl)
     rx = rx + util.width(text) + util.width(self.section_gap)
   end
@@ -145,7 +147,8 @@ function Statusline:render(canvas)
         if used >= maxw then
           break
         end
-        local t = util.truncate(s.text or "", maxw - used)
+        local t = util.truncate(s.text or "", maxw - used,
+            hl.glyph("text", "ellipsis", "…"))
         canvas:put(cx2 + used, 0, t, s.hl)
         used = used + util.width(t)
       end

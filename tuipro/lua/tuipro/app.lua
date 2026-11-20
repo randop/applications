@@ -35,10 +35,43 @@ function App.new(opts)
   if self.background == nil then
     self.background = "Normal"
   end
+  -- Chrome styles.  Every group is visible here so applications and themes
+  -- can restyle the statusline, mode badges and command line independently
+  -- from the widgets in the body.
+  self.styles = {
+    status = {
+      mode = "AppMode",
+      command = "AppModeCommand",
+      popup = "AppModePopup",
+      title = "AppTitle",
+      text = "StatusLine",
+      info = "AppInfo",
+    },
+    cmdline = {
+      fill = "AppCommandLine",
+      prompt = "AppCommandPrompt",
+      info = "AppCommandInfo",
+      cursor = "AppCommandCursor",
+    },
+    messages = {
+      info = "MessageInfo",
+      warn = "MessageWarn",
+      error = "MessageError",
+      success = "MessageSuccess",
+    },
+  }
+  for section, values in pairs(opts.styles or {}) do
+    if self.styles[section] then
+      for key, value in pairs(values) do
+        self.styles[section][key] = value
+      end
+    end
+  end
   self.show_cmdline = opts.cmdline ~= false
   self.show_statusline = opts.statusline ~= false
   self.footer_hint = opts.footer_hint or "? help   : command   C-q quit"
   self.command_prompt = opts.command_prompt or ":"
+  self.cmd_cursor_shape = opts.cmd_cursor_shape
   self.mouse = opts.mouse
   if self.mouse == nil then
     self.mouse = cli.mouse ~= false
@@ -75,6 +108,18 @@ function App.new(opts)
   self.last_error = nil
   self._owned_core = false
   self._chrome = { tab_h = 0, body_h = 0, status_h = 0, cmd_h = 0, cmd_y = 0 }
+
+  -- A theme selected with --theme NAME (or opts.theme) loads before the UI is
+  -- built.  Highlight groups and glyphs resolve lazily from group names, so
+  -- every widget, the chrome and the first frame already use it.
+  local theme_name = opts.theme or cli.theme
+  if theme_name then
+    local _, theme_err = cli.load_theme(theme_name)
+    if theme_err then
+      io.stderr:write("[tuipro] " .. tostring(theme_err) .. "\n")
+      self:error(theme_err)
+    end
+  end
 
   self.root = nil
   self:set_body(opts.body or VBox.new({ gap = 0, fill = nil }))
@@ -180,32 +225,44 @@ function App:set_title(title)
   self:invalidate()
 end
 
+-- Switch the global palette/groups and redraw.  Theme changes are applied to
+-- every existing widget because styles resolve lazily from group names.
+function App:set_theme(name, opts)
+  local def, err = hl.set_theme(name, opts)
+  if not def then
+    return nil, err
+  end
+  self:layout_invalidate()
+  return def
+end
+
 function App:status_sections()
+  local style = self.styles.status
   local mode = "NORMAL"
-  local mode_hl = "StatusLineMode"
+  local mode_hl = style.mode
   if self.mode == "command" then
     mode = "COMMAND"
-    mode_hl = "StatusLineWarning"
+    mode_hl = style.command
   elseif #self.overlays > 0 then
     mode = "POPUP"
-    mode_hl = "StatusLineAccent"
+    mode_hl = style.popup
   end
   local left = {
     { text = " " .. mode .. " ", hl = mode_hl },
-    { text = " tuipro ", hl = "StatusLineAccent" },
-    { text = self.title or "", hl = "StatusLine" },
+    { text = " tuipro ", hl = style.title },
+    { text = self.title or "", hl = style.text },
   }
   if self.focus then
     local label = self.focus:get_label()
     if label then
-      left[#left + 1] = { text = "  " .. label, hl = "StatusLineInfo" }
+      left[#left + 1] = { text = "  " .. label, hl = style.info }
     end
   end
   if #self.overlays > 0 then
-    left[#left + 1] = { text = "  modal", hl = "StatusLineInfo" }
+    left[#left + 1] = { text = "  modal", hl = style.info }
   end
   local right = {
-    { text = (self.footer_hint or "") .. " ", hl = "StatusLineInfo" },
+    { text = (self.footer_hint or "") .. " ", hl = style.info },
   }
   return { left = left, right = right }
 end
@@ -333,13 +390,6 @@ end
 -- Messages
 -- ---------------------------------------------------------------------------
 
-local level_styles = {
-  info = "MessageInfo",
-  warn = "MessageWarn",
-  error = "MessageError",
-  success = "MessageSuccess",
-}
-
 function App:set_message(text, level, timeout)
   level = level or "info"
   text = tostring(text or "")
@@ -399,9 +449,9 @@ end
 
 function App:message_style()
   if not self.message then
-    return "CommandLineInfo"
+    return self.styles.cmdline.info
   end
-  return level_styles[self.message.level] or "MessageInfo"
+  return self.styles.messages[self.message.level] or self.styles.messages.info
 end
 
 -- ---------------------------------------------------------------------------
@@ -1322,10 +1372,11 @@ function App:_render_commandline(canvas)
   if self._chrome.cmd_h <= 0 then
     return
   end
-  canvas:fill(0, row, self.width, 1, " ", "CommandLine")
+  local styles = self.styles.cmdline
+  canvas:fill(0, row, self.width, 1, " ", styles.fill)
   if self.mode == "command" then
     local prompt = self.command_prompt or ":"
-    canvas:put(0, row, prompt, "CommandLinePrompt")
+    canvas:put(0, row, prompt, styles.prompt)
     local avail = math.max(1, self.width - 2)
     local prefix_w = util.display_width_of_prefix(self.cmd_buffer, self.cmd_cursor)
     if prefix_w - self.cmd_scroll >= avail then
@@ -1335,17 +1386,23 @@ function App:_render_commandline(canvas)
       self.cmd_scroll = 0
     end
     local visible = util.slice_display(self.cmd_buffer, self.cmd_scroll, avail)
-    canvas:put(1, row, visible, "CommandLine")
+    canvas:put(1, row, visible, styles.fill)
     local cx = 1 + prefix_w - self.cmd_scroll
     cx = util.clamp(cx, 0, self.width - 1)
-    self:set_cursor(cx, row, "bar")
+    self:set_cursor(cx, row, self.cmd_cursor_shape or
+        hl.glyph("input", "cursor", "bar"))
     return
   end
   if self.message and (not self.message.expires or util.now() < self.message.expires) then
     local text = self.message.text:gsub("\n.*$", "")
-    canvas:put(1, row, util.truncate(text, self.width - 2), self:message_style())
+    canvas:put(1, row,
+        util.truncate(text, self.width - 2, hl.glyph("text", "ellipsis", "…")),
+        self:message_style())
   else
-    canvas:put(1, row, util.truncate(self.footer_hint or "", self.width - 2), "CommandLineInfo")
+    canvas:put(1, row,
+        util.truncate(self.footer_hint or "", self.width - 2,
+            hl.glyph("text", "ellipsis", "…")),
+        styles.info)
   end
 end
 

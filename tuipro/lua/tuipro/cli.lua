@@ -37,8 +37,44 @@ if M.truecolor == nil then
   end
 end
 
+-- An empty --theme= value means "no theme requested".
+if M.theme == "" then
+  M.theme = nil
+end
+
 function M.is_headless()
   return M.headless == true
+end
+
+-- Load and apply the theme requested with --theme NAME.
+--
+-- Returns the resolved theme definition, or nil plus an error message when no
+-- theme by that name exists.  Themes shipped as plugins register themselves
+-- when the plugin is loaded, so an unknown name is retried after loading a
+-- plugin with the same name (for example --theme aurora).
+function M.load_theme(name)
+  if type(name) ~= "string" or name == "" then
+    return nil
+  end
+  local hl = require("tuipro.hl")
+  local theme = require("tuipro.theme")
+  local def, err = hl.set_theme(name)
+  if def then
+    return def
+  end
+  local ok, entry = pcall(require("tuipro.plugins").load, name)
+  if ok and type(entry) == "table" then
+    if type(entry.register) == "function" then
+      pcall(entry.register, require("tuipro"))
+    elseif entry.theme then
+      pcall(theme.register, entry.theme)
+    end
+    def, err = hl.set_theme(name)
+    if def then
+      return def
+    end
+  end
+  return nil, err or ("unknown theme: " .. tostring(name))
 end
 
 return M

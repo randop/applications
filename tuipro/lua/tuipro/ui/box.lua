@@ -4,16 +4,11 @@ local Container = container.Container
 local parse_padding = container.parse_padding
 local Canvas = require("tuipro.canvas")
 local util = require("tuipro.util")
+local hl = require("tuipro.hl")
 
 local Box = Container:extend("Box")
 
-local border_chars = {
-  rounded = { tl = "╭", tr = "╮", bl = "╰", br = "╯", h = "─", v = "│" },
-  single = { tl = "┌", tr = "┐", bl = "└", br = "┘", h = "─", v = "│" },
-  double = { tl = "╔", tr = "╗", bl = "╚", br = "╝", h = "═", v = "║" },
-  heavy = { tl = "┏", tr = "┓", bl = "┗", br = "┛", h = "━", v = "┃" },
-  ascii = { tl = "+", tr = "+", bl = "+", br = "+", h = "-", v = "|" },
-}
+local fallback_border = { tl = "╭", tr = "╮", bl = "╰", br = "╯", h = "─", v = "│" }
 
 function Box.new(opts)
   opts = opts or {}
@@ -21,7 +16,7 @@ function Box.new(opts)
   Container.init(self, opts)
   self.border = opts.border ~= false
   self.border_style = opts.border_style or "rounded"
-  self.chars = opts.chars or border_chars[self.border_style] or border_chars.rounded
+  self.chars = opts.chars
   self.border_hl = opts.border_hl or opts.hl or "Border"
   self.border_focus_hl = opts.border_focus_hl or "BorderFocus"
   self.title = opts.title
@@ -110,7 +105,8 @@ function Box:render(canvas)
   local focused = self.focused or self.contains_focus
   local bhl = focused and self.border_focus_hl or self.border_hl
   local title_hl = focused and self.title_focus_hl or self.title_hl
-  local c = self.chars
+  local c = self.chars or hl.glyph("border", self.border_style,
+      hl.glyph("border", "rounded", fallback_border))
 
   if self.border and self.w >= 2 and self.h >= 2 then
     canvas:put(0, 0, c.tl, bhl)
@@ -127,7 +123,8 @@ function Box:render(canvas)
     end
     if self.title and self.title ~= "" and self.w > 4 then
       local title = " " .. tostring(self.title) .. " "
-      title = util.truncate(title, self.w - 4)
+      title = util.truncate(title, self.w - 4,
+          hl.glyph("text", "ellipsis", "…"))
       local tw = util.width(title)
       local tx = 2
       if self.title_align == "center" then

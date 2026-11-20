@@ -27,17 +27,19 @@ local DEMO_BODY = [[{
   "hint": "Press Enter or click Send to make a real request."
 }]]
 
+-- Colors are palette roles, so the HTTP demo follows the active theme and
+-- updates live when hl.set_theme() is called.
 local function define_highlights()
-  hl.define("ApiTitle", { fg = "#c0caf5", bold = true })
-  hl.define("ApiLabel", { fg = "#7aa2f7", bold = true })
-  hl.define("ApiMuted", { fg = "#565f89" })
-  hl.define("ApiUrl", { fg = "#9ece6a" })
-  hl.define("ApiOk", { fg = "#9ece6a", bold = true })
-  hl.define("ApiErr", { fg = "#f7768e", bold = true })
-  hl.define("ApiStatus", { fg = "#e0af68" })
-  hl.define("ApiBody", { fg = "#c0caf5" })
-  hl.define("ApiBorder", { fg = "#3b4261" })
-  hl.define("ApiHistory", { fg = "#a9b1d6" })
+  hl.define("ApiTitle", { fg = "code", bold = true })
+  hl.define("ApiLabel", { fg = "accent", bold = true })
+  hl.define("ApiMuted", { fg = "muted" })
+  hl.define("ApiUrl", { fg = "green" })
+  hl.define("ApiOk", { fg = "green", bold = true })
+  hl.define("ApiErr", { fg = "red", bold = true })
+  hl.define("ApiStatus", { fg = "yellow" })
+  hl.define("ApiBody", { fg = "code" })
+  hl.define("ApiBorder", { fg = "border" })
+  hl.define("ApiHistory", { fg = "text" })
 end
 
 local function trim(s)

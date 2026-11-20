@@ -12,9 +12,13 @@ applications, layouts, widgets, plugins and scripts on top.
 - Lua widget toolkit: boxes, lists, menus, tables, inputs, tabs, buttons,
   progress bars, spinners, popups, separators, scrollable viewports,
   scrollbars and status lines.
+- Theme registry with palettes, semantic highlight groups and glyphs. Themes
+  switch live and cover widget chrome, borders, markers, progress/spinner
+  glyphs and table rules; bundled dark, light, Aurora, OpenCode and TokyoNight
+  themes are included.
 - Optional terminal-transparent surfaces: neutral panels and controls use the
   terminal background while focus and selection colors stay visible. The
-  bundled demos enable this by default.
+  dashboard, coding and HTTP demos enable this by default.
 - Focus traversal, window-style directional focus, modal popups, command line,
   timers, key bindings and commands.
 - Native HTTP/HTTPS client (`fetch`) built on libuv and OpenSSL, with promises,
@@ -75,6 +79,7 @@ tuipro --plugin plugins/hello
 tuipro --demo
 tuipro --demo-coding
 tuipro --demo-api
+tuipro --demo-theme
 ```
 
 Common options:
@@ -84,9 +89,11 @@ Common options:
 | `--demo` | Run the built-in dashboard demo. |
 | `--demo-coding` | Run the built-in opencode-style coding demo. |
 | `--demo-api` | Run the built-in HTTP client (`fetch`) demo. |
+| `--demo-theme` | Run the theme showcase and live-switching demo. |
 | `--plugin PATH` | Run a plugin directory, `init.lua`, or plugin name. |
 | `-l, --load MODULE` | Require a module and call its entry point. |
 | `-e, --eval CODE` | Evaluate Lua code. |
+| `--theme NAME` | Load a theme and start the UI with it. |
 | `--headless` | No terminal I/O; useful for tests and snapshots. |
 | `--size WxH` | Initial size in headless mode (default `80x24`). |
 | `--fps N` | Maximum redraw rate (default 60). |
@@ -94,6 +101,14 @@ Common options:
 | `--truecolor`, `--no-truecolor` | Force or disable 24-bit colors. |
 | `--mouse`, `--no-mouse` | Enable or disable mouse reporting. |
 | `--no-paste` | Disable bracketed paste. |
+
+`--theme NAME` loads a theme before the UI is built, so the first frame already
+uses it: `tuipro --theme aurora`, `tuipro --theme opencode`, or
+`tuipro --theme tokyo-night examples/dashboard.lua`. Built-in themes
+(`tuipro-dark`, `tuipro-light`) are always available; other names are looked up
+as plugins, so `--theme aurora` also loads `plugins/aurora` and registers its
+palette. An unknown name reports
+`unknown theme: NAME` in the status line and starts with the current theme.
 
 The built-in demo has five pages: Dashboard, Tasks, Widgets, Inputs and
 Dialogs. The Dialogs page demonstrates a basic confirm dialog, a scrollable
@@ -114,6 +129,21 @@ the status, headers and body, while the history panel keeps recent requests.
 **Abort** cancels an in-flight request. The client is built on libuv and
 OpenSSL, supports HTTP and HTTPS, redirects, gzip/deflate and does not block
 the UI.
+
+`--demo-theme` is a live theming showcase. The left list contains the bundled
+`tuipro-dark` and `tuipro-light` themes plus the `aurora`, `opencode` and
+`tokyo-night` plugins. `opencode` ports the dark OpenCode theme export, with
+near-black surfaces, orange interactive actions, purple accents and the
+exported diff colors. `tokyo-night` is a clean-room implementation of
+TokyoNight's Night style, the default `tokyonight-night` colorscheme. It uses
+the upstream palette, resolved UI colors (`Pmenu`, `FloatBorder`, `TabLine`,
+`Visual`, the diff groups) and lualine's statusline sections. In the showcase
+its normal panes are borderless and use the Night `Normal` background, like
+Neovim splits. `t` cycles themes, `1`–`9` select one directly, `x` toggles
+transparent surfaces and `g` cycles the themed border glyph set.
+The preview uses real widgets, so buttons, inputs, lists, progress bars,
+spinners, tabs, separators, scrollbars and the application chrome are all
+recolored and redrawn on the next frame.
 
 The Lua API is a Node.js-style `fetch`:
 
@@ -143,13 +173,17 @@ Useful environment variables:
 | `TUIPRO_SYNC=0` | Disable synchronized-output escape sequences. |
 | `TUIPRO_HEADLESS=1` | Default new applications to headless mode. |
 
-The demo and the plugin can be smoke-tested without a terminal:
+The demos and plugins can be smoke-tested without a terminal:
 
 ```sh
 ./build/tuipro --headless --size 80x24 --frames 1 --demo
 ./build/tuipro --headless --size 80x24 --frames 1 --demo-coding
 ./build/tuipro --headless --size 80x24 --frames 1 --demo-api
+./build/tuipro --headless --size 80x24 --frames 1 --demo-theme
 ./build/tuipro --headless --size 80x24 --frames 1 --plugin plugins/hello
+./build/tuipro --headless --size 80x24 --frames 1 --plugin plugins/aurora
+./build/tuipro --headless --size 80x24 --frames 1 --plugin plugins/opencode
+./build/tuipro --headless --size 80x24 --frames 1 --plugin plugins/tokyo-night
 ```
 
 ## A minimal application
@@ -214,6 +248,33 @@ Widgets receive a 0-based `(x, y)` cell coordinate. Public callbacks use:
 See [docs/widgets.md](docs/widgets.md) for every widget and option, and
 [docs/lua-api.md](docs/lua-api.md) for the application and plugin APIs.
 
+## Theming
+
+Themes are plain Lua tables with a palette, highlight groups and glyphs.
+Register one and switch at runtime:
+
+```lua
+local theme = require("tuipro.theme")
+local hl = require("tuipro.hl")
+
+theme.register({
+  name = "my-theme",
+  base = "tuipro-dark",
+  colors = { accent = "#ff8800", bg = "#101014" },
+  glyphs = { list = { marker = "»" }, button = { left = "<", right = ">" } },
+})
+
+hl.set_theme("my-theme")       -- applies to every existing widget
+hl.set_transparent(true)       -- neutral surfaces fall through to the terminal
+```
+
+`app:set_theme(name)` does the same for a running application, and
+`tuipro --theme aurora myapp.lua` applies a theme before the UI starts.
+Widgets also accept per-instance overrides (`hl`, `styles`, `border_hl`, `marker`,
+`border_style`, `chars`, `fill_char`, ...). The bundled `plugins/aurora`,
+`plugins/opencode` and `plugins/tokyo-night` plugins are complete theme
+examples, and `--demo-theme` shows live switching.
+
 ## Headless scripts and snapshots
 
 Headless mode still builds a real grid, so scripts can render and inspect it:
@@ -270,6 +331,12 @@ return M
 
 Run it with `tuipro --plugin path/to/plugin`, or load it from Lua with
 `tuipro.plugins.load()` and `tuipro.plugins.install()`.
+
+`plugins/aurora` is a complete theme plugin: it registers the `aurora` palette,
+groups and glyphs, applies them when run, and adds an `:aurora` command when
+installed into an existing app. `plugins/opencode` follows the same pattern with
+the dark OpenCode export and an `:opencode` command. `plugins/tokyo-night` uses
+a clean-room TokyoNight Night palette and adds a `:tokyo-night` command.
 
 ## Examples
 

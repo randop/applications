@@ -3,6 +3,7 @@ local Widget = require("tuipro.widget")
 local util = require("tuipro.util")
 local keys = require("tuipro.keys")
 local scroll = require("tuipro.ui.scroll")
+local hl = require("tuipro.hl")
 
 local List = Widget:extend("List")
 
@@ -37,8 +38,9 @@ function List.new(opts)
   self.items = {}
   self.index = 0
   self.offset = 0
-  self.marker = opts.marker or "›"
-  self.marker_unselected = opts.marker_unselected or " "
+  self.marker = opts.marker
+  self.marker_unselected = opts.marker_unselected
+  self.glyph_section = opts.glyph_section or "list"
   self.show_marker = opts.show_marker ~= false
   self.show_index = opts.show_index == true
   self.index_width = opts.index_width
@@ -421,6 +423,11 @@ function List:render(canvas)
   local width = math.max(0, self.w - bar_w)
   local index_w = self.index_width or math.max(2, #tostring(total))
   local focused = self.focused
+  local marker_on = self.marker or hl.glyph(self.glyph_section, "marker", "›")
+  local marker_off = self.marker_unselected or
+      hl.glyph(self.glyph_section, "marker_unselected", " ")
+  local checked_ch = hl.glyph("list", "checked", "[x]")
+  local unchecked_ch = hl.glyph("list", "unchecked", "[ ]")
 
   for row = 0, self.h - 1 do
     local i = self.offset + row + 1
@@ -456,7 +463,8 @@ function List:render(canvas)
 
     local x = 0
     if self.show_marker then
-      local marker = selected and self.marker or self.marker_unselected
+      local marker = selected and marker_on or marker_off
+      local marker_w = util.width(marker)
       if marker ~= "" then
         local mstyle = active and self.styles.marker_selected or
             (selected and style or self.styles.marker)
@@ -465,11 +473,12 @@ function List:render(canvas)
         end
         canvas:put(x, row, marker, mstyle)
       end
-      x = x + 1
+      x = x + (marker ~= "" and marker_w or 1)
     end
 
     if self.multiple and not item.header then
-      local check = item.checked and "[x]" or "[ ]"
+      local check = item.checked and checked_ch or unchecked_ch
+      local check_w = util.width(check)
       local cstyle
       if active and item.checked then
         cstyle = self.styles.check_selected
@@ -481,7 +490,7 @@ function List:render(canvas)
         cstyle = style
       end
       canvas:put(x, row, check, cstyle)
-      x = x + 4
+      x = x + check_w + 1
     end
 
     if self.show_index and not item.header then
@@ -505,7 +514,8 @@ function List:render(canvas)
         if detail ~= "" and self.detail_align == "left" then
           local label_w = util.width(label)
           local max_label = math.max(0, avail - 4)
-          label = util.truncate(label, max_label)
+          label = util.truncate(label, max_label,
+              hl.glyph("text", "ellipsis", "…"))
           label_w = util.width(label)
           canvas:put(x, row, label, style)
           local dx = x + label_w + 2
@@ -520,12 +530,14 @@ function List:render(canvas)
           local label_w = avail
           if dw > 0 then
             local max_detail = math.max(0, math.floor(avail * 0.6))
-            detail = util.truncate(detail, max_detail)
+            detail = util.truncate(detail, max_detail,
+                hl.glyph("text", "ellipsis", "…"))
             dw = util.width(detail)
             label_w = avail - dw - 1
             if label_w < 4 then
               dw = math.max(0, avail - 5)
-              detail = util.truncate(detail, dw)
+              detail = util.truncate(detail, dw,
+                  hl.glyph("text", "ellipsis", "…"))
               dw = util.width(detail)
               label_w = math.max(0, avail - dw - 1)
             end

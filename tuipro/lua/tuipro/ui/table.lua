@@ -3,6 +3,7 @@ local Widget = require("tuipro.widget")
 local util = require("tuipro.util")
 local keys = require("tuipro.keys")
 local scroll = require("tuipro.ui.scroll")
+local hl = require("tuipro.hl")
 
 local Table = Widget:extend("Table")
 
@@ -427,19 +428,23 @@ function Table:render(canvas)
   local widths = self:_compute_widths(math.max(1, self.w - bar_w))
   local focused = self.focused
   local y = 0
+  local vchar = hl.glyph("table", "vertical", "│")
+  local hchar = hl.glyph("table", "horizontal", "─")
+  local crosschar = hl.glyph("table", "cross", "┼")
 
   if self.show_header then
     canvas:fill(0, 0, self.w, 1, " ", self.styles.header)
     local x = 0
     for i, col in ipairs(self.columns) do
       local cw = widths[i]
-      local title = util.truncate(tostring(col.title or ""), math.max(0, cw - pad * 2))
+      local title = util.truncate(tostring(col.title or ""),
+          math.max(0, cw - pad * 2), hl.glyph("text", "ellipsis", "…"))
       local style = col.title_hl or self.styles.header
       if cw > pad * 2 then
         canvas:text(x + pad, 0, title, cw - pad * 2, style, col.align)
       end
       if self.show_grid and i < n and x + cw < self.w then
-        canvas:put(x + cw, 0, "│", self.styles.border)
+        canvas:put(x + cw, 0, vchar, self.styles.border)
       end
       x = x + cw
     end
@@ -448,17 +453,17 @@ function Table:render(canvas)
       if self.show_grid then
         local x = 0
         for i, cw in ipairs(widths) do
-          canvas:hline(x, y, cw, "─", self.styles.border)
+          canvas:hline(x, y, cw, hchar, self.styles.border)
           if i < n and x + cw < self.w then
-            canvas:put(x + cw, y, "┼", self.styles.border)
+            canvas:put(x + cw, y, crosschar, self.styles.border)
           end
           x = x + cw
         end
         if x < self.w then
-          canvas:hline(x, y, self.w - x, "─", self.styles.border)
+          canvas:hline(x, y, self.w - x, hchar, self.styles.border)
         end
       else
-        canvas:hline(0, y, self.w, "─", self.styles.border)
+        canvas:hline(0, y, self.w, hchar, self.styles.border)
       end
       y = y + 1
     end
@@ -502,12 +507,13 @@ function Table:render(canvas)
         style = chl or base
       end
       if cw > pad * 2 then
-        text = util.truncate(text, cw - pad * 2)
+        text = util.truncate(text, cw - pad * 2,
+            hl.glyph("text", "ellipsis", "…"))
         canvas:text(x + pad, y + row, text, cw - pad * 2, style, align or "left")
       end
       if self.show_grid and ci < n and x + cw < self.w then
         local gstyle = selected and self.styles.selected_muted or self.styles.border
-        canvas:put(x + cw, y + row, "│", gstyle)
+        canvas:put(x + cw, y + row, vchar, gstyle)
       end
       x = x + cw
     end

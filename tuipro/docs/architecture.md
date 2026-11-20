@@ -35,16 +35,20 @@ lua/tuipro/app.lua        event loop, layout, focus, chrome, popups, commands
 lua/tuipro/widget.lua     Widget base class
 lua/tuipro/container.lua  VBox/HBox/Padding/Center/Stack/Split
 lua/tuipro/canvas.lua     clipped drawing surface
-lua/tuipro/hl.lua         highlight groups and style resolution
-lua/tuipro/theme.lua      default palette and groups
+lua/tuipro/hl.lua         highlight groups, glyphs and theme switching
+lua/tuipro/theme.lua      theme registry, palettes, groups and glyphs
 lua/tuipro/keys.lua       key notation parsing and normalization
 lua/tuipro/util.lua       UTF-8, width, wrapping and generic helpers
 lua/tuipro/ui/            concrete widgets
 lua/tuipro/plugins.lua    plugin discovery and installation
 lua/tuipro/demo.lua       built-in dashboard
+lua/tuipro/demo_theme.lua built-in theme showcase
 
 examples/                 minimal, dashboard, gallery, file manager, splits
 plugins/hello/            sample plugin
+plugins/aurora/           sample theme plugin with glyph overrides
+plugins/opencode/         OpenCode dark theme plugin with exported palette colors
+plugins/tokyo-night/      TokyoNight Night theme plugin with upstream colors and flat showcase styling
 tests/                    Lua suites, CLI checks, PTY smoke test
 docs/                     this documentation
 ```
@@ -314,12 +318,13 @@ The executable finds the Lua tree in this order:
 5. The compile-time `TUIPRO_LUA_DIR` (default
    `/usr/local/share/tuipro/lua`).
 
-Plugin resolution uses `<cwd>/plugins`, `$TUIPRO_RUNTIME/plugins`, and
-`<TUIPRO_LUA_DIR>/../plugins` for the installed layout. CMake installs the
-executable, Lua tree, examples, plugins, header, README, LICENSE and docs.
+Plugin resolution uses `<cwd>/plugins`, `$TUIPRO_RUNTIME/plugins`, and the
+tree's own `plugins/` directory (derived from the Lua module path) for the
+installed layout. CMake installs the executable, Lua tree, examples, plugins,
+header, README, LICENSE and docs.
 
 The launcher supports scripts, module names (`require` + entry point), `-e`
-code, `-l` modules, the built-in demo and plugins. A script returning a number
+code, `-l` modules, the built-in demos and plugins. A script returning a number
 becomes the process exit status; errors print a traceback and exit nonzero.
 
 ## Testing

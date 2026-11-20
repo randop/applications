@@ -74,6 +74,18 @@ function M.demo_api(opts)
   error("tuipro.demo_api has no run() entry point")
 end
 
+-- Run the bundled theme showcase demo.
+function M.demo_theme(opts)
+  local demo = require("tuipro.demo_theme")
+  if type(demo) == "table" and demo.run then
+    return demo.run(opts)
+  end
+  if type(demo) == "function" then
+    return demo(opts)
+  end
+  error("tuipro.demo_theme has no run() entry point")
+end
+
 -- Run the bundled opencode-style coding demo.
 function M.demo_coding(opts)
   local demo = require("tuipro.demo_coding")
