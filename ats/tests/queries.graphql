@@ -1,0 +1,173 @@
+# Get current user
+query GetMe {
+  me {
+    id
+    email
+    name
+    role
+    createdAt
+  }
+}
+
+# Get all users
+query GetUsers {
+  users {
+    id
+    email
+    name
+    role
+    createdAt
+  }
+}
+
+# Get jobs with filters and pagination
+query GetJobs {
+  jobs(status: OPEN, department: "Engineering", limit: 10, offset: 0) {
+    id
+    title
+    description
+    department
+    location
+    employmentType
+    status
+    createdBy
+    createdAt
+    updatedAt
+  }
+}
+
+# Get a single job
+query GetJob($id: ID!) {
+  job(id: $id) {
+    id
+    title
+    description
+    department
+    location
+    employmentType
+    status
+    createdBy
+    createdAt
+    updatedAt
+  }
+}
+
+# Search candidates
+query SearchCandidates {
+  candidates(q: "john", limit: 20, offset: 0) {
+    id
+    firstName
+    lastName
+    email
+    phone
+    resumeUrl
+    linkedinUrl
+    source
+    createdAt
+    updatedAt
+  }
+}
+
+# Get a single candidate
+query GetCandidate($id: ID!) {
+  candidate(id: $id) {
+    id
+    firstName
+    lastName
+    email
+    phone
+    resumeUrl
+    linkedinUrl
+    source
+    createdAt
+    updatedAt
+  }
+}
+
+# Get applications filtered by job
+query GetApplicationsByJob($jobId: ID!) {
+  applications(jobId: $jobId, stage: INTERVIEW, limit: 25, offset: 0) {
+    id
+    jobId
+    candidateId
+    stage
+    status
+    appliedAt
+    updatedAt
+  }
+}
+
+# Get a single application
+query GetApplication($id: ID!) {
+  application(id: $id) {
+    id
+    jobId
+    candidateId
+    stage
+    status
+    appliedAt
+    updatedAt
+  }
+}
+
+# Get interviews by interviewer
+query GetInterviewsByInterviewer($interviewerId: ID!) {
+  interviews(interviewerId: $interviewerId, limit: 10, offset: 0) {
+    id
+    applicationId
+    interviewerId
+    scheduledAt
+    durationMinutes
+    location
+    status
+    notes
+    createdAt
+  }
+}
+
+# Get a single interview
+query GetInterview($id: ID!) {
+  interview(id: $id) {
+    id
+    applicationId
+    interviewerId
+    scheduledAt
+    durationMinutes
+    location
+    status
+    notes
+    createdAt
+  }
+}
+
+# Get notes for an application
+query GetNotes($applicationId: ID!) {
+  notes(applicationId: $applicationId) {
+    id
+    applicationId
+    authorId
+    content
+    createdAt
+  }
+}
+
+# Get pipeline stats
+query GetStats {
+  stats {
+    jobsTotal
+    jobsOpen
+    candidatesTotal
+    applicationsTotal
+    applicationsActive
+    interviewsTotal
+    pipeline {
+      stage
+      count
+    }
+  }
+}
+
+# Get API version
+query GetVersion {
+  version
+}
